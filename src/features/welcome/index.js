@@ -10,7 +10,7 @@ import { safeMentions } from '../../core/mentions.js';
 import { renderTemplate } from '../../core/templates.js';
 import { resolveImage, parseImageInput } from '../media/images.js';
 import { buildWelcomePayload, imagePatch, DEFAULT_TEXT } from './payload.js';
-import { renderCard } from './card.js';
+import { renderCard } from '../greet/card.js';
 import { getLang, t } from '../../i18n/index.js';
 
 const EVENTS = ['join', 'leave', 'boost'];

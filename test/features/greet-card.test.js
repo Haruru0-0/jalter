@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { renderCard } from '../../src/features/welcome/card.js';
+import { renderCard } from '../../src/features/greet/card.js';
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
 
