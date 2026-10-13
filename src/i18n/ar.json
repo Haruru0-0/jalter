@@ -40,5 +40,12 @@
   "panel.comingSoon": "قريبًا",
   "panel.managerSet": "يمكن للأعضاء الذين لديهم الرتبة {role} إدارة البوت الآن.",
   "panel.managerCleared": "تمت إزالة رتبة مدير البوت.",
-  "language.set": "لغة البوت الآن هي العربية."
+  "language.set": "لغة البوت الآن هي العربية.",
+  "media.setupDone": "ستُحفظ الصور في {channel}.",
+  "media.notImage": "هذا الملف ليس صورة.",
+  "media.noChannel": "قناة التخزين غير موجودة أو لا أستطيع الإرسال فيها. شغّل /media setup مرة أخرى.",
+  "media.added": "تم حفظ الصورة باسم `{name}`.",
+  "media.empty": "لا توجد صور محفوظة بعد.",
+  "media.removed": "تم حذف `{name}`.",
+  "media.unknown": "لا توجد صورة باسم `{name}`."
 }

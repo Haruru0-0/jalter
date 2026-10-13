@@ -40,5 +40,12 @@
   "panel.comingSoon": "Bientôt disponible",
   "panel.managerSet": "Les membres ayant le rôle {role} peuvent désormais gérer le bot.",
   "panel.managerCleared": "Le rôle de gestionnaire du bot a été retiré.",
-  "language.set": "La langue du bot est maintenant le français."
+  "language.set": "La langue du bot est maintenant le français.",
+  "media.setupDone": "Les images seront conservées dans {channel}.",
+  "media.notImage": "Ce fichier n’est pas une image.",
+  "media.noChannel": "Le salon de stockage est introuvable ou je ne peux pas y écrire. Relancez /media setup.",
+  "media.added": "Image enregistrée sous `{name}`.",
+  "media.empty": "Aucune image enregistrée pour le moment.",
+  "media.removed": "`{name}` a été oublié.",
+  "media.unknown": "Aucune image nommée `{name}`."
 }

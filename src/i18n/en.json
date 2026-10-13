@@ -40,5 +40,12 @@
   "panel.comingSoon": "Coming soon",
   "panel.managerSet": "Members with the role {role} can now manage the bot.",
   "panel.managerCleared": "The bot manager role was removed.",
-  "language.set": "The bot language is now English."
+  "language.set": "The bot language is now English.",
+  "media.setupDone": "Images will be kept in {channel}.",
+  "media.notImage": "That file is not an image.",
+  "media.noChannel": "The storage channel is missing or I cannot post there. Run /media setup again.",
+  "media.added": "Stored the image as `{name}`.",
+  "media.empty": "No stored images yet.",
+  "media.removed": "Forgot `{name}`.",
+  "media.unknown": "There is no image named `{name}`."
 }
