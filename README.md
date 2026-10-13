@@ -10,7 +10,11 @@ Jalter is a Discord bot with a modular design. Most features are off by default 
 - Embeds (always available): save named embeds with `/embed create`, edit them with buttons or `/embed edit`, and post one with `/embed show` (in the channel you pick, default the current one). Use one in a message with `{embed:name}`.
 - Post (always available): send text (`/post text`) or text with a link button (`/post buttons`) as the bot, with mentions blocked. You can only post in channels where you can see and send messages yourself.
 - Greet, leave and boost messages, set with `/set greet|leave|boost ...` (channel, message, card, background, and DM for greet and boost) and tried out with `/test`. A message can hold `{embed:name}` and an optional card image.
-- Auto role: separate roles for new humans and new bots. The bot's highest role must sit above any role it gives, or Discord refuses.
+- Auto role: give new members one or more roles, for humans, for bots, or both. The bot's highest role must sit above any role it gives, or Discord refuses.
+  - `/autorole add role [target: humans|bots]` adds a role, `/autorole remove role` removes it, `/autorole show` lists the setup, `/autorole disable` turns the feature off.
+  - `/autorole timed add delay role` gives a role to a new human only after a delay, such as `30m`, `2h` or `1d` (1 minute to 30 days). `/autorole timed remove role` cancels it, including for members already waiting.
+  - `/autorole reassign state:on|off` (off by default): a member who leaves gets their roles back if they return within 30 days. Blacklisted, managed, or above-the-bot roles are never remembered.
+  - `/autorole blacklist add|remove role` keeps a role from being given or restored.
 - Logging: messages (edits and deletes), members (joins, leaves, nickname and role changes) and server changes (channels, roles, emojis). No voice logging yet.
 - Bot manager role: `/panel manager-role` lets a role use the setup commands. Only members with Manage Server can set or clear it, and @everyone or bot-managed roles are refused.
 - Info: `/userinfo`, `/avatar`, `/banner`, `/serverinfo`.
@@ -74,8 +78,12 @@ Run these on a test server with the bot invited and started. Confirm each item.
 8. `/set greet channel`, then `/set greet message` with text, and again without text (it opens the form). Put placeholders such as `{user}` and `{server_name}` in it, add `{embed:rules}`, and run `/test greet`. Then `/set greet message none` turns that one message off (`/test greet` says it is off) while the leave and boost messages keep working.
 9. `/set greet card on` and `/test greet`: the card looks right with an Arabic username. Try `/set greet background logo` and `/set greet dm on` (the DM arrives).
 10. Repeat step 8 for `/set leave ...` and `/set boost ...` with `/test leave` and `/test boost`, and the card and DM checks of step 9 for boost. Leave has the card and background but no `dm` option.
-11. `/autorole add` gives the right role to a new human account and to a bot.
-12. `/logging set messages`: edit and delete a message and see the log; edits inside the log channel itself are not logged.
-13. `/info enable`, then `/userinfo`, `/avatar`, `/banner`, `/serverinfo` work; with `/info disable` they refuse.
-14. Delete the greet channel, run `/test greet`: the bot does not crash.
-15. Stop and restart the bot, then run `docker compose restart`: all settings are still there.
+11. `/autorole add` a role for humans and another with `target: bots`, then `/autorole show`: both are listed. A new human account gets the first role and a bot gets the second.
+12. `/autorole timed add 1m` with a role, then add a new account: it gets the role after about a minute.
+13. `/autorole timed add` again with a long delay, add a new account, then `/autorole timed remove` that role: the waiting member never gets it.
+14. `/autorole reassign state:on`, give a member a role, let them leave and rejoin: the roles come back. With `state:off` they do not.
+15. `/autorole blacklist add` a role: it is no longer given, and it is not restored on rejoin. `blacklist remove` undoes this.
+16. `/logging set messages`: edit and delete a message and see the log; edits inside the log channel itself are not logged.
+17. `/info enable`, then `/userinfo`, `/avatar`, `/banner`, `/serverinfo` work; with `/info disable` they refuse.
+18. Delete the greet channel, run `/test greet`: the bot does not crash.
+19. Stop and restart the bot, then run `docker compose restart`: all settings are still there.
