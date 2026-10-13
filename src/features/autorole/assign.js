@@ -10,6 +10,7 @@ const UNKNOWN_ROLE = 10011;
 
 /** Roles the bot may hand out: they exist, are not managed and sit below the bot's own role. */
 function assignable(guild, roleId) {
+  if (roleId === guild.id) return false;
   const role = guild.roles.cache.get(roleId);
   if (!role || role.managed) return false;
   const botPosition = guild.members.me?.roles.highest.position;
@@ -29,6 +30,7 @@ export async function assignAutoRole(ctx, member, { now = Date.now() } = {}) {
       ids.push(...remembered.filter((id) => !cfg.blacklist.includes(id) && assignable(guild, id)));
     }
     ids = [...new Set(ids)];
+    const timed = cfg.timed.filter((t) => !ids.includes(t.roleId));
     for (const id of ids) {
       try {
         await member.roles.add(id);
@@ -37,7 +39,7 @@ export async function assignAutoRole(ctx, member, { now = Date.now() } = {}) {
       }
     }
     if (!isBot) {
-      for (const { roleId, seconds } of cfg.timed) {
+      for (const { roleId, seconds } of timed) {
         if (member.roles.cache?.has(roleId)) continue;
         await queueRole(ctx.db, guild.id, member.id, roleId, now + seconds * 1000);
       }
@@ -67,6 +69,9 @@ export async function rememberMemberRoles(ctx, member, { now = Date.now() } = {}
 
 export async function runDue(ctx, { now = Date.now() } = {}) {
   try {
+    // Before the client is ready the guild cache is cold: leave the rows for a later tick.
+    if (ctx.client.isReady?.() === false) return;
+    // Rows are deleted before the role is given, so a crash mid-run loses at most the batch (fine for a 30 s ticker).
     const due = await takeDue(ctx.db, now);
     const configs = new Map();
     for (const { guildId, userId, roleId } of due) {
@@ -83,7 +88,7 @@ export async function runDue(ctx, { now = Date.now() } = {}) {
         await member.roles.add(roleId);
       } catch (err) {
         if (err.code === UNKNOWN_MEMBER || err.code === UNKNOWN_ROLE) continue;
-        console.warn(`Timed auto role failed in ${guildId}: ${err.message}`);
+        console.warn(`Auto role failed in ${guildId}: ${err.message}`);
       }
     }
     await purgeOld(ctx.db, now, MEMORY_MAX_AGE_MS);
