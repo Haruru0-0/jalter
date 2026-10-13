@@ -29,3 +29,23 @@ test('buildUserInfo lists roles without @everyone and shows not-yet-available li
   assert.match(fieldValue(info, 'Warnings'), /not available/i);
   assert.match(fieldValue(info, 'Birthday'), /not available/i);
 });
+
+const memberWith = (n) => ({
+  user: { username: 'Sam', createdTimestamp: 1_600_000_000_000 },
+  joinedTimestamp: 1_700_000_000_000,
+  roles: { cache: new Map(Array.from({ length: n }, (_, i) => [String(i), { id: String(100000000000000000n + BigInt(i)), name: `r${i}` }])) },
+});
+
+test('buildUserInfo truncates a long role list to 1024 chars with a +N more suffix', () => {
+  const value = fieldValue(buildUserInfo(memberWith(100), 'en'), 'Roles');
+  assert.ok(value.length <= 1024);
+  const m = value.match(/\+(\d+) more$/);
+  assert.ok(m);
+  const mentions = value.match(/<@&\d+>/g);
+  assert.equal(value.replace(/ \+\d+ more$/, '').split(' ').length, mentions.length);
+  assert.equal(mentions.length + Number(m[1]), 100);
+});
+
+test('buildUserInfo leaves a short role list unchanged', () => {
+  assert.equal(fieldValue(buildUserInfo(memberWith(2), 'en'), 'Roles'), '<@&100000000000000000> <@&100000000000000001>');
+});

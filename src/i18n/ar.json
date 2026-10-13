@@ -126,5 +126,6 @@
   "info.birthday": "تاريخ الميلاد",
   "info.notAvailable": "غير متاح بعد.",
   "info.notMember": "هذا المستخدم ليس في هذا الخادم.",
-  "info.noBanner": "ليس لهذا المستخدم بانر."
+  "info.noBanner": "ليس لهذا المستخدم بانر.",
+  "info.rolesMore": "و{count} أخرى"
 }

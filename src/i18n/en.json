@@ -126,5 +126,6 @@
   "info.birthday": "Birthday",
   "info.notAvailable": "Not available yet.",
   "info.notMember": "That user is not in this server.",
-  "info.noBanner": "That user has no banner."
+  "info.noBanner": "That user has no banner.",
+  "info.rolesMore": "+{count} more"
 }

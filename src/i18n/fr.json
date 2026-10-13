@@ -126,5 +126,6 @@
   "info.birthday": "Anniversaire",
   "info.notAvailable": "Pas encore disponible.",
   "info.notMember": "Cet utilisateur n'est pas sur ce serveur.",
-  "info.noBanner": "Cet utilisateur n'a pas de bannière."
+  "info.noBanner": "Cet utilisateur n'a pas de bannière.",
+  "info.rolesMore": "+{count} de plus"
 }

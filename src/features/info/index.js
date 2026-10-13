@@ -42,7 +42,8 @@ export const commands = [
     async execute(i, ctx) {
       const lang = await open(i, ctx);
       if (!lang) return;
-      const user = await (i.options.getUser('user') ?? i.user).fetch(true);
+      const cached = i.options.getUser('user') ?? i.user;
+      const user = await cached.fetch(true).catch(() => cached);
       const url = user.bannerURL({ size: 1024 });
       if (!url) return i.reply(ephemeral(t(lang, 'info.noBanner')));
       await i.reply({ embeds: [{ title: user.username, image: { url } }] });
