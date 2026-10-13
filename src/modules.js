@@ -5,5 +5,6 @@ import * as embeds from './features/embeds/index.js';
 import * as post from './features/post/index.js';
 import * as welcome from './features/welcome/index.js';
 import * as autorole from './features/autorole/index.js';
+import * as logging from './features/logging/index.js';
 
-export const modules = [panel, language, media, embeds, post, welcome, autorole];
+export const modules = [panel, language, media, embeds, post, welcome, autorole, logging];
