@@ -1,228 +1,175 @@
-import {
-  SlashCommandBuilder, ChannelType, ActionRowBuilder, ModalBuilder, TextInputBuilder,
-  TextInputStyle, ButtonBuilder, ButtonStyle, MessageFlags,
-} from 'discord.js';
+import { SlashCommandBuilder, ChannelType } from 'discord.js';
 import { guard } from '../../core/guard.js';
-import { handleToggle, toggleSubcommands } from '../../core/toggle.js';
 import { ephemeral } from '../../core/replies.js';
 import { capList } from '../../core/lists.js';
 import { t } from '../../i18n/index.js';
 import { validateEmbed } from './model.js';
-import { buildEmbedPayload, sendEmbedSpec } from './send.js';
-import { putDraft, getDraft, clearDraft, draftKey } from './drafts.js';
-import { saveTemplate, getTemplate, listTemplates, deleteTemplate } from './templates.js';
-import { specFromFields, quickSpec, errorText, appendField, parseInline } from './spec.js';
+import { sendEmbedSpec } from './render.js';
+import { errorText } from './spec.js';
+import { applyEdit } from './edit.js';
+import { showPanel } from './panel.js';
+import {
+  normalizeEmbedName, createEmbed, getEmbed, saveEmbed, listEmbeds, deleteEmbed,
+} from './store.js';
 
 const CHANNEL_TYPES = [ChannelType.GuildText, ChannelType.GuildAnnouncement];
+const IMAGE_HELP = 'A link, a stored image name or a placeholder';
 
-function textInput(id, label, style, value, { required = false, max } = {}) {
-  const input = new TextInputBuilder().setCustomId(id).setLabel(label).setStyle(style).setRequired(required);
-  if (value) input.setValue(value);
-  if (max) input.setMaxLength(max);
-  return new ActionRowBuilder().addComponents(input);
+const nameOption = (o) =>
+  o.setName('embed').setDescription('The embed name').setMaxLength(16).setRequired(true);
+const strOpt = (name, description, max) => (o) => {
+  o.setName(name).setDescription(description);
+  return max ? o.setMaxLength(max) : o;
+};
+
+// Adds an `edit <name>` subcommand whose first (required) option is the embed name.
+const editSub = (g, name, description, build = (s) => s) =>
+  g.addSubcommand((s) => build(s.setName(name).setDescription(description).addStringOption(nameOption)));
+
+const data = new SlashCommandBuilder()
+  .setName('embed')
+  .setDescription('Create, edit and post named embeds')
+  .addSubcommand((s) =>
+    s.setName('create').setDescription('Create a new empty embed')
+      .addStringOption((o) => o.setName('name').setDescription('A name of 1 to 16 characters').setMaxLength(16).setRequired(true)))
+  .addSubcommandGroup((g) => {
+    g.setName('edit').setDescription('Edit a part of an embed');
+    editSub(g, 'all', 'Edit the whole embed with buttons');
+    editSub(g, 'author', 'Set or remove the author', (s) => s
+      .addStringOption(strOpt('text', 'Author text (leave empty to remove)', 256))
+      .addStringOption(strOpt('icon', `Author icon: ${IMAGE_HELP}`)));
+    editSub(g, 'title', 'Set or remove the title', (s) => s.addStringOption(strOpt('title', 'Title (leave empty to remove)', 256)));
+    editSub(g, 'description', 'Set or remove the description', (s) =>
+      s.addStringOption(strOpt('description', 'Description (leave empty to remove)', 4000)));
+    editSub(g, 'thumbnail', 'Set or remove the thumbnail', (s) => s.addStringOption(strOpt('image', IMAGE_HELP)));
+    editSub(g, 'image', 'Set or remove the large image', (s) => s.addStringOption(strOpt('image', IMAGE_HELP)));
+    editSub(g, 'color', 'Set or remove the color', (s) => s.addStringOption(strOpt('color', 'Color like #5865F2', 7)));
+    editSub(g, 'footer', 'Set or remove the footer', (s) => s.addStringOption(strOpt('text', 'Footer text (leave empty to remove)', 2048)));
+    editSub(g, 'timestamp', 'Show or hide the time the embed was posted', (s) =>
+      s.addBooleanOption((o) => o.setName('timestamp').setDescription('Show the time').setRequired(true)));
+    g.addSubcommand((s) =>
+      s.setName('field').setDescription('Add a field')
+        .addStringOption(nameOption)
+        .addStringOption((o) => o.setName('name').setDescription('Field name').setMaxLength(256).setRequired(true))
+        .addStringOption((o) => o.setName('value').setDescription('Field text').setMaxLength(1024).setRequired(true))
+        .addBooleanOption((o) => o.setName('inline').setDescription('Show side by side')));
+    editSub(g, 'clear-fields', 'Remove all fields');
+    return g;
+  })
+  .addSubcommand((s) => s.setName('list').setDescription('List the embeds of this server'))
+  .addSubcommand((s) =>
+    s.setName('delete').setDescription('Delete an embed').addStringOption(nameOption))
+  .addSubcommand((s) =>
+    s.setName('show').setDescription('Post an embed in a channel')
+      .addStringOption(nameOption)
+      .addChannelOption((o) =>
+        o.setName('channel').setDescription('Where to post it (defaults to this channel)').addChannelTypes(...CHANNEL_TYPES)));
+
+// Reads the `embed` option, replies on a bad or unknown name, returns { name, spec } or null.
+async function loadEmbed(interaction, ctx, lang) {
+  const name = normalizeEmbedName(interaction.options.getString('embed', true));
+  if (!name) {
+    await interaction.reply(ephemeral(t(lang, 'embeds.badName')));
+    return null;
+  }
+  const spec = await getEmbed(ctx.db, interaction.guildId, name);
+  if (!spec) {
+    await interaction.reply(ephemeral(t(lang, 'embeds.notFound', { name })));
+    return null;
+  }
+  return { name, spec };
 }
 
-export function builderModal(lang, channelId, spec = {}) {
-  const img = spec.image?.type === 'url' ? spec.image.url : spec.image?.name;
-  return new ModalBuilder()
-    .setCustomId(`embeds:modal:${channelId}`)
-    .setTitle(t(lang, 'embeds.modalTitle'))
-    .addComponents(
-      textInput('title', t(lang, 'embeds.title'), TextInputStyle.Short, spec.title, { max: 256 }),
-      textInput('description', t(lang, 'embeds.description'), TextInputStyle.Paragraph, spec.description, { max: 4000 }),
-      textInput('color', t(lang, 'embeds.color'), TextInputStyle.Short, spec.color, { max: 7 }),
-      textInput('footer', t(lang, 'embeds.footer'), TextInputStyle.Short, spec.footer, { max: 2048 }),
-      textInput('image', t(lang, 'embeds.image'), TextInputStyle.Short, img),
-    );
+// A stored image name must exist; links and placeholders pass. Returns true when the value is usable.
+async function imageUsable(interaction, ctx, lang, value) {
+  const v = (value ?? '').trim();
+  if (!v || /^https?:\/\//i.test(v) || v.includes('{')) return true;
+  const { rowCount } = await ctx.db.query(
+    'SELECT 1 FROM media_items WHERE guild_id = $1 AND name = $2', [interaction.guildId, v]);
+  if (rowCount) return true;
+  await interaction.reply(ephemeral(t(lang, 'media.unknown', { name: v })));
+  return false;
 }
 
-export function templateNameModal(lang) {
-  return new ModalBuilder()
-    .setCustomId('embeds:tplmodal')
-    .setTitle(t(lang, 'embeds.saveTemplate'))
-    .addComponents(
-      textInput('name', t(lang, 'embeds.templateName'), TextInputStyle.Short, '', { required: true, max: 100 }),
-    );
-}
-
-export function fieldModal(lang, channelId) {
-  return new ModalBuilder()
-    .setCustomId(`embeds:fieldmodal:${channelId}`)
-    .setTitle(t(lang, 'embeds.fieldModalTitle'))
-    .addComponents(
-      textInput('name', t(lang, 'embeds.fieldName'), TextInputStyle.Short, '', { required: true, max: 256 }),
-      textInput('value', t(lang, 'embeds.fieldValue'), TextInputStyle.Paragraph, '', { required: true, max: 1024 }),
-      textInput('inline', t(lang, 'embeds.fieldInline'), TextInputStyle.Short, '', { max: 10 }),
-    );
-}
-
-async function showPreview(interaction, ctx, lang, spec, channelId) {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  try {
-    let payload;
-    try {
-      payload = await buildEmbedPayload(ctx, interaction.guildId, spec);
-    } catch (err) {
-      if (err.message !== 'image-not-found') throw err;
-      return await interaction.editReply(t(lang, 'embeds.imageMissing'));
-    }
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`embeds:edit:${channelId}`).setLabel(t(lang, 'embeds.edit')).setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`embeds:field:${channelId}`).setLabel(t(lang, 'embeds.addField')).setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`embeds:send:${channelId}`).setLabel(t(lang, 'embeds.send')).setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId('embeds:tpl').setLabel(t(lang, 'embeds.saveTemplate')).setStyle(ButtonStyle.Primary),
-    );
-    return await interaction.editReply({ content: t(lang, 'embeds.previewHint'), ...payload, components: [row] });
-  } catch (err) {
-    console.error('Embed preview failed:', err);
-    return interaction.editReply(t(lang, 'embeds.previewFailed')).catch(() => {});
+function readEdit(interaction, sub) {
+  const o = interaction.options;
+  switch (sub) {
+    case 'author': return { text: o.getString('text'), icon: o.getString('icon') };
+    case 'title': return o.getString('title');
+    case 'description': return o.getString('description');
+    case 'thumbnail':
+    case 'image': return o.getString('image');
+    case 'color': return o.getString('color');
+    case 'footer': return o.getString('text');
+    case 'timestamp': return o.getBoolean('timestamp', true);
+    case 'field':
+      return { name: o.getString('name', true), value: o.getString('value', true), inline: o.getBoolean('inline') ?? false };
+    default: return undefined;
   }
 }
 
-const data = toggleSubcommands(
-  new SlashCommandBuilder()
-    .setName('embed')
-    .setDescription('Build, save and post embeds')
-    .addSubcommand((s) =>
-      s.setName('builder').setDescription('Build an embed step by step with a preview')
-        .addChannelOption((o) =>
-          o.setName('channel').setDescription('Where to post it (defaults to this channel)').addChannelTypes(...CHANNEL_TYPES)))
-    .addSubcommand((s) =>
-      s.setName('quick').setDescription('Post a simple embed right away')
-        .addStringOption((o) => o.setName('title').setDescription('Embed title').setMaxLength(256).setRequired(true))
-        .addStringOption((o) => o.setName('description').setDescription('Embed text').setMaxLength(4000).setRequired(true))
-        .addStringOption((o) => o.setName('color').setDescription('Color like #5865F2').setMaxLength(7))
-        .addStringOption((o) => o.setName('image').setDescription('Image link or stored image name'))
-        .addChannelOption((o) =>
-          o.setName('channel').setDescription('Where to post it (defaults to this channel)').addChannelTypes(...CHANNEL_TYPES)))
-    .addSubcommandGroup((g) =>
-      g.setName('template').setDescription('Saved embed templates')
-        .addSubcommand((s) =>
-          s.setName('use').setDescription('Post a saved template')
-            .addStringOption((o) => o.setName('name').setDescription('Template name').setMaxLength(100).setRequired(true))
-            .addChannelOption((o) =>
-              o.setName('channel').setDescription('Where to post it (defaults to this channel)').addChannelTypes(...CHANNEL_TYPES)))
-        .addSubcommand((s) => s.setName('list').setDescription('List saved templates'))
-        .addSubcommand((s) =>
-          s.setName('delete').setDescription('Delete a saved template')
-            .addStringOption((o) => o.setName('name').setDescription('Template name').setMaxLength(100).setRequired(true)))),
-);
+async function editPart(interaction, ctx, lang, sub) {
+  const loaded = await loadEmbed(interaction, ctx, lang);
+  if (!loaded) return;
+  const value = readEdit(interaction, sub);
+  let image = null;
+  if (sub === 'author') image = value.icon;
+  else if (sub === 'thumbnail' || sub === 'image') image = value;
+  if (image && !(await imageUsable(interaction, ctx, lang, image))) return;
+  const result = applyEdit(loaded.spec, sub, value);
+  if (!result.ok) return interaction.reply(ephemeral(errorText(lang, result.errors)));
+  await saveEmbed(ctx.db, interaction.guildId, loaded.name, result.spec);
+  return interaction.reply(ephemeral(t(lang, 'common.saved')));
+}
 
 async function execute(interaction, ctx) {
+  const lang = await guard(interaction, ctx, 'embeds', { requireEnabled: false });
+  if (!lang) return;
   const group = interaction.options.getSubcommandGroup(false);
   const sub = interaction.options.getSubcommand();
-  if (!group && (sub === 'enable' || sub === 'disable')) return handleToggle(interaction, ctx, 'embeds');
-
-  const lang = await guard(interaction, ctx, 'embeds');
-  if (!lang) return;
   const guildId = interaction.guildId;
-  const channelId = () => interaction.options.getChannel('channel')?.id ?? interaction.channelId;
 
-  if (!group && sub === 'builder') {
-    // A new build starts clean; the modal submit keeps fields only from the current draft.
-    clearDraft(draftKey(guildId, interaction.user.id));
-    return interaction.showModal(builderModal(lang, channelId()));
+  if (group === 'edit') {
+    if (sub === 'all') {
+      const loaded = await loadEmbed(interaction, ctx, lang);
+      return loaded && showPanel(interaction, ctx, lang, loaded.name);
+    }
+    return editPart(interaction, ctx, lang, sub);
   }
 
-  if (!group && sub === 'quick') {
-    const spec = quickSpec({
-      title: interaction.options.getString('title', true),
-      description: interaction.options.getString('description', true),
-      color: interaction.options.getString('color'),
-      image: interaction.options.getString('image'),
-    });
-    return sendEmbedSpec(interaction, ctx, lang, spec, channelId(), 'embeds');
+  if (sub === 'create') {
+    const name = normalizeEmbedName(interaction.options.getString('name', true));
+    if (!name) return interaction.reply(ephemeral(t(lang, 'embeds.badName')));
+    if (!(await createEmbed(ctx.db, guildId, name))) {
+      return interaction.reply(ephemeral(t(lang, 'embeds.exists', { name })));
+    }
+    return showPanel(interaction, ctx, lang, name);
   }
 
-  if (group === 'template') {
-    if (sub === 'list') {
-      const names = await listTemplates(ctx.db, guildId);
-      const text = names.length
-        ? capList(names.map((n) => `\`${n}\``), { more: (count) => t(lang, 'common.more', { count }) })
-        : t(lang, 'embeds.noTemplates');
-      return interaction.reply(ephemeral(text));
-    }
-    const name = interaction.options.getString('name', true).trim();
-    if (sub === 'use') {
-      const spec = await getTemplate(ctx.db, guildId, name);
-      if (!spec) return interaction.reply(ephemeral(t(lang, 'embeds.noTemplate')));
-      return sendEmbedSpec(interaction, ctx, lang, spec, channelId(), 'embeds');
-    }
-    if (sub === 'delete') {
-      const removed = await deleteTemplate(ctx.db, guildId, name);
-      return interaction.reply(ephemeral(t(lang, removed ? 'embeds.templateDeleted' : 'embeds.noTemplate')));
-    }
+  if (sub === 'list') {
+    const names = await listEmbeds(ctx.db, guildId);
+    const text = names.length
+      ? capList(names.map((n) => `\`${n}\``), { more: (count) => t(lang, 'common.more', { count }) })
+      : t(lang, 'embeds.none');
+    return interaction.reply(ephemeral(text));
   }
-}
 
-async function handle(interaction, ctx) {
-  const lang = await guard(interaction, ctx, 'embeds');
-  if (!lang) return;
-  const [, action, channelId] = interaction.customId.split(':');
-  const key = draftKey(interaction.guildId, interaction.user.id);
+  if (sub === 'delete') {
+    const name = normalizeEmbedName(interaction.options.getString('embed', true));
+    if (!name) return interaction.reply(ephemeral(t(lang, 'embeds.badName')));
+    const removed = await deleteEmbed(ctx.db, guildId, name);
+    return interaction.reply(ephemeral(t(lang, removed ? 'embeds.deleted' : 'embeds.notFound', { name })));
+  }
 
-  if (action === 'modal' && interaction.isModalSubmit()) {
-    let spec;
-    try {
-      spec = specFromFields((id) => interaction.fields.getTextInputValue(id));
-    } catch {
-      return interaction.reply(ephemeral(t(lang, 'embeds.imageMissing')));
-    }
-    // The builder form has no field inputs, so an edit keeps the fields already added.
-    const previous = getDraft(key);
-    if (previous?.fields?.length) spec.fields = previous.fields;
-    const check = validateEmbed(spec);
+  if (sub === 'show') {
+    const loaded = await loadEmbed(interaction, ctx, lang);
+    if (!loaded) return;
+    const check = validateEmbed(loaded.spec);
     if (!check.ok) return interaction.reply(ephemeral(errorText(lang, check.errors)));
-    putDraft(key, spec);
-    return showPreview(interaction, ctx, lang, spec, channelId);
-  }
-
-  if (action === 'edit' && interaction.isButton()) {
-    const spec = getDraft(key);
-    if (!spec) return interaction.reply(ephemeral(t(lang, 'embeds.draftExpired')));
-    return interaction.showModal(builderModal(lang, channelId, spec));
-  }
-
-  if (action === 'field' && interaction.isButton()) {
-    if (!getDraft(key)) return interaction.reply(ephemeral(t(lang, 'embeds.draftExpired')));
-    return interaction.showModal(fieldModal(lang, channelId));
-  }
-
-  if (action === 'fieldmodal' && interaction.isModalSubmit()) {
-    const spec = getDraft(key);
-    if (!spec) return interaction.reply(ephemeral(t(lang, 'embeds.draftExpired')));
-    const result = appendField(spec, {
-      name: interaction.fields.getTextInputValue('name'),
-      value: interaction.fields.getTextInputValue('value'),
-      inline: parseInline(interaction.fields.getTextInputValue('inline')),
-    });
-    if (!result.ok) return interaction.reply(ephemeral(errorText(lang, result.errors)));
-    putDraft(key, result.spec);
-    return showPreview(interaction, ctx, lang, result.spec, channelId);
-  }
-
-  if (action === 'send' && interaction.isButton()) {
-    const spec = getDraft(key);
-    if (!spec) return interaction.reply(ephemeral(t(lang, 'embeds.draftExpired')));
-    const sent = await sendEmbedSpec(interaction, ctx, lang, spec, channelId, 'embeds');
-    if (sent) clearDraft(key);
-    return;
-  }
-
-  if (action === 'tpl' && interaction.isButton()) {
-    if (!getDraft(key)) return interaction.reply(ephemeral(t(lang, 'embeds.draftExpired')));
-    return interaction.showModal(templateNameModal(lang));
-  }
-
-  if (action === 'tplmodal' && interaction.isModalSubmit()) {
-    const spec = getDraft(key);
-    if (!spec) return interaction.reply(ephemeral(t(lang, 'embeds.draftExpired')));
-    const name = interaction.fields.getTextInputValue('name').trim();
-    if (!name) return interaction.reply(ephemeral(t(lang, 'embeds.noTemplate')));
-    await saveTemplate(ctx.db, interaction.guildId, name, spec);
-    return interaction.reply(ephemeral(t(lang, 'embeds.templateSaved')));
+    const channelId = interaction.options.getChannel('channel')?.id ?? interaction.channelId;
+    return sendEmbedSpec(interaction, ctx, lang, loaded.spec, channelId);
   }
 }
 
-export const commands = [{ data, execute, components: { prefix: 'embeds', handle } }];
+export const commands = [{ data, execute }];
 export const events = [];

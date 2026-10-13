@@ -8,8 +8,8 @@ import { trySend } from '../../core/send.js';
 import { safeMentions } from '../../core/mentions.js';
 import { memberCanPost } from '../../core/permissions.js';
 import { t } from '../../i18n/index.js';
-import { getTemplate } from '../embeds/templates.js';
-import { fetchGuildSendable, sendEmbedSpec } from '../embeds/send.js';
+import { getEmbed, normalizeEmbedName } from '../embeds/store.js';
+import { fetchGuildSendable, sendEmbedSpec } from '../embeds/render.js';
 import { rolesToPing, isHttpUrl } from './rules.js';
 
 const CHANNEL_TYPES = [ChannelType.GuildText, ChannelType.GuildAnnouncement];
@@ -72,10 +72,11 @@ async function execute(interaction, ctx) {
   }
 
   if (sub === 'embed') {
-    const name = interaction.options.getString('template', true).trim();
-    const spec = await getTemplate(ctx.db, interaction.guildId, name);
-    if (!spec) return interaction.reply(ephemeral(t(lang, 'embeds.noTemplate')));
-    return sendEmbedSpec(interaction, ctx, lang, spec, channelId, 'post');
+    const name = normalizeEmbedName(interaction.options.getString('template', true));
+    if (!name) return interaction.reply(ephemeral(t(lang, 'embeds.badName')));
+    const spec = await getEmbed(ctx.db, interaction.guildId, name);
+    if (!spec) return interaction.reply(ephemeral(t(lang, 'embeds.notFound', { name })));
+    return sendEmbedSpec(interaction, ctx, lang, spec, channelId);
   }
 
   if (sub === 'buttons') {
