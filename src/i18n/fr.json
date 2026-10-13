@@ -34,5 +34,11 @@
   "feature.afk": "AFK",
   "feature.statschannels": "Salons de statistiques",
   "feature.backup": "Sauvegarde et restauration",
-  "feature.translate": "Traduction"
+  "feature.translate": "Traduction",
+  "panel.title": "Fonctionnalités du bot",
+  "panel.core": "Essentiel",
+  "panel.comingSoon": "Bientôt disponible",
+  "panel.managerSet": "Les membres ayant le rôle {role} peuvent désormais gérer le bot.",
+  "panel.managerCleared": "Le rôle de gestionnaire du bot a été retiré.",
+  "language.set": "La langue du bot est maintenant le français."
 }

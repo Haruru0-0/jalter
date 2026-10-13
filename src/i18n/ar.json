@@ -34,5 +34,11 @@
   "feature.afk": "الغياب",
   "feature.statschannels": "قنوات الإحصائيات",
   "feature.backup": "النسخ الاحتياطي والاستعادة",
-  "feature.translate": "الترجمة"
+  "feature.translate": "الترجمة",
+  "panel.title": "ميزات البوت",
+  "panel.core": "أساسي",
+  "panel.comingSoon": "قريبًا",
+  "panel.managerSet": "يمكن للأعضاء الذين لديهم الرتبة {role} إدارة البوت الآن.",
+  "panel.managerCleared": "تمت إزالة رتبة مدير البوت.",
+  "language.set": "لغة البوت الآن هي العربية."
 }

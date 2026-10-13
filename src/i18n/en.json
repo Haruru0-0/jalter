@@ -34,5 +34,11 @@
   "feature.afk": "AFK",
   "feature.statschannels": "Stats channels",
   "feature.backup": "Backup and restore",
-  "feature.translate": "Translate"
+  "feature.translate": "Translate",
+  "panel.title": "Bot features",
+  "panel.core": "Core",
+  "panel.comingSoon": "Coming soon",
+  "panel.managerSet": "Members with the role {role} can now manage the bot.",
+  "panel.managerCleared": "The bot manager role was removed.",
+  "language.set": "The bot language is now English."
 }
