@@ -1,0 +1,20 @@
+{
+  "name": "jalter",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "deploy": "node src/deploy-commands.js",
+    "db:up": "docker compose up -d",
+    "test": "node --test --test-concurrency=1"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "1.0.11",
+    "discord.js": "14.27.0",
+    "dotenv": "18.0.7",
+    "pg": "8.23.1"
+  }
+}
