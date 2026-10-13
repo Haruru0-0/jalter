@@ -1,1 +1,1 @@
-Noto Sans and Noto Sans Arabic (Regular, 400) come from the @fontsource/noto-sans and @fontsource/noto-sans-arabic npm packages, licensed under the SIL Open Font License 1.1.
+Noto Sans and Noto Sans Arabic (Regular, 400) come from the @fontsource/noto-sans and @fontsource/noto-sans-arabic npm packages, licensed under the SIL Open Font License 1.1. The copyright notices and the full license text are in [OFL.txt](OFL.txt), copied from the LICENSE files shipped in those packages.
