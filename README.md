@@ -68,10 +68,10 @@ Run these on a test server with the bot invited and started. Confirm each item.
 2. As a normal member (no Manage Server), every setup command is refused with the permission message.
 3. `/language set` to French changes `/panel overview` to French; Arabic shows Arabic.
 4. `/media setup`, `/media add logo`, `/media list`.
-5. `/embed create name:rules` opens the editor; use the buttons to set the title, description and fields, then `/embed edit title ...` and `/embed show`. An embed with `logo` as its image shows the image.
+5. `/embed create name:rules` works without enabling anything and opens the editor; use the buttons to set the title, description and fields, then `/embed edit title ...` and `/embed show`. An embed with `logo` as its image shows the image.
 6. A text over the limits (for example a 300-character title) shows the error and saves nothing.
 7. `/post` works without enabling anything; `@everyone` in the text does not ping.
-8. `/set greet channel`, then `/set greet message` with text, and again without text (it opens the form). Add `{embed:rules}` to the message and run `/test greet`.
+8. `/set greet channel`, then `/set greet message` with text, and again without text (it opens the form). Put placeholders such as `{user}` and `{server_name}` in it, add `{embed:rules}`, and run `/test greet`. Then `/set greet message none` turns that one message off (`/test greet` says it is off) while the leave and boost messages keep working.
 9. `/set greet card on` and `/test greet`: the card looks right with an Arabic username. Try `/set greet background logo` and `/set greet dm on` (the DM arrives).
 10. Repeat steps 8 and 9 for `/set leave ...` and `/set boost ...` with `/test leave` and `/test boost`.
 11. `/autorole setup` gives the right role to a new human account and to a bot.
