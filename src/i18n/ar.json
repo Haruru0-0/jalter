@@ -141,5 +141,10 @@
   "panel.everyoneRole": "لا يمكن أن يكون دور @everyone دور إدارة البوت. اختر دوراً يملكه الطاقم فقط.",
   "panel.managedRole": "هذا الدور يديره بوت أو تكامل ولا يمكن أن يكون دور إدارة البوت.",
   "panel.needManageServer": "فقط الأعضاء الذين لديهم صلاحية إدارة الخادم يمكنهم تغيير دور إدارة البوت.",
-  "common.cannotPostThere": "ليست لديك صلاحية رؤية تلك القناة أو إرسال الرسائل فيها."
+  "common.cannotPostThere": "ليست لديك صلاحية رؤية تلك القناة أو إرسال الرسائل فيها.",
+  "common.more": "و{count} أخرى",
+  "welcome.testFeatureOff": "لم يُرسل شيء: رسائل الترحيب متوقفة. فعّلها باستخدام /welcome setup.",
+  "welcome.testEventOff": "لم يُرسل شيء: رسالة {event} متوقفة. فعّلها باستخدام /welcome setup.",
+  "welcome.testNoChannel": "لم يُرسل شيء: قناة {event} غير موجودة أو لا أستطيع رؤيتها. شغّل /welcome setup مرة أخرى.",
+  "welcome.testFailed": "لم أتمكن من نشر الرسالة التجريبية. تحقّق من صلاحياتي في القناة."
 }

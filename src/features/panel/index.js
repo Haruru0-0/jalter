@@ -1,5 +1,5 @@
 import { SlashCommandBuilder } from 'discord.js';
-import { FEATURES } from '../../core/registry.js';
+import { FEATURES, setupCommand } from '../../core/registry.js';
 import { guard } from '../../core/guard.js';
 import { ephemeral } from '../../core/replies.js';
 import { listFeatures, setFeature } from '../../db/settings.js';
@@ -10,7 +10,10 @@ export function buildPanelEmbed(features, lang) {
     let status;
     if (f.alwaysOn) status = t(lang, 'panel.core');
     else if (f.command === null) status = t(lang, 'panel.comingSoon');
-    else status = features.get(f.key)?.enabled ? t(lang, 'common.on') : t(lang, 'common.off');
+    else {
+      const onOff = features.get(f.key)?.enabled ? t(lang, 'common.on') : t(lang, 'common.off');
+      status = `${onOff} (/${setupCommand(f)})`;
+    }
     return `**${t(lang, f.nameKey)}**: ${status}`;
   });
   return { title: t(lang, 'panel.title'), description: lines.join('\n') };

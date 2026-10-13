@@ -141,5 +141,10 @@
   "panel.everyoneRole": "The @everyone role cannot be the bot manager role. Pick a role that only staff have.",
   "panel.managedRole": "That role is managed by a bot or an integration and cannot be the bot manager role.",
   "panel.needManageServer": "Only members with the Manage Server permission can change the bot manager role.",
-  "common.cannotPostThere": "You do not have permission to see or send messages in that channel."
+  "common.cannotPostThere": "You do not have permission to see or send messages in that channel.",
+  "common.more": "+{count} more",
+  "welcome.testFeatureOff": "Nothing was sent: welcome messages are off. Turn them on with /welcome setup.",
+  "welcome.testEventOff": "Nothing was sent: the {event} message is off. Turn it on with /welcome setup.",
+  "welcome.testNoChannel": "Nothing was sent: the {event} channel is missing or I cannot see it. Run /welcome setup again.",
+  "welcome.testFailed": "I could not post the test message. Check my permissions in the channel."
 }

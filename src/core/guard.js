@@ -1,6 +1,6 @@
 import { getLang, t } from '../i18n/index.js';
 import { canManage } from './permissions.js';
-import { isEnabled, FEATURES } from './registry.js';
+import { isEnabled, FEATURES, setupCommand } from './registry.js';
 import { ephemeral } from './replies.js';
 
 export async function guard(interaction, ctx, key, { requireManager = true, requireEnabled = true } = {}) {
@@ -14,9 +14,8 @@ export async function guard(interaction, ctx, key, { requireManager = true, requ
     return null;
   }
   if (requireEnabled && !(await isEnabled(ctx.db, interaction.guildId, key))) {
-    const feature = FEATURES.find((f) => f.key === key);
-    const command = feature?.enableCommand ?? `${feature?.command ?? key} enable`;
-    await interaction.reply(ephemeral(t(lang, 'common.featureOff', { command: `/${command}` })));
+    const feature = FEATURES.find((f) => f.key === key) ?? { key };
+    await interaction.reply(ephemeral(t(lang, 'common.featureOff', { command: `/${setupCommand(feature)}` })));
     return null;
   }
   return lang;

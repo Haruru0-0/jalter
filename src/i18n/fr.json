@@ -141,5 +141,10 @@
   "panel.everyoneRole": "Le rôle @everyone ne peut pas être le rôle de gestion du bot. Choisissez un rôle réservé à l'équipe.",
   "panel.managedRole": "Ce rôle est géré par un bot ou une intégration et ne peut pas être le rôle de gestion du bot.",
   "panel.needManageServer": "Seuls les membres ayant la permission Gérer le serveur peuvent changer le rôle de gestion du bot.",
-  "common.cannotPostThere": "Vous n'avez pas la permission de voir ce salon ou d'y envoyer des messages."
+  "common.cannotPostThere": "Vous n'avez pas la permission de voir ce salon ou d'y envoyer des messages.",
+  "common.more": "+{count} de plus",
+  "welcome.testFeatureOff": "Rien n'a été envoyé : les messages de bienvenue sont désactivés. Activez-les avec /welcome setup.",
+  "welcome.testEventOff": "Rien n'a été envoyé : le message {event} est désactivé. Activez-le avec /welcome setup.",
+  "welcome.testNoChannel": "Rien n'a été envoyé : le salon {event} est introuvable ou je ne peux pas le voir. Relancez /welcome setup.",
+  "welcome.testFailed": "Je n'ai pas pu publier le message de test. Vérifiez mes permissions dans le salon."
 }

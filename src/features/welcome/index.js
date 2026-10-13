@@ -15,15 +15,13 @@ import { getLang, t } from '../../i18n/index.js';
 
 const EVENTS = ['join', 'leave', 'boost'];
 
-async function sendWelcome(ctx, member, event, cfg, vars) {
-  const channel = await fetchSendable(ctx.client, cfg.channelId);
-  if (!channel) {
-    console.warn(`Welcome channel for ${event} missing in guild ${member.guild.id}`);
-    return;
-  }
-  const lang = await getLang(ctx.db, member.guild.id);
+// Builds the styled payload. Loading the embed image, the card background or the
+// avatar can fail; the caller then falls back to the plain text payload.
+async function styledPayload(ctx, member, event, cfg, vars, lang) {
   const images = {};
-  if (cfg.style === 'embed' && cfg.embed?.image) images.image = await resolveImage(ctx.db, ctx.client, member.guild.id, cfg.embed.image);
+  if (cfg.style === 'embed' && cfg.embed?.image) {
+    images.image = await resolveImage(ctx.db, ctx.client, member.guild.id, cfg.embed.image);
+  }
   let card = null;
   if (cfg.style === 'card') {
     const background = cfg.background
@@ -36,23 +34,47 @@ async function sendWelcome(ctx, member, event, cfg, vars) {
       background,
     });
   }
-  const payload = buildWelcomePayload(cfg, vars, { images, card, event, lang });
-  await trySend(channel, {
+  return buildWelcomePayload(cfg, vars, { images, card, event, lang });
+}
+
+// Returns 'sent', 'no-channel' or 'send-failed'.
+async function sendWelcome(ctx, member, event, cfg, vars) {
+  const channel = await fetchSendable(ctx.client, cfg.channelId);
+  if (!channel) {
+    console.warn(`Welcome channel for ${event} missing in guild ${member.guild.id}`);
+    return 'no-channel';
+  }
+  const lang = await getLang(ctx.db, member.guild.id);
+  let payload;
+  try {
+    payload = await styledPayload(ctx, member, event, cfg, vars, lang);
+  } catch (err) {
+    console.warn(`Welcome ${event} image failed in ${member.guild.id}, falling back to text: ${err.message}`);
+    payload = buildWelcomePayload({ ...cfg, style: 'text' }, vars, { event, lang });
+  }
+  const sent = await trySend(channel, {
     ...payload,
     allowedMentions: event === 'leave' ? safeMentions() : { parse: [], users: [member.id] },
   });
+  return sent ? 'sent' : 'send-failed';
 }
 
-// Never throws: a missing channel, a failed send or closed DMs only log a warning.
+/**
+ * Posts the welcome, leave or boost message and the optional DM.
+ * Returns 'sent' | 'feature-off' | 'event-off' | 'no-channel' | 'send-failed'.
+ * Never throws: a missing channel, a failed send or closed DMs only log a warning.
+ */
 export async function handleMember(ctx, member, event) {
+  let status = 'send-failed';
   try {
     const { enabled, config } = await getFeature(ctx.db, member.guild.id, 'welcome');
     const cfg = config[event];
-    if (!enabled || !cfg?.enabled) return;
+    if (!enabled) return 'feature-off';
+    if (!cfg?.enabled) return 'event-off';
     // A partial member (left while uncached) normally still carries its user.
     if (!member.user) {
       console.warn(`Welcome ${event} skipped in ${member.guild.id}: member has no user data`);
-      return;
+      return 'send-failed';
     }
 
     const vars = {
@@ -64,7 +86,7 @@ export async function handleMember(ctx, member, event) {
     };
 
     try {
-      await sendWelcome(ctx, member, event, cfg, vars);
+      status = await sendWelcome(ctx, member, event, cfg, vars);
     } catch (err) {
       console.warn(`Welcome ${event} failed:`, err.message);
     }
@@ -79,7 +101,16 @@ export async function handleMember(ctx, member, event) {
   } catch (err) {
     console.warn(`Welcome ${event} failed:`, err.message);
   }
+  return status;
 }
+
+const TEST_REPLY = {
+  sent: 'welcome.testSent',
+  'feature-off': 'welcome.testFeatureOff',
+  'event-off': 'welcome.testEventOff',
+  'no-channel': 'welcome.testNoChannel',
+  'send-failed': 'welcome.testFailed',
+};
 
 const eventOption = (o) =>
   o.setName('event').setDescription('Which message')
@@ -201,8 +232,8 @@ async function execute(interaction, ctx) {
 
   if (sub === 'test') {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    await handleMember(ctx, interaction.member, event);
-    return interaction.editReply(t(lang, 'welcome.testSent'));
+    const status = await handleMember(ctx, interaction.member, event);
+    return interaction.editReply(t(lang, TEST_REPLY[status], { event }));
   }
 
   if (sub === 'disable') {

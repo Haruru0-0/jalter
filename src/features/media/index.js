@@ -2,6 +2,7 @@ import { SlashCommandBuilder, ChannelType } from 'discord.js';
 import { guard } from '../../core/guard.js';
 import { handleToggle, toggleSubcommands } from '../../core/toggle.js';
 import { ephemeral } from '../../core/replies.js';
+import { capList } from '../../core/lists.js';
 import { fetchSendable } from '../../core/send.js';
 import { getFeature, setFeature } from '../../db/settings.js';
 import { t } from '../../i18n/index.js';
@@ -63,7 +64,9 @@ async function execute(interaction, ctx) {
 
   if (sub === 'list') {
     const { rows } = await ctx.db.query('SELECT name FROM media_items WHERE guild_id = $1 ORDER BY name', [guildId]);
-    const text = rows.length ? rows.map((r) => `\`${r.name}\``).join(', ') : t(lang, 'media.empty');
+    const text = rows.length
+      ? capList(rows.map((r) => `\`${r.name}\``), { more: (count) => t(lang, 'common.more', { count }) })
+      : t(lang, 'media.empty');
     return interaction.reply(ephemeral(text));
   }
 

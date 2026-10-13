@@ -5,10 +5,11 @@ import {
 import { guard } from '../../core/guard.js';
 import { handleToggle, toggleSubcommands } from '../../core/toggle.js';
 import { ephemeral } from '../../core/replies.js';
+import { capList } from '../../core/lists.js';
 import { t } from '../../i18n/index.js';
 import { validateEmbed } from './model.js';
 import { buildEmbedPayload, sendEmbedSpec } from './send.js';
-import { putDraft, getDraft, clearDraft } from './drafts.js';
+import { putDraft, getDraft, clearDraft, draftKey } from './drafts.js';
 import { saveTemplate, getTemplate, listTemplates, deleteTemplate } from './templates.js';
 import { specFromFields, quickSpec, errorText, appendField, parseInline } from './spec.js';
 
@@ -119,7 +120,7 @@ async function execute(interaction, ctx) {
 
   if (!group && sub === 'builder') {
     // A new build starts clean; the modal submit keeps fields only from the current draft.
-    clearDraft(interaction.user.id);
+    clearDraft(draftKey(guildId, interaction.user.id));
     return interaction.showModal(builderModal(lang, channelId()));
   }
 
@@ -136,7 +137,9 @@ async function execute(interaction, ctx) {
   if (group === 'template') {
     if (sub === 'list') {
       const names = await listTemplates(ctx.db, guildId);
-      const text = names.length ? names.map((n) => `\`${n}\``).join(', ') : t(lang, 'embeds.noTemplates');
+      const text = names.length
+        ? capList(names.map((n) => `\`${n}\``), { more: (count) => t(lang, 'common.more', { count }) })
+        : t(lang, 'embeds.noTemplates');
       return interaction.reply(ephemeral(text));
     }
     const name = interaction.options.getString('name', true).trim();
@@ -156,7 +159,7 @@ async function handle(interaction, ctx) {
   const lang = await guard(interaction, ctx, 'embeds');
   if (!lang) return;
   const [, action, channelId] = interaction.customId.split(':');
-  const userId = interaction.user.id;
+  const key = draftKey(interaction.guildId, interaction.user.id);
 
   if (action === 'modal' && interaction.isModalSubmit()) {
     let spec;
@@ -166,27 +169,27 @@ async function handle(interaction, ctx) {
       return interaction.reply(ephemeral(t(lang, 'embeds.imageMissing')));
     }
     // The builder form has no field inputs, so an edit keeps the fields already added.
-    const previous = getDraft(userId);
+    const previous = getDraft(key);
     if (previous?.fields?.length) spec.fields = previous.fields;
     const check = validateEmbed(spec);
     if (!check.ok) return interaction.reply(ephemeral(errorText(lang, check.errors)));
-    putDraft(userId, spec);
+    putDraft(key, spec);
     return showPreview(interaction, ctx, lang, spec, channelId);
   }
 
   if (action === 'edit' && interaction.isButton()) {
-    const spec = getDraft(userId);
+    const spec = getDraft(key);
     if (!spec) return interaction.reply(ephemeral(t(lang, 'embeds.draftExpired')));
     return interaction.showModal(builderModal(lang, channelId, spec));
   }
 
   if (action === 'field' && interaction.isButton()) {
-    if (!getDraft(userId)) return interaction.reply(ephemeral(t(lang, 'embeds.draftExpired')));
+    if (!getDraft(key)) return interaction.reply(ephemeral(t(lang, 'embeds.draftExpired')));
     return interaction.showModal(fieldModal(lang, channelId));
   }
 
   if (action === 'fieldmodal' && interaction.isModalSubmit()) {
-    const spec = getDraft(userId);
+    const spec = getDraft(key);
     if (!spec) return interaction.reply(ephemeral(t(lang, 'embeds.draftExpired')));
     const result = appendField(spec, {
       name: interaction.fields.getTextInputValue('name'),
@@ -194,25 +197,25 @@ async function handle(interaction, ctx) {
       inline: parseInline(interaction.fields.getTextInputValue('inline')),
     });
     if (!result.ok) return interaction.reply(ephemeral(errorText(lang, result.errors)));
-    putDraft(userId, result.spec);
+    putDraft(key, result.spec);
     return showPreview(interaction, ctx, lang, result.spec, channelId);
   }
 
   if (action === 'send' && interaction.isButton()) {
-    const spec = getDraft(userId);
+    const spec = getDraft(key);
     if (!spec) return interaction.reply(ephemeral(t(lang, 'embeds.draftExpired')));
     const sent = await sendEmbedSpec(interaction, ctx, lang, spec, channelId, 'embeds');
-    if (sent) clearDraft(userId);
+    if (sent) clearDraft(key);
     return;
   }
 
   if (action === 'tpl' && interaction.isButton()) {
-    if (!getDraft(userId)) return interaction.reply(ephemeral(t(lang, 'embeds.draftExpired')));
+    if (!getDraft(key)) return interaction.reply(ephemeral(t(lang, 'embeds.draftExpired')));
     return interaction.showModal(templateNameModal(lang));
   }
 
   if (action === 'tplmodal' && interaction.isModalSubmit()) {
-    const spec = getDraft(userId);
+    const spec = getDraft(key);
     if (!spec) return interaction.reply(ephemeral(t(lang, 'embeds.draftExpired')));
     const name = interaction.fields.getTextInputValue('name').trim();
     if (!name) return interaction.reply(ephemeral(t(lang, 'embeds.noTemplate')));
