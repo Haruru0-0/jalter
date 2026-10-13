@@ -65,3 +65,15 @@ export const setReassign = (config, on) => ({ ...readConfig(config), reassign: B
 
 /** `@everyone` (role id equals guild id) and managed roles cannot be handed out. */
 export const isValidRoleId = (role, guildId) => role.id !== guildId && !role.managed;
+
+/** Drops role ids for which `exists(id)` is false; returns the normalised config. */
+export function pruneRoles(config, exists) {
+  const current = readConfig(config);
+  return {
+    ...current,
+    roles: current.roles.filter(exists),
+    botRoles: current.botRoles.filter(exists),
+    timed: current.timed.filter((t) => exists(t.roleId)),
+    blacklist: current.blacklist.filter(exists),
+  };
+}

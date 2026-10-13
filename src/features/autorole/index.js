@@ -7,7 +7,7 @@ import { capList } from '../../core/lists.js';
 import { t } from '../../i18n/index.js';
 import {
   readConfig, addRole, removeRole, addTimed, removeTimed, addBlacklist, removeBlacklist,
-  setReassign, isValidRoleId, LIMITS, MAX_TIMED,
+  setReassign, isValidRoleId, pruneRoles, LIMITS, MAX_TIMED,
 } from './config.js';
 import { parseDuration, formatDuration, MIN_DELAY, MAX_DELAY } from './duration.js';
 import { cancelRole } from './store.js';
@@ -100,15 +100,23 @@ async function execute(interaction, ctx) {
   const lang = await guard(interaction, ctx, 'autorole', { requireEnabled: false });
   if (!lang) return;
   const guildId = interaction.guildId;
-  const { config } = await getFeature(ctx.db, guildId, 'autorole');
+  const stored = (await getFeature(ctx.db, guildId, 'autorole')).config;
+  // Deleted roles cannot be picked in a command option, so every change drops them first.
+  const cache = interaction.guild.roles.cache;
+  const config = cache.size ? pruneRoles(stored, (id) => cache.has(id)) : stored;
+  const prunedTimed = readConfig(stored).timed.filter((x) => !readConfig(config).timed.some((y) => y.roleId === x.roleId));
+  const saveAll = async (next, enabled) => {
+    await save(ctx, guildId, next, enabled);
+    for (const { roleId } of prunedTimed) await cancelRole(ctx.db, guildId, roleId);
+  };
   const failure = (result, fullKey = 'autorole.full', limit = LIMITS.roles) =>
     reply(interaction, t(lang, { full: fullKey, exists: 'autorole.exists', missing: 'autorole.notListed' }[result.reason], { limit }));
 
-  if (!group && sub === 'show') return reply(interaction, showText(interaction, lang, readConfig(config)));
+  if (!group && sub === 'show') return reply(interaction, showText(interaction, lang, readConfig(stored)));
 
   if (!group && sub === 'reassign') {
     const on = interaction.options.getString('state', true) === 'on';
-    await save(ctx, guildId, setReassign(config, on));
+    await saveAll(setReassign(config, on));
     return reply(interaction, t(lang, on ? 'autorole.reassignOn' : 'autorole.reassignOff'));
   }
 
@@ -119,7 +127,7 @@ async function execute(interaction, ctx) {
     const target = interaction.options.getString('target') === 'bots' ? 'bots' : 'humans';
     const result = addRole(config, target, role.id);
     if (!result.ok) return failure(result, 'autorole.full');
-    await save(ctx, guildId, result.config, true);
+    await saveAll(result.config, true);
     const botTop = interaction.guild.members.me?.roles.highest.position;
     const warn = botTop !== undefined && role.position >= botTop ? `\n${t(lang, 'autorole.tooHigh')}` : '';
     return reply(interaction, t(lang, 'autorole.added', {
@@ -130,14 +138,14 @@ async function execute(interaction, ctx) {
   if (!group && sub === 'remove') {
     const result = removeRole(config, 'both', role.id);
     if (!result.ok) return failure(result);
-    await save(ctx, guildId, result.config);
+    await saveAll(result.config);
     return reply(interaction, t(lang, 'autorole.removed', { role: mention(role.id) }));
   }
 
   if (group === 'blacklist') {
     const result = sub === 'add' ? addBlacklist(config, role.id) : removeBlacklist(config, role.id);
     if (!result.ok) return failure(result, 'autorole.blacklistFull', LIMITS.blacklist);
-    await save(ctx, guildId, result.config);
+    await saveAll(result.config);
     return reply(interaction, t(lang, sub === 'add' ? 'autorole.blacklistAdded' : 'autorole.blacklistRemoved',
       { role: mention(role.id) }));
   }
@@ -152,14 +160,14 @@ async function execute(interaction, ctx) {
     }
     const result = addTimed(config, role.id, seconds);
     if (!result.ok) return failure(result, 'autorole.full', MAX_TIMED);
-    await save(ctx, guildId, result.config, true);
+    await saveAll(result.config, true);
     return reply(interaction, t(lang, 'autorole.timedAdded', { role: mention(role.id), delay: formatDuration(seconds) }));
   }
 
   if (group === 'timed' && sub === 'remove') {
     const result = removeTimed(config, role.id);
     if (!result.ok) return failure(result);
-    await save(ctx, guildId, result.config);
+    await saveAll(result.config);
     await cancelRole(ctx.db, guildId, role.id);
     return reply(interaction, t(lang, 'autorole.timedRemoved', { role: mention(role.id) }));
   }

@@ -4,6 +4,7 @@ import { commands, events } from '../../src/features/autorole/index.js';
 import { events as assignEvents } from '../../src/features/autorole/assign.js';
 import { getFeature, setFeature } from '../../src/db/settings.js';
 import { queueRole } from '../../src/features/autorole/store.js';
+import { readConfig } from '../../src/features/autorole/config.js';
 import { t } from '../../src/i18n/index.js';
 import { testDb } from '../helpers/db.js';
 
@@ -136,14 +137,53 @@ test('add rejects @everyone and managed roles without saving', async () => {
   assert.equal((await state()).enabled, false);
 });
 
-test('legacy keys are replaced on save and do not come back', async () => {
+test('legacy keys are folded, nulled in storage and cannot come back', async () => {
   await setFeature(db, 'g1', 'autorole', { enabled: true, config: { humanRoleId: 'r2', botRoleId: 'r1' } });
   await run(fake('add', { roles: { role: 'hi' } }));
   const { config } = await state();
-  assert.deepEqual(config.roles, ['r2', 'hi']);
-  assert.deepEqual(config.botRoles, ['r1']);
+  assert.equal(config.humanRoleId, null);
+  assert.equal(config.botRoleId, null);
+  assert.deepEqual(readConfig(config).roles, ['r2', 'hi']);
+  assert.deepEqual(readConfig(config).botRoles, ['r1']);
+  const bot = fake('remove', { roles: { role: 'r1' } });
+  await run(bot);
+  assert.equal(text(bot), t('en', 'autorole.removed', { role: '<@&r1>' }));
+  assert.deepEqual(readConfig((await state()).config).botRoles, []);
   await run(fake('remove', { roles: { role: 'r2' } }));
-  assert.deepEqual((await state()).config.roles, ['hi']);
+  assert.deepEqual(readConfig((await state()).config).roles, ['hi']);
+});
+
+test('a change drops roles that no longer exist in the guild, and their pending grants', async () => {
+  await setFeature(db, 'g1', 'autorole', { enabled: true, config: {
+    roles: ['r1', 'gone'], botRoles: ['gone'], blacklist: ['gone'], timed: [{ roleId: 'gone', seconds: 60 }] } });
+  await queueRole(db, 'g1', 'u1', 'gone', Date.now() + 60000);
+  await run(fake('add', { roles: { role: 'r2' } }));
+  const { config } = await state();
+  assert.deepEqual(config.roles, ['r1', 'r2']);
+  assert.deepEqual([config.botRoles, config.blacklist, config.timed], [[], [], []]);
+  const { rows } = await db.query('SELECT * FROM pending_roles');
+  assert.equal(rows.length, 0);
+});
+
+test('pruning is skipped when the role cache is empty', async () => {
+  await setFeature(db, 'g1', 'autorole', { enabled: true, config: { roles: ['gone'] } });
+  await run(fake('add', { roles: { role: 'r2' }, ids: [] }));
+  assert.deepEqual((await state()).config.roles, ['gone', 'r2']);
+});
+
+test('show stays under 2000 characters with long lists in every language', async () => {
+  const many = Array.from({ length: 30 }, (_, i) => `1234567890123456${String(i).padStart(2, '0')}`);
+  const defs = Object.fromEntries(many.map((id) => [id, { id, managed: false, position: 1 }]));
+  Object.assign(ROLES, defs);
+  await setFeature(db, 'g1', 'autorole', { enabled: true, config: {
+    roles: many, botRoles: many, blacklist: many, timed: many.map((roleId) => ({ roleId, seconds: 90061 })) } });
+  for (const lang of ['en', 'ar', 'fr']) {
+    await db.query("DELETE FROM guild_settings WHERE feature = 'language'");
+    await setFeature(db, 'g1', 'language', { config: { lang } });
+    const i = fake('show', { ids: many });
+    await run(i);
+    assert.ok(text(i).length < 2000, `${lang} ${text(i).length}`);
+  }
 });
 
 test('remove drops a listed role and says notListed for an unlisted one', async () => {

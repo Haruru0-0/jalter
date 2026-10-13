@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   LIMITS, readConfig, addRole, removeRole, addTimed, removeTimed,
-  addBlacklist, removeBlacklist, setReassign, isValidRoleId,
+  addBlacklist, removeBlacklist, setReassign, isValidRoleId, pruneRoles,
 } from '../../src/features/autorole/config.js';
 
 const ids = (n, p = 'r') => Array.from({ length: n }, (_, i) => `${p}${i}`);
@@ -103,4 +103,16 @@ test('helpers never mutate their input', () => {
 test('readConfig ignores null legacy keys', () => {
   const c = readConfig({ roles: [], botRoles: [], humanRoleId: null, botRoleId: null });
   assert.deepEqual([c.roles, c.botRoles], [[], []]);
+});
+
+test('readConfig gives empty lists when arrays are absent and legacy keys are null', () => {
+  const c = readConfig({ humanRoleId: null, botRoleId: null });
+  assert.deepEqual([c.roles, c.botRoles], [[], []]);
+});
+
+test('pruneRoles drops missing ids everywhere and folds legacy keys', () => {
+  const keep = (id) => id !== 'x';
+  const c = pruneRoles({ humanRoleId: 'x', botRoles: ['a', 'x'], blacklist: ['x', 'b'],
+    timed: [{ roleId: 'x', seconds: 60 }, { roleId: 't', seconds: 60 }], reassign: true }, keep);
+  assert.deepEqual(c, { roles: [], botRoles: ['a'], timed: [{ roleId: 't', seconds: 60 }], reassign: true, blacklist: ['b'] });
 });
