@@ -171,7 +171,7 @@ test('runDue warns on an unexpected error and drops the row', async () => {
   assert.equal(rows.length, 0);
 });
 
-test('(h) reassign off remembers and re-gives nothing', async () => {
+test('(h) reassign off remembers and re-gives nothing, and clears an old memory at join', async () => {
   await enable({ roles: ['h1'], reassign: false });
   const g = fakeGuild();
   await rememberMemberRoles(ctxFor(), fakeMember(g, { roles: ['g1', 'h2'] }), { now: NOW });
@@ -182,7 +182,7 @@ test('(h) reassign off remembers and re-gives nothing', async () => {
   await assignAutoRole(ctxFor(), m, { now: NOW + 1000 });
   assert.deepEqual(m.added, ['h1']);
   ({ rows } = await db.query('SELECT * FROM remembered_roles'));
-  assert.equal(rows.length, 1, 'memory is neither read nor consumed');
+  assert.equal(rows.length, 0, 'memory is not used and is cleared');
 });
 
 test('(i) reassign remembers filtered roles and gives them back without duplicates', async () => {
@@ -213,13 +213,41 @@ test('(j) memory older than 30 days is ignored', async () => {
   assert.deepEqual(m.added, []);
 });
 
-test('(k) partial or only-everyone members do not overwrite a memory', async () => {
+test('(k) partial members do not overwrite a memory, even with only @everyone cached', async () => {
   await enable({ reassign: true });
   const g = fakeGuild();
   await rememberRoles(db, 'g1', 'u1', ['h2'], NOW - DAY);
   await rememberMemberRoles(ctxFor(), fakeMember(g, { partial: true, roles: ['g1', 'h1'] }), { now: NOW });
-  await rememberMemberRoles(ctxFor(), fakeMember(g, { roles: ['g1'] }), { now: NOW });
+  await rememberMemberRoles(ctxFor(), fakeMember(g, { partial: true, roles: ['g1'] }), { now: NOW });
   assert.deepEqual(await takeRemembered(db, 'g1', 'u1', NOW, MEMORY_MAX_AGE_MS), ['h2']);
+});
+
+test('a full member with only @everyone overwrites the memory with an empty list', async () => {
+  await enable({ reassign: true });
+  await rememberRoles(db, 'g1', 'u1', ['h2'], NOW - DAY);
+  await rememberMemberRoles(ctxFor(), fakeMember(fakeGuild(), { roles: ['g1'] }), { now: NOW });
+  const { rows } = await db.query('SELECT role_ids, left_at FROM remembered_roles');
+  assert.deepEqual(rows[0].role_ids, []);
+  assert.equal(rows[0].left_at.getTime(), NOW);
+});
+
+test('stale memory: a role lost while away is not given back later', async () => {
+  await enable({ reassign: true });
+  const g = fakeGuild();
+  // Leaves holding h2 (say Mod): it is remembered.
+  await rememberMemberRoles(ctxFor(), fakeMember(g, { roles: ['g1', 'h2'] }), { now: NOW });
+  // Rejoins while the feature is off, so the memory is neither read nor deleted.
+  await enable({ reassign: true }, false);
+  const quiet = fakeMember(g);
+  await assignAutoRole(ctxFor(), quiet, { now: NOW + DAY });
+  assert.deepEqual(quiet.added, []);
+  await enable({ reassign: true });
+  // Leaves again with no roles (a full, non-partial member).
+  await rememberMemberRoles(ctxFor(), fakeMember(g, { roles: ['g1'] }), { now: NOW + 2 * DAY });
+  // Rejoins within 30 days of the first leave: h2 must not come back.
+  const back = fakeMember(g);
+  await assignAutoRole(ctxFor(), back, { now: NOW + 3 * DAY });
+  assert.deepEqual(back.added, []);
 });
 
 test('(l) a deleted role is not re-given', async () => {

@@ -44,6 +44,10 @@ export async function takeRemembered(db, guildId, userId, nowMs, maxAgeMs) {
   return rows[0].role_ids;
 }
 
+export async function forgetRoles(db, guildId, userId) {
+  await db.query('DELETE FROM remembered_roles WHERE guild_id = $1 AND user_id = $2', [guildId, userId]);
+}
+
 export async function purgeOld(db, nowMs, maxAgeMs) {
   const { rowCount } = await db.query(
     'DELETE FROM remembered_roles WHERE left_at < $1', [new Date(nowMs - maxAgeMs)]);

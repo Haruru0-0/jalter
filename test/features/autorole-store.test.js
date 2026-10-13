@@ -1,7 +1,7 @@
 import { test, before, beforeEach, after } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  queueRole, takeDue, cancelRole, rememberRoles, takeRemembered, purgeOld,
+  queueRole, takeDue, cancelRole, rememberRoles, takeRemembered, forgetRoles, purgeOld,
 } from '../../src/features/autorole/store.js';
 import { testDb } from '../helpers/db.js';
 
@@ -72,6 +72,17 @@ test('purgeOld removes only the old rows', async () => {
   await rememberRoles(db, 'g1', 'new', ['b'], 9000);
   assert.equal(await purgeOld(db, 10000, 5000), 1);
   assert.deepEqual(await takeRemembered(db, 'g1', 'new', 10000, 5000), ['b']);
+});
+
+test('forgetRoles deletes only that member in that guild', async () => {
+  await rememberRoles(db, 'g1', 'u1', ['a'], 1000);
+  await rememberRoles(db, 'g1', 'u2', ['b'], 1000);
+  await rememberRoles(db, 'g2', 'u1', ['c'], 1000);
+  await forgetRoles(db, 'g1', 'u1');
+  await forgetRoles(db, 'g1', 'nobody');
+  assert.equal(await count('remembered_roles'), 2);
+  assert.deepEqual(await takeRemembered(db, 'g1', 'u2', 2000, 5000), ['b']);
+  assert.deepEqual(await takeRemembered(db, 'g2', 'u1', 2000, 5000), ['c']);
 });
 
 test('rows of two guilds do not mix', async () => {

@@ -1,7 +1,7 @@
 import { Events } from 'discord.js';
 import { getFeature } from '../../db/settings.js';
 import { readConfig } from './config.js';
-import { queueRole, takeDue, rememberRoles, takeRemembered, purgeOld } from './store.js';
+import { queueRole, takeDue, rememberRoles, takeRemembered, forgetRoles, purgeOld } from './store.js';
 
 export const MEMORY_MAX_AGE_MS = 30 * 24 * 3600 * 1000;
 
@@ -28,6 +28,9 @@ export async function assignAutoRole(ctx, member, { now = Date.now() } = {}) {
     if (!isBot && cfg.reassign) {
       const remembered = await takeRemembered(ctx.db, guild.id, member.id, now, MEMORY_MAX_AGE_MS);
       ids.push(...remembered.filter((id) => !cfg.blacklist.includes(id) && assignable(guild, id)));
+    } else if (!isBot) {
+      // A memory written while sticky roles were on must not outlive a join with them off.
+      await forgetRoles(ctx.db, guild.id, member.id);
     }
     ids = [...new Set(ids)];
     const timed = cfg.timed.filter((t) => !ids.includes(t.roleId));
@@ -58,8 +61,9 @@ export async function rememberMemberRoles(ctx, member, { now = Date.now() } = {}
     const cfg = readConfig(config);
     if (!cfg.reassign) return;
     const ids = [...(member.roles?.cache?.keys() ?? [])].filter((id) => id !== guild.id);
-    // A partial member, or one with only @everyone cached, would wipe a good memory.
-    if (member.partial || ids.length === 0) return;
+    // A partial member's roles are unknown and would wipe a good memory. A full member's list is
+    // authoritative (members are fetched at ready), so no roles overwrites an older memory with [].
+    if (member.partial) return;
     const keep = ids.filter((id) => !cfg.blacklist.includes(id) && assignable(guild, id));
     await rememberRoles(ctx.db, guild.id, member.id, keep, now);
   } catch (err) {
