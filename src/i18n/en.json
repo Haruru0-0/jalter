@@ -112,5 +112,19 @@
   "logging.rolesRemoved": "Roles removed",
   "logging.name": "Name",
   "logging.permissions": "Permissions",
-  "logging.permissionsChanged": "Permissions were changed."
+  "logging.permissionsChanged": "Permissions were changed.",
+  "info.members": "Members",
+  "info.boosts": "Boosts",
+  "info.boostValue": "{count} (level {tier})",
+  "info.channels": "Channels",
+  "info.roles": "Roles",
+  "info.created": "Created",
+  "info.joined": "Joined",
+  "info.accountAge": "Account created",
+  "info.level": "Level",
+  "info.warnings": "Warnings",
+  "info.birthday": "Birthday",
+  "info.notAvailable": "Not available yet.",
+  "info.notMember": "That user is not in this server.",
+  "info.noBanner": "That user has no banner."
 }

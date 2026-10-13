@@ -112,5 +112,19 @@
   "logging.rolesRemoved": "Rôles retirés",
   "logging.name": "Nom",
   "logging.permissions": "Permissions",
-  "logging.permissionsChanged": "Les permissions ont été modifiées."
+  "logging.permissionsChanged": "Les permissions ont été modifiées.",
+  "info.members": "Membres",
+  "info.boosts": "Boosts",
+  "info.boostValue": "{count} (niveau {tier})",
+  "info.channels": "Salons",
+  "info.roles": "Rôles",
+  "info.created": "Création",
+  "info.joined": "Arrivée",
+  "info.accountAge": "Compte créé",
+  "info.level": "Niveau",
+  "info.warnings": "Avertissements",
+  "info.birthday": "Anniversaire",
+  "info.notAvailable": "Pas encore disponible.",
+  "info.notMember": "Cet utilisateur n'est pas sur ce serveur.",
+  "info.noBanner": "Cet utilisateur n'a pas de bannière."
 }

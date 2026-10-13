@@ -112,5 +112,19 @@
   "logging.rolesRemoved": "الرتب المزالة",
   "logging.name": "الاسم",
   "logging.permissions": "الصلاحيات",
-  "logging.permissionsChanged": "تم تغيير الصلاحيات."
+  "logging.permissionsChanged": "تم تغيير الصلاحيات.",
+  "info.members": "الأعضاء",
+  "info.boosts": "التعزيزات",
+  "info.boostValue": "{count} (المستوى {tier})",
+  "info.channels": "القنوات",
+  "info.roles": "الرتب",
+  "info.created": "تاريخ الإنشاء",
+  "info.joined": "تاريخ الانضمام",
+  "info.accountAge": "تاريخ إنشاء الحساب",
+  "info.level": "المستوى",
+  "info.warnings": "التحذيرات",
+  "info.birthday": "تاريخ الميلاد",
+  "info.notAvailable": "غير متاح بعد.",
+  "info.notMember": "هذا المستخدم ليس في هذا الخادم.",
+  "info.noBanner": "ليس لهذا المستخدم بانر."
 }
