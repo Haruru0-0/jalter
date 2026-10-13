@@ -47,5 +47,13 @@
   "media.added": "Image enregistrée sous `{name}`.",
   "media.empty": "Aucune image enregistrée pour le moment.",
   "media.removed": "`{name}` a été oublié.",
-  "media.unknown": "Aucune image nommée `{name}`."
+  "media.unknown": "Aucune image nommée `{name}`.",
+  "embeds.err.empty": "L’embed doit contenir au moins un titre, une description, une image ou un champ.",
+  "embeds.err.titleTooLong": "Le titre dépasse 256 caractères.",
+  "embeds.err.descriptionTooLong": "La description dépasse 4096 caractères.",
+  "embeds.err.footerTooLong": "Le pied de page dépasse 2048 caractères.",
+  "embeds.err.tooManyFields": "Un embed peut avoir 25 champs au maximum.",
+  "embeds.err.fieldTooLong": "Un nom de champ dépasse 256 caractères ou une valeur dépasse 1024.",
+  "embeds.err.tooLarge": "L’embed dépasse 6000 caractères au total.",
+  "embeds.err.badColor": "La couleur doit ressembler à #5865F2."
 }

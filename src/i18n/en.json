@@ -47,5 +47,13 @@
   "media.added": "Stored the image as `{name}`.",
   "media.empty": "No stored images yet.",
   "media.removed": "Forgot `{name}`.",
-  "media.unknown": "There is no image named `{name}`."
+  "media.unknown": "There is no image named `{name}`.",
+  "embeds.err.empty": "The embed needs at least a title, description, image or field.",
+  "embeds.err.titleTooLong": "The title is longer than 256 characters.",
+  "embeds.err.descriptionTooLong": "The description is longer than 4096 characters.",
+  "embeds.err.footerTooLong": "The footer is longer than 2048 characters.",
+  "embeds.err.tooManyFields": "An embed can have at most 25 fields.",
+  "embeds.err.fieldTooLong": "A field name is over 256 characters or a value is over 1024.",
+  "embeds.err.tooLarge": "The embed is over 6000 characters in total.",
+  "embeds.err.badColor": "The color must look like #5865F2."
 }
