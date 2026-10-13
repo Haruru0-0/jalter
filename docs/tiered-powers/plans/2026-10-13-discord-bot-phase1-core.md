@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use tiered-powers:subagent-driven-development (recommended) or tiered-powers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Superseded in part (2026-10-13):** the welcome feature (Task 11), the embed builder, quick command and templates (Task 9), `/post embed`, and `core/templates.js` (Task 10) are replaced by `2026-10-13-discord-bot-phase1b-mimu-style.md`. Everything else in this plan stands. A final fix wave (partials and member fetch, GuildExpressions intent, error listeners, manager-role lockdown, Postgres loopback port, posting-rights check, capped lists, OFL text) also changed the code after this plan was written; the code, not this text, is the reference for those.
+
 **Goal:** A working Discord bot with per-server feature toggles (everything off by default), a `/panel` overview, three languages, and the Phase 1 features: media storage, embed builder, post message, welcome/leave/boost messages, auto role, logging, and info commands.
 
 **Architecture:** One Node.js process. Slash commands and component interactions are routed from a registry built from feature modules. Each feature lives in `src/features/<name>/index.js` and exports `{ commands, events }`. Every handler first checks the feature is enabled for that guild. All settings live in PostgreSQL (Docker) as one row per guild per feature (`enabled` plus a JSONB `config`). All database calls are asynchronous.
