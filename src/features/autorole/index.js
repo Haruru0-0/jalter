@@ -1,50 +1,169 @@
-import { SlashCommandBuilder, Events } from 'discord.js';
+import { SlashCommandBuilder } from 'discord.js';
 import { getFeature, setFeature } from '../../db/settings.js';
 import { guard } from '../../core/guard.js';
 import { handleToggle } from '../../core/toggle.js';
 import { ephemeral } from '../../core/replies.js';
+import { capList } from '../../core/lists.js';
 import { t } from '../../i18n/index.js';
+import {
+  readConfig, addRole, removeRole, addTimed, removeTimed, addBlacklist, removeBlacklist,
+  setReassign, isValidRoleId, LIMITS, MAX_TIMED,
+} from './config.js';
+import { parseDuration, formatDuration, MIN_DELAY, MAX_DELAY } from './duration.js';
+import { cancelRole } from './store.js';
+import { events } from './assign.js';
 
-export async function assignAutoRole(ctx, member) {
-  try {
-    const { enabled, config } = await getFeature(ctx.db, member.guild.id, 'autorole');
-    if (!enabled) return;
-    const roleId = member.user.bot ? config.botRoleId : config.humanRoleId;
-    if (!roleId) return;
-    await member.roles.add(roleId);
-  } catch (err) {
-    console.warn(`Auto role failed in ${member.guild.id}: ${err.message}`);
-  }
-}
+const roleOption = (description) => (o) => o.setName('role').setDescription(description).setRequired(true);
 
 const data = new SlashCommandBuilder()
   .setName('autorole')
-  .setDescription('Give new members a role automatically')
+  .setDescription('Give new members roles automatically')
   .addSubcommand((s) =>
-    s.setName('setup').setDescription('Choose the roles')
-      .addRoleOption((o) => o.setName('human-role').setDescription('Role for new members'))
-      .addRoleOption((o) => o.setName('bot-role').setDescription('Role for new bots')))
+    s.setName('add').setDescription('Give a role to every new member or bot')
+      .addRoleOption(roleOption('Role to give'))
+      .addStringOption((o) =>
+        o.setName('target').setDescription('Who gets it (default: humans)')
+          .addChoices({ name: 'humans', value: 'humans' }, { name: 'bots', value: 'bots' })))
+  .addSubcommand((s) =>
+    s.setName('remove').setDescription('Stop giving a role automatically')
+      .addRoleOption(roleOption('Role to stop giving')))
+  .addSubcommand((s) => s.setName('show').setDescription('Show the auto role settings'))
+  .addSubcommand((s) =>
+    s.setName('reassign').setDescription('Give returning members their old roles back')
+      .addStringOption((o) =>
+        o.setName('state').setDescription('On or off')
+          .addChoices({ name: 'on', value: 'on' }, { name: 'off', value: 'off' }).setRequired(true)))
+  .addSubcommandGroup((g) =>
+    g.setName('blacklist').setDescription('Roles whose members get no auto role')
+      .addSubcommand((s) =>
+        s.setName('add').setDescription('Skip auto roles for members with a role')
+          .addRoleOption(roleOption('Role to skip')))
+      .addSubcommand((s) =>
+        s.setName('remove').setDescription('Allow auto roles for members with a role again')
+          .addRoleOption(roleOption('Role to allow'))))
+  .addSubcommandGroup((g) =>
+    g.setName('timed').setDescription('Roles given some time after joining')
+      .addSubcommand((s) =>
+        s.setName('add').setDescription('Give a role a while after a member joins')
+          .addStringOption((o) =>
+            o.setName('delay').setDescription('How long to wait, like 30m, 12h or 1d (1m to 30d)')
+              .setMaxLength(32).setRequired(true))
+          .addRoleOption(roleOption('Role to give')))
+      .addSubcommand((s) =>
+        s.setName('remove').setDescription('Stop giving a role after a delay')
+          .addRoleOption(roleOption('Role to stop giving'))))
   .addSubcommand((s) => s.setName('disable').setDescription('Turn auto role off'));
 
+const mention = (id) => `<@&${id}>`;
+const reply = (interaction, content) =>
+  interaction.reply(ephemeral({ content, allowedMentions: { parse: [] } }));
+
+// The config helpers return the whole normalised config without the legacy keys;
+// the null patch stops setFeature's top-level merge from bringing them back.
+const save = (ctx, guildId, config, enabled) =>
+  setFeature(ctx.db, guildId, 'autorole', {
+    ...(enabled ? { enabled: true } : {}),
+    config: { ...config, humanRoleId: null, botRoleId: null },
+  });
+
+function roleLine(guild, botTop, lang, id) {
+  const role = guild.roles.cache.get(id);
+  if (!role) return `\`${id}\` (${t(lang, 'autorole.deletedRole')})`;
+  return botTop !== undefined && role.position >= botTop
+    ? `${mention(id)} (${t(lang, 'autorole.tooHighShort')})`
+    : mention(id);
+}
+
+function showText(interaction, lang, config) {
+  const guild = interaction.guild;
+  const botTop = guild.members.me?.roles.highest.position;
+  const list = (items) =>
+    capList(items, { max: 350, more: (count) => t(lang, 'common.more', { count }) });
+  const roles = (ids) => list(ids.map((id) => roleLine(guild, botTop, lang, id)));
+  const sections = [
+    ['humans', config.roles.length && roles(config.roles)],
+    ['bots', config.botRoles.length && roles(config.botRoles)],
+    ['timed', config.timed.length && list(config.timed.map(({ roleId, seconds }) =>
+      `${roleLine(guild, botTop, lang, roleId)} ${formatDuration(seconds)}`))],
+    ['blacklist', config.blacklist.length && list(config.blacklist.map((id) => roleLine(guild, undefined, lang, id)))],
+  ].filter(([, value]) => value);
+  if (!sections.length && !config.reassign) return t(lang, 'autorole.nothing');
+  const lines = sections.map(([key, value]) => `**${t(lang, `autorole.${key}`)}**: ${value}`);
+  lines.push(`**${t(lang, 'autorole.sticky')}**: ${t(lang, config.reassign ? 'common.on' : 'common.off')}`);
+  return `**${t(lang, 'autorole.showTitle')}**\n${lines.join('\n')}`;
+}
+
 async function execute(interaction, ctx) {
-  if (interaction.options.getSubcommand() === 'disable') return handleToggle(interaction, ctx, 'autorole');
+  const group = interaction.options.getSubcommandGroup(false);
+  const sub = interaction.options.getSubcommand();
+  if (!group && sub === 'disable') return handleToggle(interaction, ctx, 'autorole');
   const lang = await guard(interaction, ctx, 'autorole', { requireEnabled: false });
   if (!lang) return;
-  const human = interaction.options.getRole('human-role');
-  const bot = interaction.options.getRole('bot-role');
-  const botTop = interaction.guild.members.me?.roles.highest.position;
-  const tooHigh = botTop === undefined
-    ? []
-    : [human, bot].filter(Boolean).filter((r) => r.position >= botTop);
-  await setFeature(ctx.db, interaction.guildId, 'autorole', {
-    enabled: true,
-    config: { humanRoleId: human?.id ?? null, botRoleId: bot?.id ?? null },
-  });
-  const warn = tooHigh.length ? `\n${t(lang, 'autorole.tooHigh')}` : '';
-  await interaction.reply(ephemeral(t(lang, 'autorole.setupDone') + warn));
+  const guildId = interaction.guildId;
+  const { config } = await getFeature(ctx.db, guildId, 'autorole');
+  const failure = (result, fullKey = 'autorole.full', limit = LIMITS.roles) =>
+    reply(interaction, t(lang, { full: fullKey, exists: 'autorole.exists', missing: 'autorole.notListed' }[result.reason], { limit }));
+
+  if (!group && sub === 'show') return reply(interaction, showText(interaction, lang, readConfig(config)));
+
+  if (!group && sub === 'reassign') {
+    const on = interaction.options.getString('state', true) === 'on';
+    await save(ctx, guildId, setReassign(config, on));
+    return reply(interaction, t(lang, on ? 'autorole.reassignOn' : 'autorole.reassignOff'));
+  }
+
+  const role = interaction.options.getRole('role', true);
+
+  if (!group && sub === 'add') {
+    if (!isValidRoleId(role, guildId)) return reply(interaction, t(lang, 'autorole.badRole'));
+    const target = interaction.options.getString('target') === 'bots' ? 'bots' : 'humans';
+    const result = addRole(config, target, role.id);
+    if (!result.ok) return failure(result, 'autorole.full');
+    await save(ctx, guildId, result.config, true);
+    const botTop = interaction.guild.members.me?.roles.highest.position;
+    const warn = botTop !== undefined && role.position >= botTop ? `\n${t(lang, 'autorole.tooHigh')}` : '';
+    return reply(interaction, t(lang, 'autorole.added', {
+      role: mention(role.id), target: t(lang, target === 'bots' ? 'autorole.targetBots' : 'autorole.targetHumans'),
+    }) + warn);
+  }
+
+  if (!group && sub === 'remove') {
+    const result = removeRole(config, 'both', role.id);
+    if (!result.ok) return failure(result);
+    await save(ctx, guildId, result.config);
+    return reply(interaction, t(lang, 'autorole.removed', { role: mention(role.id) }));
+  }
+
+  if (group === 'blacklist') {
+    const result = sub === 'add' ? addBlacklist(config, role.id) : removeBlacklist(config, role.id);
+    if (!result.ok) return failure(result, 'autorole.blacklistFull', LIMITS.blacklist);
+    await save(ctx, guildId, result.config);
+    return reply(interaction, t(lang, sub === 'add' ? 'autorole.blacklistAdded' : 'autorole.blacklistRemoved',
+      { role: mention(role.id) }));
+  }
+
+  if (group === 'timed' && sub === 'add') {
+    if (!isValidRoleId(role, guildId)) return reply(interaction, t(lang, 'autorole.badRole'));
+    const text = interaction.options.getString('delay', true).trim();
+    const seconds = parseDuration(text);
+    if (seconds === null || seconds < MIN_DELAY || seconds > MAX_DELAY) {
+      return reply(interaction, t(lang, 'autorole.badDelay',
+        { min: formatDuration(MIN_DELAY), max: formatDuration(MAX_DELAY) }));
+    }
+    const result = addTimed(config, role.id, seconds);
+    if (!result.ok) return failure(result, 'autorole.full', MAX_TIMED);
+    await save(ctx, guildId, result.config, true);
+    return reply(interaction, t(lang, 'autorole.timedAdded', { role: mention(role.id), delay: formatDuration(seconds) }));
+  }
+
+  if (group === 'timed' && sub === 'remove') {
+    const result = removeTimed(config, role.id);
+    if (!result.ok) return failure(result);
+    await save(ctx, guildId, result.config);
+    await cancelRole(ctx.db, guildId, role.id);
+    return reply(interaction, t(lang, 'autorole.timedRemoved', { role: mention(role.id) }));
+  }
 }
 
 export const commands = [{ data, execute }];
-export const events = [
-  { name: Events.GuildMemberAdd, execute: assignAutoRole },
-];
+export { events };

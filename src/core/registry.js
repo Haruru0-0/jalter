@@ -13,7 +13,7 @@ export const FEATURES = [
   f('greet', 1, 'set', { enableCommand: 'set greet channel' }),
   f('leave', 1, 'set', { enableCommand: 'set leave channel' }),
   f('boost', 1, 'set', { enableCommand: 'set boost channel' }),
-  f('autorole', 1, 'autorole', { enableCommand: 'autorole setup' }),
+  f('autorole', 1, 'autorole', { enableCommand: 'autorole add' }),
   f('logging', 1, 'logging', { enableCommand: 'logging set' }),
   f('info', 1, 'info'),
   f('moderation', 2, null), f('automod', 2, null), f('antiraid', 2, null),

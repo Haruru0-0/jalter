@@ -99,3 +99,8 @@ test('helpers never mutate their input', () => {
     assert.equal(JSON.stringify(c), snapshot);
   }
 });
+
+test('readConfig ignores null legacy keys', () => {
+  const c = readConfig({ roles: [], botRoles: [], humanRoleId: null, botRoleId: null });
+  assert.deepEqual([c.roles, c.botRoles], [[], []]);
+});

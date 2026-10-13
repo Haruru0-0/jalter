@@ -19,7 +19,7 @@ test('an enabled feature says On and still shows its setup command', () => {
 
 test('each feature line shows the command that sets it up', () => {
   const { description } = buildPanelEmbed(new Map(), 'en');
-  assert.match(description, /Auto role\*\*: Off \(\/autorole setup\)/);
+  assert.match(description, /Auto role\*\*: Off \(\/autorole add\)/);
   assert.match(description, /Media storage\*\*: Off \(\/media setup\)/);
 });
 

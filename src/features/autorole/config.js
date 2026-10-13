@@ -1,5 +1,5 @@
 export const LIMITS = { roles: 10, blacklist: 25 };
-const MAX_TIMED = 10;
+export const MAX_TIMED = 10;
 
 /** Normalises the raw stored config, folding the legacy single-role keys in. */
 export function readConfig(config = {}) {

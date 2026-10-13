@@ -74,7 +74,7 @@ Run these on a test server with the bot invited and started. Confirm each item.
 8. `/set greet channel`, then `/set greet message` with text, and again without text (it opens the form). Put placeholders such as `{user}` and `{server_name}` in it, add `{embed:rules}`, and run `/test greet`. Then `/set greet message none` turns that one message off (`/test greet` says it is off) while the leave and boost messages keep working.
 9. `/set greet card on` and `/test greet`: the card looks right with an Arabic username. Try `/set greet background logo` and `/set greet dm on` (the DM arrives).
 10. Repeat step 8 for `/set leave ...` and `/set boost ...` with `/test leave` and `/test boost`, and the card and DM checks of step 9 for boost. Leave has the card and background but no `dm` option.
-11. `/autorole setup` gives the right role to a new human account and to a bot.
+11. `/autorole add` gives the right role to a new human account and to a bot.
 12. `/logging set messages`: edit and delete a message and see the log; edits inside the log channel itself are not logged.
 13. `/info enable`, then `/userinfo`, `/avatar`, `/banner`, `/serverinfo` work; with `/info disable` they refuse.
 14. Delete the greet channel, run `/test greet`: the bot does not crash.
