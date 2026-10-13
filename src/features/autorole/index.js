@@ -34,13 +34,13 @@ const data = new SlashCommandBuilder()
         o.setName('state').setDescription('On or off')
           .addChoices({ name: 'on', value: 'on' }, { name: 'off', value: 'off' }).setRequired(true)))
   .addSubcommandGroup((g) =>
-    g.setName('blacklist').setDescription('Roles whose members get no auto role')
+    g.setName('blacklist').setDescription('Roles that are never given back to returning members')
       .addSubcommand((s) =>
-        s.setName('add').setDescription('Skip auto roles for members with a role')
-          .addRoleOption(roleOption('Role to skip')))
+        s.setName('add').setDescription('Never give this role back to a returning member')
+          .addRoleOption(roleOption('Role to never give back')))
       .addSubcommand((s) =>
-        s.setName('remove').setDescription('Allow auto roles for members with a role again')
-          .addRoleOption(roleOption('Role to allow'))))
+        s.setName('remove').setDescription('Allow this role to be given back again')
+          .addRoleOption(roleOption('Role to give back again'))))
   .addSubcommandGroup((g) =>
     g.setName('timed').setDescription('Roles given some time after joining')
       .addSubcommand((s) =>
