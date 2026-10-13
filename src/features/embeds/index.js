@@ -7,7 +7,7 @@ import { validateEmbed } from './model.js';
 import { sendEmbedSpec } from './render.js';
 import { errorText } from './spec.js';
 import { applyEdit } from './edit.js';
-import { showPanel } from './panel.js';
+import { showPanel, handlePanel } from './panel.js';
 import {
   normalizeEmbedName, createEmbed, getEmbed, saveEmbed, listEmbeds, deleteEmbed,
 } from './store.js';
@@ -132,7 +132,7 @@ async function execute(interaction, ctx) {
   if (group === 'edit') {
     if (sub === 'all') {
       const loaded = await loadEmbed(interaction, ctx, lang);
-      return loaded && showPanel(interaction, ctx, lang, loaded.name);
+      return loaded && showPanel(interaction, ctx, lang, loaded.name, loaded.spec);
     }
     return editPart(interaction, ctx, lang, sub);
   }
@@ -143,7 +143,7 @@ async function execute(interaction, ctx) {
     if (!(await createEmbed(ctx.db, guildId, name))) {
       return interaction.reply(ephemeral(t(lang, 'embeds.exists', { name })));
     }
-    return showPanel(interaction, ctx, lang, name);
+    return showPanel(interaction, ctx, lang, name, {});
   }
 
   if (sub === 'list') {
@@ -171,5 +171,5 @@ async function execute(interaction, ctx) {
   }
 }
 
-export const commands = [{ data, execute }];
+export const commands = [{ data, execute, components: { prefix: 'embeds', handle: handlePanel } }];
 export const events = [];
