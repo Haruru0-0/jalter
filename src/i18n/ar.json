@@ -83,5 +83,7 @@
   "welcome.testSent": "تم إرسال رسالة تجريبية.",
   "welcome.noChannel": "حدّد قناة أولاً باستخدام /welcome setup.",
   "welcome.modalTitle": "رسالة الترحيب",
-  "welcome.messageLabel": "نص الرسالة"
+  "welcome.messageLabel": "نص الرسالة",
+  "autorole.setupDone": "الرتبة التلقائية مفعّلة.",
+  "autorole.tooHigh": "تحذير: إحدى هذه الرتب أعلى من أعلى رتبة لدي، لذلك لا أستطيع منحها."
 }

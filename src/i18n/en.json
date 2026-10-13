@@ -83,5 +83,7 @@
   "welcome.testSent": "Sent a test message.",
   "welcome.noChannel": "Set a channel first with /welcome setup.",
   "welcome.modalTitle": "Welcome message",
-  "welcome.messageLabel": "Message text"
+  "welcome.messageLabel": "Message text",
+  "autorole.setupDone": "Auto role is on.",
+  "autorole.tooHigh": "Warning: one of those roles is above my highest role, so I cannot give it."
 }

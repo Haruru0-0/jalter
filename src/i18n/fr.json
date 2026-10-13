@@ -83,5 +83,7 @@
   "welcome.testSent": "Message de test envoyé.",
   "welcome.noChannel": "Choisissez d'abord un salon avec /welcome setup.",
   "welcome.modalTitle": "Message de bienvenue",
-  "welcome.messageLabel": "Texte du message"
+  "welcome.messageLabel": "Texte du message",
+  "autorole.setupDone": "Le rôle automatique est activé.",
+  "autorole.tooHigh": "Attention : l'un de ces rôles est au-dessus de mon rôle le plus élevé, je ne peux donc pas l'attribuer."
 }
