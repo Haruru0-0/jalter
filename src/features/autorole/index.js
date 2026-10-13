@@ -74,7 +74,12 @@ function roleLine(guild, botTop, lang, id) {
     : mention(id);
 }
 
-function showText(interaction, lang, config) {
+const tooHighWarning = (interaction, lang, role) => {
+  const botTop = interaction.guild.members.me?.roles.highest.position;
+  return botTop !== undefined && role.position >= botTop ? `\n${t(lang, 'autorole.tooHigh')}` : '';
+};
+
+function showText(interaction, lang, config, enabled) {
   const guild = interaction.guild;
   const botTop = guild.members.me?.roles.highest.position;
   const list = (items) =>
@@ -90,7 +95,8 @@ function showText(interaction, lang, config) {
   if (!sections.length && !config.reassign) return t(lang, 'autorole.nothing');
   const lines = sections.map(([key, value]) => `**${t(lang, `autorole.${key}`)}**: ${value}`);
   lines.push(`**${t(lang, 'autorole.sticky')}**: ${t(lang, config.reassign ? 'common.on' : 'common.off')}`);
-  return `**${t(lang, 'autorole.showTitle')}**\n${lines.join('\n')}`;
+  const status = t(lang, enabled ? 'autorole.statusOn' : 'autorole.statusOff');
+  return `**${t(lang, 'autorole.showTitle')}**\n${status}\n${lines.join('\n')}`;
 }
 
 async function execute(interaction, ctx) {
@@ -100,7 +106,7 @@ async function execute(interaction, ctx) {
   const lang = await guard(interaction, ctx, 'autorole', { requireEnabled: false });
   if (!lang) return;
   const guildId = interaction.guildId;
-  const stored = (await getFeature(ctx.db, guildId, 'autorole')).config;
+  const { enabled, config: stored } = await getFeature(ctx.db, guildId, 'autorole');
   // Deleted roles cannot be picked in a command option, so every change drops them first.
   const cache = interaction.guild.roles.cache;
   const config = cache.size ? pruneRoles(stored, (id) => cache.has(id)) : stored;
@@ -112,7 +118,7 @@ async function execute(interaction, ctx) {
   const failure = (result, fullKey = 'autorole.full', limit = LIMITS.roles) =>
     reply(interaction, t(lang, { full: fullKey, exists: 'autorole.exists', missing: 'autorole.notListed' }[result.reason], { limit }));
 
-  if (!group && sub === 'show') return reply(interaction, showText(interaction, lang, readConfig(stored)));
+  if (!group && sub === 'show') return reply(interaction, showText(interaction, lang, readConfig(stored), enabled));
 
   if (!group && sub === 'reassign') {
     const on = interaction.options.getString('state', true) === 'on';
@@ -126,13 +132,17 @@ async function execute(interaction, ctx) {
     if (!isValidRoleId(role, guildId)) return reply(interaction, t(lang, 'autorole.badRole'));
     const target = interaction.options.getString('target') === 'bots' ? 'bots' : 'humans';
     const result = addRole(config, target, role.id);
+    // `/autorole disable` keeps the lists, so adding a listed role is how the feature comes back on.
+    if (!result.ok && result.reason === 'exists' && !enabled) {
+      await saveAll(readConfig(config), true);
+      return reply(interaction, t(lang, 'autorole.enabledAgain', { role: mention(role.id) })
+        + tooHighWarning(interaction, lang, role));
+    }
     if (!result.ok) return failure(result, 'autorole.full');
     await saveAll(result.config, true);
-    const botTop = interaction.guild.members.me?.roles.highest.position;
-    const warn = botTop !== undefined && role.position >= botTop ? `\n${t(lang, 'autorole.tooHigh')}` : '';
     return reply(interaction, t(lang, 'autorole.added', {
       role: mention(role.id), target: t(lang, target === 'bots' ? 'autorole.targetBots' : 'autorole.targetHumans'),
-    }) + warn);
+    }) + tooHighWarning(interaction, lang, role));
   }
 
   if (!group && sub === 'remove') {
@@ -161,7 +171,8 @@ async function execute(interaction, ctx) {
     const result = addTimed(config, role.id, seconds);
     if (!result.ok) return failure(result, 'autorole.full', MAX_TIMED);
     await saveAll(result.config, true);
-    return reply(interaction, t(lang, 'autorole.timedAdded', { role: mention(role.id), delay: formatDuration(seconds) }));
+    return reply(interaction, t(lang, 'autorole.timedAdded', { role: mention(role.id), delay: formatDuration(seconds) })
+      + tooHighWarning(interaction, lang, role));
   }
 
   if (group === 'timed' && sub === 'remove') {

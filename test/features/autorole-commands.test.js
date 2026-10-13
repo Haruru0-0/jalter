@@ -128,6 +128,17 @@ test('add of the same role twice replies exists and keeps one copy', async () =>
   assert.deepEqual((await state()).config.roles, ['r1']);
 });
 
+test('add of a listed role after disable turns the feature back on', async () => {
+  await run(fake('add', { roles: { role: 'r1' } }));
+  await run(fake('disable'));
+  assert.equal((await state()).enabled, false);
+  const i = fake('add', { roles: { role: 'r1' } });
+  await run(i);
+  assert.equal((await state()).enabled, true);
+  assert.deepEqual((await state()).config.roles, ['r1']);
+  assert.equal(text(i), t('en', 'autorole.enabledAgain', { role: '<@&r1>' }));
+});
+
 test('add rejects @everyone and managed roles without saving', async () => {
   for (const id of ['g1', 'mg']) {
     const i = fake('add', { roles: { role: id }, ids: ['g1', 'mg'] });
@@ -207,6 +218,15 @@ test('timed add with a bad delay stores nothing', async () => {
   assert.deepEqual((await state()).config, {});
 });
 
+test('timed add of a role above the bot adds the warning', async () => {
+  const i = fake('timed add', { roles: { role: 'hi' }, strings: { delay: '1h' } });
+  await run(i);
+  assert.ok(text(i).includes(t('en', 'autorole.tooHigh')));
+  const low = fake('timed add', { roles: { role: 'r1' }, strings: { delay: '1h' } });
+  await run(low);
+  assert.ok(!text(low).includes(t('en', 'autorole.tooHigh')));
+});
+
 test('timed add stores the delay; timed remove deletes it and cancels pending grants', async () => {
   const add = fake('timed add', { roles: { role: 'r1' }, strings: { delay: '1h30m' } });
   await run(add);
@@ -248,6 +268,17 @@ test('show with nothing set says so', async () => {
   const i = fake('show');
   await run(i);
   assert.equal(text(i), t('en', 'autorole.nothing'));
+});
+
+test('show starts with the on or off status', async () => {
+  await run(fake('add', { roles: { role: 'r1' } }));
+  const on = fake('show');
+  await run(on);
+  assert.equal(text(on).split('\n')[1], t('en', 'autorole.statusOn'));
+  await run(fake('disable'));
+  const off = fake('show');
+  await run(off);
+  assert.equal(text(off).split('\n')[1], t('en', 'autorole.statusOff'));
 });
 
 test('show lists roles without pinging and marks deleted and too-high roles', async () => {
