@@ -87,10 +87,14 @@ export async function handleMember(ctx, member, kind) {
     }
     payload = ensureNotEmpty(payload, renderPlaceholders(DEFAULT_MESSAGE[kind], vars));
 
-    const sent = await trySend(channel, {
-      ...payload,
-      allowedMentions: kind === 'leave' ? safeMentions() : { parse: [], users: [member.id] },
-    });
+    const allowedMentions = kind === 'leave' ? safeMentions() : { parse: [], users: [member.id] };
+    let sent = await trySend(channel, { ...payload, allowedMentions });
+    if (!sent && (payload.embeds || payload.files)) {
+      // Discord may refuse the embed or file (bad image URL, empty field): retry as text only.
+      console.warn(`Greet ${kind} send refused in ${member.guild.id}, retrying as text only`);
+      const textOnly = ensureNotEmpty(content ? { content } : {}, renderPlaceholders(DEFAULT_MESSAGE[kind], vars));
+      sent = await trySend(channel, { ...textOnly, allowedMentions });
+    }
     if (DM_KINDS.includes(kind) && config.dm) await sendDm(member, payload);
     return sent ? 'sent' : 'send-failed';
   } catch (err) {

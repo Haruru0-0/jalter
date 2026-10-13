@@ -102,6 +102,48 @@ test('an embed with a missing stored image falls back to text only', async () =>
   assert.ok(warnings.length > 0);
 });
 
+test('a refused embed send is retried once as text only with the same mentions', async () => {
+  const f = fakeMember();
+  const attempts = [];
+  f.channel.send = async (p) => {
+    attempts.push(p);
+    if (p.embeds) throw new Error('Invalid Form Body');
+    return {};
+  };
+  await createEmbed(db, 'g1', 'rules');
+  await saveEmbed(db, 'g1', 'rules', { title: 'Rules', description: 'Be kind' });
+  await on('greet', { message: 'Hi {user_name} {embed:rules}' });
+  assert.equal(await handleMember(f.ctx(), f.member, 'greet'), 'sent');
+  assert.equal(attempts.length, 2);
+  assert.equal(attempts[1].content, 'Hi Sam');
+  assert.equal(attempts[1].embeds, undefined);
+  assert.equal(attempts[1].files, undefined);
+  assert.deepEqual(attempts[1].allowedMentions, attempts[0].allowedMentions);
+  assert.ok(warnings.some((w) => /retrying as text only/.test(w)));
+});
+
+test('a refused plain text send is not retried', async () => {
+  const f = fakeMember();
+  let calls = 0;
+  f.channel.send = async () => { calls += 1; throw new Error('Missing Permissions'); };
+  await on('greet');
+  assert.equal(await handleMember(f.ctx(), f.member, 'greet'), 'send-failed');
+  assert.equal(calls, 1);
+});
+
+test('an embed that is invalid after placeholders still sends the text', async () => {
+  const f = fakeMember();
+  f.member.displayName = 'x'.repeat(300);
+  await createEmbed(db, 'g1', 'long');
+  await saveEmbed(db, 'g1', 'long', { title: '{user_name}' });
+  await on('greet', { message: 'Hi {embed:long}' });
+  assert.equal(await handleMember(f.ctx(), f.member, 'greet'), 'sent');
+  assert.equal(f.sent.length, 1);
+  assert.equal(f.sent[0].content, 'Hi');
+  assert.equal(f.sent[0].embeds, undefined);
+  assert.ok(warnings.length > 0);
+});
+
 test('card true attaches card.png', async () => {
   const f = fakeMember();
   await on('greet', { card: true });
