@@ -78,5 +78,10 @@
   "embeds.previewFailed": "I could not show that preview. Check the image link and try again.",
   "post.sent": "Posted.",
   "post.cannotSend": "I could not post in that channel. Check my permissions.",
-  "post.badUrl": "The link must start with http:// or https://."
+  "post.badUrl": "The link must start with http:// or https://.",
+  "welcome.setupDone": "Done. I will post {event} messages in {channel}.",
+  "welcome.testSent": "Sent a test message.",
+  "welcome.noChannel": "Set a channel first with /welcome setup.",
+  "welcome.modalTitle": "Welcome message",
+  "welcome.messageLabel": "Message text"
 }

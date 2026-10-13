@@ -78,5 +78,10 @@
   "embeds.previewFailed": "تعذّر عرض المعاينة. تحقق من رابط الصورة وحاول مرة أخرى.",
   "post.sent": "تم النشر.",
   "post.cannotSend": "لم أتمكن من النشر في تلك القناة. تحقق من صلاحياتي.",
-  "post.badUrl": "يجب أن يبدأ الرابط بـ http:// أو https://."
+  "post.badUrl": "يجب أن يبدأ الرابط بـ http:// أو https://.",
+  "welcome.setupDone": "تم. سأنشر رسائل {event} في {channel}.",
+  "welcome.testSent": "تم إرسال رسالة تجريبية.",
+  "welcome.noChannel": "حدّد قناة أولاً باستخدام /welcome setup.",
+  "welcome.modalTitle": "رسالة الترحيب",
+  "welcome.messageLabel": "نص الرسالة"
 }

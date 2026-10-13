@@ -78,5 +78,10 @@
   "embeds.previewFailed": "Impossible d'afficher l'aperçu. Vérifiez le lien de l'image et réessayez.",
   "post.sent": "Publié.",
   "post.cannotSend": "Je n'ai pas pu publier dans ce salon. Vérifiez mes permissions.",
-  "post.badUrl": "Le lien doit commencer par http:// ou https://."
+  "post.badUrl": "Le lien doit commencer par http:// ou https://.",
+  "welcome.setupDone": "Terminé. Je publierai les messages {event} dans {channel}.",
+  "welcome.testSent": "Message de test envoyé.",
+  "welcome.noChannel": "Choisissez d'abord un salon avec /welcome setup.",
+  "welcome.modalTitle": "Message de bienvenue",
+  "welcome.messageLabel": "Texte du message"
 }
