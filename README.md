@@ -41,7 +41,7 @@ npm start
 
 1. Go to the Discord developer portal and create an application.
 2. Open the Bot tab, create the bot and copy its token into `.env`.
-3. Under Privileged Gateway Intents enable Server Members and Message Content.
+3. Under Privileged Gateway Intents enable Server Members and Message Content. The bot also uses the Guilds, Guild Messages and Guild Expressions (emoji and sticker events, used by logging) intents; those are not privileged and need no switch in the portal.
 4. Copy the application ID into `.env` as `CLIENT_ID`.
 5. Invite the bot with the `bot` and `applications.commands` scopes and these permissions: View Channels, Send Messages, Embed Links, Attach Files, Manage Roles.
 

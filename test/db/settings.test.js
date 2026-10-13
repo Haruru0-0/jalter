@@ -57,3 +57,9 @@ test('openDb twice does not re-apply migrations', async () => {
   assert.equal(rows[0].n, 1);
   await again.end();
 });
+
+test('openDb attaches an error listener so an idle-client error cannot crash the process', async () => {
+  const pool = await openDb(TEST_DB_URL);
+  assert.ok(pool.listenerCount('error') > 0);
+  await pool.end();
+});

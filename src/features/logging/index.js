@@ -68,6 +68,11 @@ const onMemberAdd = safe('memberAdd', async (ctx, member) => {
 });
 
 const onMemberRemove = safe('memberRemove', async (ctx, member) => {
+  // A partial member (left while uncached) normally still carries its user.
+  if (!member.user) {
+    console.warn(`Leave log skipped in ${member.guild.id}: member has no user data`);
+    return;
+  }
   const lang = await getLang(ctx.db, member.guild.id);
   await sendLog(ctx, member.guild.id, 'members', {
     title: t(lang, 'logging.memberLeft'),

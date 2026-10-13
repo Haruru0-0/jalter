@@ -48,6 +48,11 @@ export async function handleMember(ctx, member, event) {
     const { enabled, config } = await getFeature(ctx.db, member.guild.id, 'welcome');
     const cfg = config[event];
     if (!enabled || !cfg?.enabled) return;
+    // A partial member (left while uncached) normally still carries its user.
+    if (!member.user) {
+      console.warn(`Welcome ${event} skipped in ${member.guild.id}: member has no user data`);
+      return;
+    }
 
     const vars = {
       user: `<@${member.id}>`,

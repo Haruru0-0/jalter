@@ -7,6 +7,9 @@ const MIGRATIONS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '
 
 export async function openDb(databaseUrl) {
   const pool = new pg.Pool({ connectionString: databaseUrl });
+  // An idle client losing its connection (for example a Postgres restart) emits
+  // 'error' on the pool; without a listener that would crash the process.
+  pool.on('error', (err) => console.error('Postgres pool error:', err.message));
   await pool.query('CREATE TABLE IF NOT EXISTS schema_version (name TEXT PRIMARY KEY)');
   const done = new Set(
     (await pool.query('SELECT name FROM schema_version')).rows.map((r) => r.name),

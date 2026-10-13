@@ -73,3 +73,11 @@ test('closed DMs do not throw', async () => {
   await setFeature(db, 'g1', 'welcome', { enabled: true, config: cfg({ dm: { enabled: true, text: 'x' } }) });
   await handleMember(f.ctx(), f.member, 'join');
 });
+
+test('a leave event for a member without a user is skipped', async () => {
+  const f = fakeMember();
+  await setFeature(db, 'g1', 'welcome', { enabled: true, config: { leave: { ...cfg().join } } });
+  delete f.member.user;
+  await handleMember(f.ctx(), f.member, 'leave');
+  assert.equal(f.sent.length, 0);
+});
