@@ -1,0 +1,11 @@
+{
+  "common.on": "مفعّل",
+  "common.off": "معطّل",
+  "common.enabledMsg": "تم تفعيل {feature}.",
+  "common.disabledMsg": "تم تعطيل {feature}.",
+  "common.featureOff": "هذه الميزة معطّلة. يمكن للمدير تفعيلها بالأمر {command}.",
+  "common.notAllowed": "تحتاج إلى صلاحية إدارة الخادم أو رتبة مدير البوت.",
+  "common.guildOnly": "هذا الأمر يعمل داخل الخادم فقط.",
+  "common.saved": "تم الحفظ.",
+  "common.error": "حدث خطأ ما. حاول مرة أخرى."
+}

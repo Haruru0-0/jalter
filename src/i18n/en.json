@@ -1,0 +1,11 @@
+{
+  "common.on": "On",
+  "common.off": "Off",
+  "common.enabledMsg": "{feature} is now on.",
+  "common.disabledMsg": "{feature} is now off.",
+  "common.featureOff": "This feature is off. A manager can turn it on with {command}.",
+  "common.notAllowed": "You need the Manage Server permission or the bot manager role.",
+  "common.guildOnly": "This command only works in a server.",
+  "common.saved": "Saved.",
+  "common.error": "Something went wrong. Please try again."
+}
