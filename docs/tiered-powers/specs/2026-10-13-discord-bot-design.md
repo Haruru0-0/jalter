@@ -22,11 +22,11 @@ A multi-purpose Discord bot in the spirit of MEE6, Mimu and YAGPDB. The owner wa
 ## Features (by phase)
 
 **Phase 1: Core**
-- `/panel` (admin only): menu to enable/configure each feature.
-- Embed builder (modal-driven: title, description, color, image, footer, fields) and "post message" to a chosen channel, plain or embed.
-- Welcome and leave messages (channel, template with member/server placeholders, optional embed).
+- `/panel` (overview; manager role set by Manage Server holders): shows what is on or off and the command that sets each feature up.
+- Named embeds, Mimu-style: `/embed create`, `edit`, `list`, `delete`, `show` (parts: author, title, description, thumbnail, image, color, footer, timestamp, plus fields). Embeds and `/post` (plain text, link buttons) are always available to managers.
+- Greet, leave and boost messages, Mimu-style: `/set greet|leave|boost channel|message`, `/test greet|leave|boost`; a message can contain `{embed:name}`; Mimu-style placeholders (`{user}`, `{user_name}`, `{server_membercount_ordinal}`, `{newline}`, ...).
 - Auto role on join.
-- Logging: message edit/delete, joins/leaves, voice join/leave/move, mod actions, role/channel changes. Log channel per category.
+- Logging: message edit/delete, joins/leaves, nickname and role changes, channel/role/emoji changes. Log channel per category. No voice logging (owner decision).
 - Language setting (en/ar/fr).
 - User, avatar and server info commands.
 
@@ -38,7 +38,7 @@ A multi-purpose Discord bot in the spirit of MEE6, Mimu and YAGPDB. The owner wa
 - Sticky roles: roles restored when a member rejoins.
 
 **Phase 3: Automation**
-- Autoresponder: trigger (exact/contains), reply (text or embed), per-server list managed from the panel.
+- Autoresponder: trigger (exact/contains), reply (text, optionally with `{embed:name}`), per-server list managed from the panel.
 - Reaction roles: created from the panel; user chooses type per setup: button, emoji reaction, or command-created. Supports multiple roles per message and remove-on-unclick.
 - Quote: `/quote` (and message context menu) renders a chosen message as a quote embed with author, text and jump link.
 
@@ -105,7 +105,7 @@ A multi-purpose Discord bot in the spirit of MEE6, Mimu and YAGPDB. The owner wa
 ## Third round of owner decisions
 - Auto role: one role for humans and a separate optional role for bots, given on join.
 - Post message: plain text, embeds (builder or saved template), link buttons and role pings. Editing posted messages is not requested.
-- Panel layout: each feature has its own command group (for example `/welcome setup`, `/autorole setup`), and `/panel` is a summary/overview that shows what is on and links to each feature's settings. This replaces the earlier idea of one big menu for everything.
+- Panel layout: each feature has its own command group (for example `/set greet channel`, `/autorole setup`; see the fifth round for the greet commands), and `/panel` is a summary/overview that shows what is on and links to each feature's settings. This replaces the earlier idea of one big menu for everything.
 - The panel and setup replies are private (only the person who opened them sees them).
 
 ## Fourth round of owner decisions
@@ -113,10 +113,20 @@ A multi-purpose Discord bot in the spirit of MEE6, Mimu and YAGPDB. The owner wa
 - Images can come from either source: an external link the admin pastes, or an image stored in the media storage channel. Anywhere the bot takes an image, the admin chooses which.
 - Media storage channel: the admin picks a channel where staff upload images. The embed builder, welcome cards and similar features can pick from those images instead of needing an outside link. Builder's note: Discord attachment links expire, so the bot should store the message and channel IDs and fetch a fresh link (or re-upload) whenever it uses an image, rather than saving the raw link.
 
+## Fifth round of owner decisions: copy Mimu (docs.mimu.bot)
+The owner asked for the same design as Mimu for embeds and for greet, leave and boost messages. This replaces the earlier `/welcome <event>` command, the embed builder with templates, and the text/embed/card style switch.
+- **Greet, leave and boost are three separate features**, each with its own on/off state in `/panel`. Commands: `/set greet channel`, `/set greet message`, and the same for `leave` and `boost`; `/test greet`, `/test leave`, `/test boost`. Setting a message to `none` or `disable` turns that one off. `/set <kind> message` with no text opens a multi-line form (slash commands cannot take line breaks).
+- **Embeds are named objects**, as in Mimu: name up to 16 characters with no spaces. `/embed create name:`, `/embed edit all` (buttons and forms, saved automatically), `/embed edit <part>` for one part (blank removes it), `/embed list`, `/embed delete`, `/embed show embed: [channel:]`. Parts: author (text and icon), title, description, thumbnail, image, color, footer, timestamp, plus fields (kept from the earlier design). No limit on the number of embeds (Mimu limits to 5 on free servers; not copied).
+- **An embed is attached to a message by writing `{embed:name}` in its text** (greet, leave, boost messages; later also the autoresponder). The embed's parts may contain placeholders, including image parts (`{user_avatar}`, `{server_icon}`).
+- **Placeholders (Mimu's names):** `{user}`, `{user_name}`, `{user_tag}`, `{user_avatar}`, `{server_name}`, `{server_icon}`, `{server_owner}`, `{server_createdate}`, `{server_membercount}`, `{server_membercount_ordinal}`, `{server_boostcount}`, `{date}`, `{newline}`. The earlier `{username}`, `{server}`, `{count}`, `{boosts}` keep working.
+- **Embeds and `/post` are always available to managers** (no enable/disable). `/post` keeps plain text and link buttons; posting an embed is `/embed show`.
+- Not copied from Mimu: the 5-embed limit, premium and webhook options, currency placeholders.
+- Additions beyond Mimu's documented behavior (my calls): an optional image card (`/set <kind> card`, with `/set <kind> background`), an optional DM that sends the same message to the member (`/set greet dm`, `/set boost dm`; not for leave), and the "Add field" button.
+
 ## Calls made by me (not yet checked by the owner)
 - `/panel` requires the Manage Server permission, or a "bot manager" role the owner can set in the panel. Not full Administrator.
 - Moderation commands check the matching Discord permission, plus the bot's own role position (it refuses to act on anyone ranked above it). A configurable mod role is optional.
-- Stack (Node.js, discord.js, SQLite) is provisional. Storage and Discord access sit behind thin layers so they can be swapped.
+- Stack: Node.js, discord.js and PostgreSQL in Docker (confirmed by the owner). Storage and Discord access sit behind thin layers so they can be swapped.
 - Scale: "own server or a few" is firm. The bot requires the message-content and server-members intents from the start, enabled in the developer portal. No degraded mode.
 - Phase 1 ships the mod-action log category and panel entries for later features as disabled stubs.
 - Each phase is done when its commands work end to end on a test server and survive a restart.
