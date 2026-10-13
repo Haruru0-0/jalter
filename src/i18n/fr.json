@@ -56,6 +56,8 @@
   "embeds.err.fieldTooLong": "Un nom de champ dépasse 256 caractères ou une valeur dépasse 1024.",
   "embeds.err.tooLarge": "L’embed dépasse 6000 caractères au total.",
   "embeds.err.badColor": "La couleur doit ressembler à #5865F2.",
+  "embeds.err.authorTooLong": "Le texte de l’auteur dépasse 256 caractères.",
+  "embeds.err.authorNeedsText": "L’icône de l’auteur a aussi besoin d’un texte d’auteur.",
   "embeds.modalTitle": "Créer un embed",
   "embeds.title": "Titre",
   "embeds.description": "Description",

@@ -56,6 +56,8 @@
   "embeds.err.fieldTooLong": "اسم الحقل أطول من 256 حرفًا أو قيمته أطول من 1024.",
   "embeds.err.tooLarge": "مجموع أحرف الإمبد يتجاوز 6000.",
   "embeds.err.badColor": "يجب أن يكون اللون بصيغة مثل #5865F2.",
+  "embeds.err.authorTooLong": "نص المؤلف أطول من 256 حرفًا.",
+  "embeds.err.authorNeedsText": "تحتاج أيقونة المؤلف إلى نص المؤلف أيضًا.",
   "embeds.modalTitle": "إنشاء رسالة مضمّنة",
   "embeds.title": "العنوان",
   "embeds.description": "الوصف",
