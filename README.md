@@ -37,6 +37,8 @@ npm start
 
 `npm run deploy` prints `Registered N commands ...` and `npm start` prints `Logged in as <bot>`.
 
+Postgres only listens on this computer (`127.0.0.1`). Before hosting the bot anywhere reachable from the network, change the database password (`POSTGRES_PASSWORD` in `docker-compose.yml` and the password in `DATABASE_URL`) from the default `bot`.
+
 ## Discord developer portal
 
 1. Go to the Discord developer portal and create an application.

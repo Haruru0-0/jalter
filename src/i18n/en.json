@@ -137,5 +137,9 @@
   "embeds.fieldName": "Field name",
   "embeds.fieldValue": "Field text",
   "embeds.fieldInline": "Side by side? (yes or no)",
-  "embeds.err.fieldEmpty": "A field needs both a name and a text."
+  "embeds.err.fieldEmpty": "A field needs both a name and a text.",
+  "panel.everyoneRole": "The @everyone role cannot be the bot manager role. Pick a role that only staff have.",
+  "panel.managedRole": "That role is managed by a bot or an integration and cannot be the bot manager role.",
+  "panel.needManageServer": "Only members with the Manage Server permission can change the bot manager role.",
+  "common.cannotPostThere": "You do not have permission to see or send messages in that channel."
 }

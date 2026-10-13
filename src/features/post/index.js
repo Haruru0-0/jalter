@@ -6,6 +6,7 @@ import { handleToggle, toggleSubcommands } from '../../core/toggle.js';
 import { ephemeral } from '../../core/replies.js';
 import { trySend } from '../../core/send.js';
 import { safeMentions } from '../../core/mentions.js';
+import { memberCanPost } from '../../core/permissions.js';
 import { t } from '../../i18n/index.js';
 import { getTemplate } from '../embeds/templates.js';
 import { fetchGuildSendable, sendEmbedSpec } from '../embeds/send.js';
@@ -41,6 +42,10 @@ async function postPayload(interaction, ctx, lang, channelId, payload) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   try {
     const channel = await fetchGuildSendable(ctx.client, interaction.guildId, channelId);
+    if (channel && !memberCanPost(channel, interaction.member)) {
+      await interaction.editReply(t(lang, 'common.cannotPostThere'));
+      return;
+    }
     const sent = channel ? await trySend(channel, payload) : null;
     await interaction.editReply(t(lang, sent ? 'post.sent' : 'post.cannotSend'));
   } catch (err) {

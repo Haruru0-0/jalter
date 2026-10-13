@@ -137,5 +137,9 @@
   "embeds.fieldName": "اسم الحقل",
   "embeds.fieldValue": "نص الحقل",
   "embeds.fieldInline": "جنباً إلى جنب؟ (نعم أو لا)",
-  "embeds.err.fieldEmpty": "يحتاج الحقل إلى اسم ونص."
+  "embeds.err.fieldEmpty": "يحتاج الحقل إلى اسم ونص.",
+  "panel.everyoneRole": "لا يمكن أن يكون دور @everyone دور إدارة البوت. اختر دوراً يملكه الطاقم فقط.",
+  "panel.managedRole": "هذا الدور يديره بوت أو تكامل ولا يمكن أن يكون دور إدارة البوت.",
+  "panel.needManageServer": "فقط الأعضاء الذين لديهم صلاحية إدارة الخادم يمكنهم تغيير دور إدارة البوت.",
+  "common.cannotPostThere": "ليست لديك صلاحية رؤية تلك القناة أو إرسال الرسائل فيها."
 }

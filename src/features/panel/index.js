@@ -32,8 +32,23 @@ async function execute(interaction, ctx) {
   if (sub === 'overview') {
     const features = await listFeatures(ctx.db, interaction.guildId);
     await interaction.reply(ephemeral({ embeds: [buildPanelEmbed(features, lang)] }));
-  } else if (sub === 'manager-role') {
+    return;
+  }
+  // Only the real Manage Server permission may decide who manages the bot.
+  if (!interaction.member.permissions.has('ManageGuild')) {
+    await interaction.reply(ephemeral(t(lang, 'panel.needManageServer')));
+    return;
+  }
+  if (sub === 'manager-role') {
     const role = interaction.options.getRole('role', true);
+    if (role.id === interaction.guildId) {
+      await interaction.reply(ephemeral(t(lang, 'panel.everyoneRole')));
+      return;
+    }
+    if (role.managed) {
+      await interaction.reply(ephemeral(t(lang, 'panel.managedRole')));
+      return;
+    }
     await setFeature(ctx.db, interaction.guildId, 'panel', { config: { managerRoleId: role.id } });
     await interaction.reply(ephemeral(t(lang, 'panel.managerSet', { role: role.name })));
   } else {

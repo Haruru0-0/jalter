@@ -2,6 +2,7 @@ import { MessageFlags } from 'discord.js';
 import { ephemeral } from '../../core/replies.js';
 import { fetchSendable, trySend } from '../../core/send.js';
 import { safeMentions } from '../../core/mentions.js';
+import { memberCanPost } from '../../core/permissions.js';
 import { t } from '../../i18n/index.js';
 import { toDiscordEmbed, validateEmbed } from './model.js';
 import { resolveImage } from '../media/images.js';
@@ -42,6 +43,10 @@ export async function sendEmbedSpec(interaction, ctx, lang, spec, channelId, ns 
       return null;
     }
     const channel = await fetchGuildSendable(ctx.client, interaction.guildId, channelId);
+    if (channel && !memberCanPost(channel, interaction.member)) {
+      await interaction.editReply(t(lang, 'common.cannotPostThere'));
+      return null;
+    }
     const sent = channel ? await trySend(channel, { ...payload, allowedMentions: safeMentions() }) : null;
     await interaction.editReply(t(lang, sent ? `${ns}.sent` : `${ns}.cannotSend`));
     return sent;

@@ -137,5 +137,9 @@
   "embeds.fieldName": "Nom du champ",
   "embeds.fieldValue": "Texte du champ",
   "embeds.fieldInline": "Côte à côte ? (oui ou non)",
-  "embeds.err.fieldEmpty": "Un champ a besoin d'un nom et d'un texte."
+  "embeds.err.fieldEmpty": "Un champ a besoin d'un nom et d'un texte.",
+  "panel.everyoneRole": "Le rôle @everyone ne peut pas être le rôle de gestion du bot. Choisissez un rôle réservé à l'équipe.",
+  "panel.managedRole": "Ce rôle est géré par un bot ou une intégration et ne peut pas être le rôle de gestion du bot.",
+  "panel.needManageServer": "Seuls les membres ayant la permission Gérer le serveur peuvent changer le rôle de gestion du bot.",
+  "common.cannotPostThere": "Vous n'avez pas la permission de voir ce salon ou d'y envoyer des messages."
 }
