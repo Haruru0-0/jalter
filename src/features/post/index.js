@@ -2,22 +2,19 @@ import {
   SlashCommandBuilder, ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags,
 } from 'discord.js';
 import { guard } from '../../core/guard.js';
-import { handleToggle, toggleSubcommands } from '../../core/toggle.js';
 import { ephemeral } from '../../core/replies.js';
 import { trySend } from '../../core/send.js';
 import { safeMentions } from '../../core/mentions.js';
 import { memberCanPost } from '../../core/permissions.js';
 import { t } from '../../i18n/index.js';
-import { getEmbed, normalizeEmbedName } from '../embeds/store.js';
-import { fetchGuildSendable, sendEmbedSpec } from '../embeds/render.js';
+import { fetchGuildSendable } from '../embeds/render.js';
 import { rolesToPing, isHttpUrl } from './rules.js';
 
 const CHANNEL_TYPES = [ChannelType.GuildText, ChannelType.GuildAnnouncement];
 const channelOption = (o) =>
   o.setName('channel').setDescription('Where to post').addChannelTypes(...CHANNEL_TYPES).setRequired(true);
 
-const data = toggleSubcommands(
-  new SlashCommandBuilder()
+const data = new SlashCommandBuilder()
     .setName('post')
     .setDescription('Post a message as the bot')
     .addSubcommand((s) =>
@@ -26,16 +23,11 @@ const data = toggleSubcommands(
         .addStringOption((o) => o.setName('text').setDescription('Message text').setMaxLength(2000).setRequired(true))
         .addBooleanOption((o) => o.setName('allow-role-ping').setDescription('Let role mentions in the text ping')))
     .addSubcommand((s) =>
-      s.setName('embed').setDescription('Post a saved embed template')
-        .addChannelOption(channelOption)
-        .addStringOption((o) => o.setName('template').setDescription('Template name').setMaxLength(100).setRequired(true)))
-    .addSubcommand((s) =>
       s.setName('buttons').setDescription('Post a message with a link button')
         .addChannelOption(channelOption)
         .addStringOption((o) => o.setName('text').setDescription('Message text').setMaxLength(2000).setRequired(true))
         .addStringOption((o) => o.setName('label').setDescription('Button label').setMaxLength(80).setRequired(true))
-        .addStringOption((o) => o.setName('url').setDescription('Link starting with http:// or https://').setMaxLength(512).setRequired(true))),
-);
+        .addStringOption((o) => o.setName('url').setDescription('Link starting with http:// or https://').setMaxLength(512).setRequired(true)));
 
 // Defers, posts the payload and answers with post.sent or post.cannotSend.
 async function postPayload(interaction, ctx, lang, channelId, payload) {
@@ -56,9 +48,7 @@ async function postPayload(interaction, ctx, lang, channelId, payload) {
 
 async function execute(interaction, ctx) {
   const sub = interaction.options.getSubcommand();
-  if (sub === 'enable' || sub === 'disable') return handleToggle(interaction, ctx, 'post');
-
-  const lang = await guard(interaction, ctx, 'post');
+  const lang = await guard(interaction, ctx, 'post', { requireEnabled: false });
   if (!lang) return;
   const channelId = interaction.options.getChannel('channel', true).id;
 
@@ -69,14 +59,6 @@ async function execute(interaction, ctx) {
       content: text,
       allowedMentions: safeMentions(rolesToPing(text, allow)),
     });
-  }
-
-  if (sub === 'embed') {
-    const name = normalizeEmbedName(interaction.options.getString('template', true));
-    if (!name) return interaction.reply(ephemeral(t(lang, 'embeds.badName')));
-    const spec = await getEmbed(ctx.db, interaction.guildId, name);
-    if (!spec) return interaction.reply(ephemeral(t(lang, 'embeds.notFound', { name })));
-    return sendEmbedSpec(interaction, ctx, lang, spec, channelId);
   }
 
   if (sub === 'buttons') {

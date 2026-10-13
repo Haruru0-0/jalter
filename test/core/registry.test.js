@@ -11,7 +11,7 @@ after(async () => { await db.end(); });
 test('FEATURES has unique keys and covers all phase 1 features', () => {
   const keys = FEATURES.map((f) => f.key);
   assert.equal(new Set(keys).size, keys.length);
-  for (const k of ['panel', 'language', 'media', 'embeds', 'post', 'welcome', 'autorole', 'logging', 'info']) {
+  for (const k of ['panel', 'language', 'media', 'embeds', 'post', 'greet', 'leave', 'boost', 'autorole', 'logging', 'info']) {
     assert.ok(keys.includes(k), k);
   }
 });

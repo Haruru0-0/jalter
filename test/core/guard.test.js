@@ -25,7 +25,7 @@ function fakeInteraction({ manage }) {
 
 test('guard refuses a non-manager with an ephemeral message', async () => {
   const i = fakeInteraction({ manage: false });
-  assert.equal(await guard(i, { db }, 'welcome'), null);
+  assert.equal(await guard(i, { db }, 'greet'), null);
   assert.match(i.replies[0].content, /Manage Server/);
   assert.ok(i.replies[0].flags);
 });
@@ -38,14 +38,14 @@ test('guard refuses when the feature is off and names the enable command', async
 
 test('guard names the setup command for features without an enable subcommand', async () => {
   const i = fakeInteraction({ manage: true });
-  assert.equal(await guard(i, { db }, 'welcome'), null);
-  assert.match(i.replies[0].content, /\/welcome setup/);
+  assert.equal(await guard(i, { db }, 'greet'), null);
+  assert.match(i.replies[0].content, /\/set greet channel/);
 });
 
 test('guard returns the language when allowed and enabled', async () => {
-  await setFeature(db, 'g1', 'welcome', { enabled: true });
+  await setFeature(db, 'g1', 'greet', { enabled: true });
   const i = fakeInteraction({ manage: true });
-  assert.equal(await guard(i, { db }, 'welcome'), 'en');
+  assert.equal(await guard(i, { db }, 'greet'), 'en');
   assert.equal(i.replies.length, 0);
 });
 
