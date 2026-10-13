@@ -68,3 +68,11 @@ test('extractEmbedRefs removes every tag and lowercases names', () => {
   assert.deepEqual(extractEmbedRefs('no tags'), { text: 'no tags', names: [] });
   assert.deepEqual(extractEmbedRefs('{embed:has space}'), { text: '{embed:has space}', names: [] });
 });
+
+test('inherited object keys are not placeholders', () => {
+  assert.equal(renderPlaceholders('{constructor} {__proto__}', {}), '{constructor} {__proto__}');
+});
+
+test('extractEmbedRefs tolerates missing text', () => {
+  assert.deepEqual(extractEmbedRefs(undefined), { text: '', names: [] });
+});

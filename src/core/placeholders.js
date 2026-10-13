@@ -9,7 +9,7 @@ export function ordinal(n, lang = 'en') {
 export function renderPlaceholders(text, vars) {
   if (!text) return text;
   return text.replace(/\{([a-z_]+)\}/g, (match, key) =>
-    vars[key] === undefined ? match : String(vars[key]));
+    Object.hasOwn(vars, key) && vars[key] !== undefined ? String(vars[key]) : match);
 }
 
 const unix = (ms) => Math.floor(ms / 1000);
@@ -40,6 +40,7 @@ export function buildVars({ user, member = null, guild, lang = 'en', now = Date.
 }
 
 export function extractEmbedRefs(text) {
+  if (!text) return { text: text ?? '', names: [] };
   const names = [];
   const stripped = text.replace(/\{embed:([A-Za-z0-9_-]{1,16})\}/g, (_match, name) => {
     names.push(name.toLowerCase());
