@@ -127,5 +127,15 @@
   "info.notAvailable": "Not available yet.",
   "info.notMember": "That user is not in this server.",
   "info.noBanner": "That user has no banner.",
-  "info.rolesMore": "+{count} more"
+  "info.rolesMore": "+{count} more",
+  "welcome.title.join": "Welcome {username}",
+  "welcome.title.leave": "Goodbye {username}",
+  "welcome.title.boost": "Thanks for boosting, {username}",
+  "welcome.imageNeeded": "Give an image link or stored image name, or set clear to true.",
+  "embeds.addField": "Add field",
+  "embeds.fieldModalTitle": "Add a field",
+  "embeds.fieldName": "Field name",
+  "embeds.fieldValue": "Field text",
+  "embeds.fieldInline": "Side by side? (yes or no)",
+  "embeds.err.fieldEmpty": "A field needs both a name and a text."
 }

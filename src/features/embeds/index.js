@@ -10,7 +10,7 @@ import { validateEmbed } from './model.js';
 import { buildEmbedPayload, sendEmbedSpec } from './send.js';
 import { putDraft, getDraft, clearDraft } from './drafts.js';
 import { saveTemplate, getTemplate, listTemplates, deleteTemplate } from './templates.js';
-import { specFromFields, quickSpec, errorText } from './spec.js';
+import { specFromFields, quickSpec, errorText, appendField, parseInline } from './spec.js';
 
 const CHANNEL_TYPES = [ChannelType.GuildText, ChannelType.GuildAnnouncement];
 
@@ -44,6 +44,17 @@ export function templateNameModal(lang) {
     );
 }
 
+export function fieldModal(lang, channelId) {
+  return new ModalBuilder()
+    .setCustomId(`embeds:fieldmodal:${channelId}`)
+    .setTitle(t(lang, 'embeds.fieldModalTitle'))
+    .addComponents(
+      textInput('name', t(lang, 'embeds.fieldName'), TextInputStyle.Short, '', { required: true, max: 256 }),
+      textInput('value', t(lang, 'embeds.fieldValue'), TextInputStyle.Paragraph, '', { required: true, max: 1024 }),
+      textInput('inline', t(lang, 'embeds.fieldInline'), TextInputStyle.Short, '', { max: 10 }),
+    );
+}
+
 async function showPreview(interaction, ctx, lang, spec, channelId) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   try {
@@ -56,6 +67,7 @@ async function showPreview(interaction, ctx, lang, spec, channelId) {
     }
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId(`embeds:edit:${channelId}`).setLabel(t(lang, 'embeds.edit')).setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`embeds:field:${channelId}`).setLabel(t(lang, 'embeds.addField')).setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId(`embeds:send:${channelId}`).setLabel(t(lang, 'embeds.send')).setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId('embeds:tpl').setLabel(t(lang, 'embeds.saveTemplate')).setStyle(ButtonStyle.Primary),
     );
@@ -106,6 +118,8 @@ async function execute(interaction, ctx) {
   const channelId = () => interaction.options.getChannel('channel')?.id ?? interaction.channelId;
 
   if (!group && sub === 'builder') {
+    // A new build starts clean; the modal submit keeps fields only from the current draft.
+    clearDraft(interaction.user.id);
     return interaction.showModal(builderModal(lang, channelId()));
   }
 
@@ -151,6 +165,9 @@ async function handle(interaction, ctx) {
     } catch {
       return interaction.reply(ephemeral(t(lang, 'embeds.imageMissing')));
     }
+    // The builder form has no field inputs, so an edit keeps the fields already added.
+    const previous = getDraft(userId);
+    if (previous?.fields?.length) spec.fields = previous.fields;
     const check = validateEmbed(spec);
     if (!check.ok) return interaction.reply(ephemeral(errorText(lang, check.errors)));
     putDraft(userId, spec);
@@ -161,6 +178,24 @@ async function handle(interaction, ctx) {
     const spec = getDraft(userId);
     if (!spec) return interaction.reply(ephemeral(t(lang, 'embeds.draftExpired')));
     return interaction.showModal(builderModal(lang, channelId, spec));
+  }
+
+  if (action === 'field' && interaction.isButton()) {
+    if (!getDraft(userId)) return interaction.reply(ephemeral(t(lang, 'embeds.draftExpired')));
+    return interaction.showModal(fieldModal(lang, channelId));
+  }
+
+  if (action === 'fieldmodal' && interaction.isModalSubmit()) {
+    const spec = getDraft(userId);
+    if (!spec) return interaction.reply(ephemeral(t(lang, 'embeds.draftExpired')));
+    const result = appendField(spec, {
+      name: interaction.fields.getTextInputValue('name'),
+      value: interaction.fields.getTextInputValue('value'),
+      inline: parseInline(interaction.fields.getTextInputValue('inline')),
+    });
+    if (!result.ok) return interaction.reply(ephemeral(errorText(lang, result.errors)));
+    putDraft(userId, result.spec);
+    return showPreview(interaction, ctx, lang, result.spec, channelId);
   }
 
   if (action === 'send' && interaction.isButton()) {

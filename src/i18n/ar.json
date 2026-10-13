@@ -127,5 +127,15 @@
   "info.notAvailable": "غير متاح بعد.",
   "info.notMember": "هذا المستخدم ليس في هذا الخادم.",
   "info.noBanner": "ليس لهذا المستخدم بانر.",
-  "info.rolesMore": "و{count} أخرى"
+  "info.rolesMore": "و{count} أخرى",
+  "welcome.title.join": "أهلاً بك {username}",
+  "welcome.title.leave": "وداعاً {username}",
+  "welcome.title.boost": "شكراً على التعزيز يا {username}",
+  "welcome.imageNeeded": "أدخل رابط صورة أو اسم صورة محفوظة، أو اضبط clear على true.",
+  "embeds.addField": "إضافة حقل",
+  "embeds.fieldModalTitle": "إضافة حقل",
+  "embeds.fieldName": "اسم الحقل",
+  "embeds.fieldValue": "نص الحقل",
+  "embeds.fieldInline": "جنباً إلى جنب؟ (نعم أو لا)",
+  "embeds.err.fieldEmpty": "يحتاج الحقل إلى اسم ونص."
 }

@@ -127,5 +127,15 @@
   "info.notAvailable": "Pas encore disponible.",
   "info.notMember": "Cet utilisateur n'est pas sur ce serveur.",
   "info.noBanner": "Cet utilisateur n'a pas de bannière.",
-  "info.rolesMore": "+{count} de plus"
+  "info.rolesMore": "+{count} de plus",
+  "welcome.title.join": "Bienvenue {username}",
+  "welcome.title.leave": "Au revoir {username}",
+  "welcome.title.boost": "Merci pour le boost, {username}",
+  "welcome.imageNeeded": "Indiquez un lien d'image ou le nom d'une image stockée, ou mettez clear sur true.",
+  "embeds.addField": "Ajouter un champ",
+  "embeds.fieldModalTitle": "Ajouter un champ",
+  "embeds.fieldName": "Nom du champ",
+  "embeds.fieldValue": "Texte du champ",
+  "embeds.fieldInline": "Côte à côte ? (oui ou non)",
+  "embeds.err.fieldEmpty": "Un champ a besoin d'un nom et d'un texte."
 }

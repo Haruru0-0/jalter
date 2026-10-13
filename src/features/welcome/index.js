@@ -8,10 +8,10 @@ import { ephemeral } from '../../core/replies.js';
 import { fetchSendable, trySend } from '../../core/send.js';
 import { safeMentions } from '../../core/mentions.js';
 import { renderTemplate } from '../../core/templates.js';
-import { resolveImage } from '../media/images.js';
-import { buildWelcomePayload, DEFAULT_TEXT } from './payload.js';
+import { resolveImage, parseImageInput } from '../media/images.js';
+import { buildWelcomePayload, imagePatch, DEFAULT_TEXT } from './payload.js';
 import { renderCard } from './card.js';
-import { t } from '../../i18n/index.js';
+import { getLang, t } from '../../i18n/index.js';
 
 const EVENTS = ['join', 'leave', 'boost'];
 
@@ -21,8 +21,9 @@ async function sendWelcome(ctx, member, event, cfg, vars) {
     console.warn(`Welcome channel for ${event} missing in guild ${member.guild.id}`);
     return;
   }
+  const lang = await getLang(ctx.db, member.guild.id);
   const images = {};
-  if (cfg.embed?.image) images.image = await resolveImage(ctx.db, ctx.client, member.guild.id, cfg.embed.image);
+  if (cfg.style === 'embed' && cfg.embed?.image) images.image = await resolveImage(ctx.db, ctx.client, member.guild.id, cfg.embed.image);
   let card = null;
   if (cfg.style === 'card') {
     const background = cfg.background
@@ -35,7 +36,7 @@ async function sendWelcome(ctx, member, event, cfg, vars) {
       background,
     });
   }
-  const payload = buildWelcomePayload(cfg, vars, { images, card });
+  const payload = buildWelcomePayload(cfg, vars, { images, card, event, lang });
   await trySend(channel, {
     ...payload,
     allowedMentions: event === 'leave' ? safeMentions() : { parse: [], users: [member.id] },
@@ -102,6 +103,12 @@ const data = new SlashCommandBuilder()
   .addSubcommand((s) =>
     s.setName('message').setDescription('Edit the message text').addStringOption(eventOption))
   .addSubcommand((s) =>
+    s.setName('image').setDescription('Set the card background or embed image')
+      .addStringOption(eventOption)
+      .addStringOption((o) =>
+        o.setName('source').setDescription('Image link or stored image name').setMaxLength(512))
+      .addBooleanOption((o) => o.setName('clear').setDescription('Remove the image instead')))
+  .addSubcommand((s) =>
     s.setName('dm').setDescription('Also send the member a direct message')
       .addStringOption(eventOption)
       .addStringOption((o) =>
@@ -149,11 +156,26 @@ async function execute(interaction, ctx) {
 
   if (sub === 'style') {
     const style = interaction.options.getString('style', true);
-    const patch = { style };
-    if (style === 'embed' && !current.embed) {
-      patch.embed = { title: 'Welcome {username}', description: DEFAULT_TEXT[event] };
+    // Embed style needs no stored embed: the title defaults per event and the text is the description.
+    await updateEvent(ctx, guildId, event, { style });
+    return interaction.reply(ephemeral(t(lang, 'common.saved')));
+  }
+
+  if (sub === 'image') {
+    const clear = interaction.options.getBoolean('clear') ?? false;
+    const source = interaction.options.getString('source')?.trim();
+    if (clear) {
+      await updateEvent(ctx, guildId, event, imagePatch(current, null));
+      return interaction.reply(ephemeral(t(lang, 'common.saved')));
     }
-    await updateEvent(ctx, guildId, event, patch);
+    if (!source) return interaction.reply(ephemeral(t(lang, 'welcome.imageNeeded')));
+    const ref = parseImageInput(source);
+    if (ref.type === 'stored') {
+      const { rowCount } = await ctx.db.query(
+        'SELECT 1 FROM media_items WHERE guild_id = $1 AND name = $2', [guildId, ref.name]);
+      if (!rowCount) return interaction.reply(ephemeral(t(lang, 'media.unknown', { name: ref.name })));
+    }
+    await updateEvent(ctx, guildId, event, imagePatch(current, ref));
     return interaction.reply(ephemeral(t(lang, 'common.saved')));
   }
 
