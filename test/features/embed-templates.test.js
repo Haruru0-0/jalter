@@ -5,7 +5,7 @@ import { testDb } from '../helpers/db.js';
 
 let db;
 before(async () => { db = await testDb(); });
-beforeEach(async () => { await db.query('TRUNCATE embed_templates'); });
+beforeEach(async () => { await db.query('TRUNCATE embeds'); });
 after(async () => { await db.end(); });
 
 test('save then get returns the same spec', async () => {

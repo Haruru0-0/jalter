@@ -1,5 +1,6 @@
 import { test, before, beforeEach, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { readdir } from 'node:fs/promises';
 import { openDb } from '../../src/db/index.js';
 import { getFeature, setFeature, listFeatures } from '../../src/db/settings.js';
 import { testDb, TEST_DB_URL } from '../helpers/db.js';
@@ -54,7 +55,8 @@ test('listFeatures returns a map of all features for a guild', async () => {
 test('openDb twice does not re-apply migrations', async () => {
   const again = await openDb(TEST_DB_URL);
   const { rows } = await again.query('SELECT count(*)::int AS n FROM schema_version');
-  assert.equal(rows[0].n, 1);
+  const files = (await readdir(new URL('../../src/db/migrations/', import.meta.url))).filter((f) => f.endsWith('.sql'));
+  assert.equal(rows[0].n, files.length);
   await again.end();
 });
 
