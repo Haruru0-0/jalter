@@ -5,7 +5,7 @@ import { errorText, parseInline, appendField } from '../../src/features/embeds/s
 test('errorText lists each translated error on its own line', () => {
   assert.equal(
     errorText('en', ['embeds.err.empty', 'embeds.err.badColor']),
-    '• The embed needs at least a title, description, image or field.\n• The color must look like #5865F2.',
+    '• The embed needs at least a title, description, image, thumbnail, author, footer or field.\n• The color must look like #5865F2.',
   );
 });
 

@@ -1,15 +1,15 @@
 # Jalter
 
-Jalter is a Discord bot with a modular design. Every feature is off by default and a server admin turns it on. Replies to setup commands are private (ephemeral) and need the Manage Server permission or the bot manager role.
+Jalter is a Discord bot with a modular design. Most features are off by default and a server admin turns them on. Replies to setup commands are private (ephemeral) and need the Manage Server permission or the bot manager role.
 
 ## Phase 1 features
 
 - Panel: `/panel overview` shows which features are on, off or coming later (always on).
 - Language: English, French and Arabic, set per server (always on).
 - Media: store images for the server with `/media add` and use them by name. Uploading a file straight into the storage channel does not register it; only `/media add` does.
-- Embeds: `/embed quick`, an interactive builder (with an Add field button), and saved templates.
-- Post: send text or embeds as the bot, with mentions blocked. You can only post in channels where you can see and send messages yourself.
-- Welcome, leave and boost messages in text, embed or card style, with an optional DM and an image (`/welcome image`: the card background, or the embed image).
+- Embeds (always available): save named embeds with `/embed create`, edit them with buttons or `/embed edit`, and preview with `/embed show`. Use one in a message with `{embed:name}`.
+- Post (always available): send text or saved embeds as the bot, with mentions blocked. You can only post in channels where you can see and send messages yourself.
+- Greet, leave and boost messages, set with `/set greet|leave|boost ...` (channel, message, card, background, and DM for greet and boost) and tried out with `/test`. A message can hold `{embed:name}` and an optional card image.
 - Auto role: separate roles for new humans and new bots. The bot's highest role must sit above any role it gives, or Discord refuses.
 - Logging: messages (edits and deletes), members (joins, leaves, nickname and role changes) and server changes (channels, roles, emojis). No voice logging yet.
 - Bot manager role: `/panel manager-role` lets a role use the setup commands. Only members with Manage Server can set or clear it, and @everyone or bot-managed roles are refused.
@@ -67,13 +67,15 @@ Run these on a test server with the bot invited and started. Confirm each item.
 1. `/panel overview` shows Panel and Language as Core, other Phase 1 features Off, later phases Coming soon.
 2. As a normal member (no Manage Server), every setup command is refused with the permission message.
 3. `/language set` to French changes `/panel overview` to French; Arabic shows Arabic.
-4. `/media setup`, `/media add logo`, `/media list`; then `/embed enable`, `/embed quick` with image `logo` shows the image.
-5. `/embed builder`: fill the form, see the preview, press Add field and add a field, press Send; press Save as template; `/embed template use`.
-6. A text over the limits (for example a 300-character title) shows the error and posts nothing.
-7. `/post enable`, `/post text` with `@everyone` in the text does not ping.
-8. `/welcome setup join`, then `/welcome test join` in text, embed and card styles; the card looks right with an Arabic username; the DM option works; `/welcome message` changes the embed text; `/welcome image join logo` shows the image.
-9. `/autorole setup` gives the right role to a new human account and to a bot.
-10. `/logging set messages`: edit and delete a message and see the log; edits inside the log channel itself are not logged.
-11. `/info enable`, then `/userinfo`, `/avatar`, `/banner`, `/serverinfo` work; with `/info disable` they refuse.
-12. Delete the welcome channel, trigger `/welcome test join`: the bot does not crash.
-13. Stop and restart the bot, then run `docker compose restart`: all settings are still there.
+4. `/media setup`, `/media add logo`, `/media list`.
+5. `/embed create name:rules` opens the editor; use the buttons to set the title, description and fields, then `/embed edit title ...` and `/embed show`. An embed with `logo` as its image shows the image.
+6. A text over the limits (for example a 300-character title) shows the error and saves nothing.
+7. `/post` works without enabling anything; `@everyone` in the text does not ping.
+8. `/set greet channel`, then `/set greet message` with text, and again without text (it opens the form). Add `{embed:rules}` to the message and run `/test greet`.
+9. `/set greet card on` and `/test greet`: the card looks right with an Arabic username. Try `/set greet background logo` and `/set greet dm on` (the DM arrives).
+10. Repeat steps 8 and 9 for `/set leave ...` and `/set boost ...` with `/test leave` and `/test boost`.
+11. `/autorole setup` gives the right role to a new human account and to a bot.
+12. `/logging set messages`: edit and delete a message and see the log; edits inside the log channel itself are not logged.
+13. `/info enable`, then `/userinfo`, `/avatar`, `/banner`, `/serverinfo` work; with `/info disable` they refuse.
+14. Delete the greet channel, run `/test greet`: the bot does not crash.
+15. Stop and restart the bot, then run `docker compose restart`: all settings are still there.
