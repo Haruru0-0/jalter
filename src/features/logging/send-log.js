@@ -1,5 +1,7 @@
 import { getFeature } from '../../db/settings.js';
 import { fetchSendable, trySend } from '../../core/send.js';
+import { getLang } from '../../i18n/index.js';
+import { withExecutor } from './format.js';
 import { isEventEnabled, isIgnored, resolveChannelId } from './config.js';
 
 export async function sendLog(ctx, guildId, event, embed, opts = {}) {
@@ -16,7 +18,12 @@ export async function sendLog(ctx, guildId, event, embed, opts = {}) {
       console.warn(`Log channel for ${event} missing in guild ${guildId}`);
       return;
     }
-    await trySend(channel, { embeds: [{ ...embed, timestamp: new Date().toISOString() }], allowedMentions: { parse: [] } });
+    let finalEmbed = embed;
+    if (opts.executor) {
+      const executorId = await opts.executor().catch(() => null);
+      if (executorId) finalEmbed = withExecutor(embed, executorId, await getLang(ctx.db, guildId));
+    }
+    await trySend(channel, { embeds: [{ ...finalEmbed, timestamp: new Date().toISOString() }], allowedMentions: { parse: [] } });
   } catch (err) {
     console.warn(`Could not write log in ${guildId}: ${err.message}`);
   }

@@ -1,8 +1,10 @@
 import { Events, AuditLogEvent } from 'discord.js';
 import { getLang, t } from '../../i18n/index.js';
 import { sendLog, safe } from './send-log.js';
-import { diffRoles, formatRoleChange, truncate, timeoutTransition, withExecutor } from './format.js';
+import { diffRoles, formatRoleChange, truncate, timeoutTransition } from './format.js';
 import { findExecutor } from './audit.js';
+
+const timeoutEntry = (entry) => entry.changes?.some((c) => c.key === 'communication_disabled_until');
 
 const userLine = (user) => `<@${user.id}> (${user.username ?? '?'})`;
 
@@ -48,7 +50,6 @@ const onMemberUpdate = safe('memberUpdate', async (ctx, oldM, newM) => {
   }
   const transition = timeoutTransition(oldM.communicationDisabledUntilTimestamp, newM.communicationDisabledUntilTimestamp);
   if (transition) {
-    const executor = await findExecutor(newM.guild, AuditLogEvent.MemberUpdate, newM.user.id);
     const embed = transition === 'timeout'
       ? {
         title: t(lang, 'logging.memberTimedOut'),
@@ -56,7 +57,9 @@ const onMemberUpdate = safe('memberUpdate', async (ctx, oldM, newM) => {
         fields: [{ name: t(lang, 'logging.timeoutUntil'), value: `<t:${Math.floor(newM.communicationDisabledUntilTimestamp / 1000)}:F>` }],
       }
       : { title: t(lang, 'logging.timeoutRemoved'), description: userLine(newM.user) };
-    await sendLog(ctx, newM.guild.id, transition, withExecutor(embed, executor, lang));
+    await sendLog(ctx, newM.guild.id, transition, embed, {
+      executor: () => findExecutor(newM.guild, AuditLogEvent.MemberUpdate, newM.user.id, Date.now(), timeoutEntry),
+    });
   }
   const diff = diffRoles([...oldM.roles.cache.keys()], [...newM.roles.cache.keys()]);
   if (diff.added.length || diff.removed.length) {
@@ -65,11 +68,11 @@ const onMemberUpdate = safe('memberUpdate', async (ctx, oldM, newM) => {
 });
 
 async function onBan(ctx, ban, event, auditType, titleKey) {
-  const full = ban.partial ? await ban.fetch() : ban;
+  // Gateway ban events are always partial (no reason) but always carry the user.
   const lang = await getLang(ctx.db, ban.guild.id);
-  const executor = await findExecutor(ban.guild, auditType, full.user.id);
   await sendLog(ctx, ban.guild.id, event,
-    withExecutor({ title: t(lang, titleKey), description: userLine(full.user) }, executor, lang));
+    { title: t(lang, titleKey), description: userLine(ban.user) },
+    { executor: () => findExecutor(ban.guild, auditType, ban.user.id) });
 }
 
 const onBanAdd = safe('banAdd', (ctx, ban) => onBan(ctx, ban, 'ban', AuditLogEvent.MemberBanAdd, 'logging.memberBanned'));

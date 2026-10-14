@@ -228,6 +228,7 @@
   "logging.statusNotSet": "غير محددة",
   "logging.statusFallback": "تستخدم {category}",
   "logging.statusNone": "لا شيء",
+  "logging.statusMore": "…و{count} آخرين",
   "logging.statusDisabled": "الأحداث المعطّلة",
   "logging.statusIgnoredChannels": "القنوات المتجاهلة",
   "logging.statusIgnoredMembers": "الأعضاء المتجاهلون",

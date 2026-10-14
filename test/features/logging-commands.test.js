@@ -151,3 +151,17 @@ test('setup creates the category and five channels and stores them', async () =>
   assert.equal(enabled, true);
   assert.deepEqual(config.channels, { messages: 'ch2', members: 'ch3', join: 'ch4', server: 'ch5', voice: 'ch6' });
 });
+
+test('status keeps every embed field value within 1024 characters', async () => {
+  const channels = Array.from({ length: 100 }, (_, i) => `1234567890123456${String(i).padStart(2, '0')}`);
+  await setFeature(db, 'g-setup', 'logging', {
+    enabled: true,
+    config: { ignore: { channels, members: channels, prefixes: channels.map((c) => c.slice(-6)) } },
+  });
+  const i = fakeInteraction('status');
+  await commands[0].execute(i, { db });
+  const embed = i.replies[0].embeds[0];
+  assert.ok(embed.fields.length >= 5);
+  for (const f of embed.fields) assert.ok(f.value.length <= 1024, `${f.name}: ${f.value.length}`);
+  assert.match(embed.fields[2].value, /more/);
+});

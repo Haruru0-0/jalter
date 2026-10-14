@@ -72,8 +72,23 @@ function categoryLine(lang, config, category) {
   return t(lang, 'logging.statusFallback', { category: fallback });
 }
 
+const FIELD_CAP = 1000;
+
+// Joins items for an embed field (max 1024 chars), cutting with an "and N more" suffix.
 function listOrNone(lang, items) {
-  return items.length ? items.join(', ') : t(lang, 'logging.statusNone');
+  if (!items.length) return t(lang, 'logging.statusNone');
+  const full = items.join(', ');
+  if (full.length <= FIELD_CAP) return full;
+  let shown = 0;
+  let text = '';
+  for (const item of items) {
+    const next = shown ? `${text}, ${item}` : item;
+    const suffix = t(lang, 'logging.statusMore', { count: items.length - shown - 1 });
+    if (next.length + suffix.length + 2 > FIELD_CAP) break;
+    text = next;
+    shown += 1;
+  }
+  return `${text}${text ? ' ' : ''}${t(lang, 'logging.statusMore', { count: items.length - shown })}`;
 }
 
 function statusEmbed(lang, enabled, config) {
@@ -154,7 +169,8 @@ async function runSetup(interaction, ctx, lang, config) {
       channels[key] = channel.id;
     }
     await setFeature(ctx.db, interaction.guildId, 'logging', { enabled: true, config: { channels } });
-  } catch {
+  } catch (err) {
+    console.warn(`Logging setup failed in ${interaction.guildId}: ${err.message}`);
     for (const channel of created.reverse()) await channel.delete?.().catch(() => {});
     await interaction.editReply(t(lang, 'logging.setupFailed'));
     return;

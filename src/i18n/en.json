@@ -228,6 +228,7 @@
   "logging.statusNotSet": "not set",
   "logging.statusFallback": "falls back to {category}",
   "logging.statusNone": "none",
+  "logging.statusMore": "…and {count} more",
   "logging.statusDisabled": "Disabled events",
   "logging.statusIgnoredChannels": "Ignored channels",
   "logging.statusIgnoredMembers": "Ignored members",

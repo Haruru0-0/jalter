@@ -70,3 +70,31 @@ test('timeout set in GuildMemberUpdate logs with end time', async () => {
   assert.equal(sent.length, 1);
   assert.match(sent[0].embeds[0].fields.map((f) => f.value).join(' '), /<t:\d+:F>/);
 });
+
+test('ban and unban log from a partial ban whose fetch would throw', async () => {
+  const sent = [];
+  await enable('g1');
+  const ctx = ctxWith(sent, []);
+  const g = guild('g1', true)[1];
+  const ban = { guild: g, user: { id: 'u1', username: 'sam' }, partial: true, fetch: async () => { throw new Error('Unknown Ban'); } };
+  await handler('guildBanAdd')(ctx, ban);
+  await handler('guildBanRemove')(ctx, ban);
+  assert.equal(sent.length, 2);
+});
+
+test('audit lookup is skipped when the event is disabled or no channel is set', async () => {
+  const sent = [];
+  let lookups = 0;
+  const g = { id: 'g1', fetchAuditLogs: async () => { lookups++; return { entries: new Map() }; } };
+  const ban = { guild: g, user: { id: 'u1', username: 'sam' }, partial: true };
+  await setFeature(db, 'g1', 'logging', { enabled: true, config: { channels: { default: 'LOG' }, disabledEvents: ['ban'] } });
+  await handler('guildBanAdd')(ctxWith(sent, []), ban);
+  await setFeature(db, 'g1', 'logging', { enabled: true, config: { channels: {}, disabledEvents: [] } });
+  await handler('guildBanAdd')(ctxWith(sent, []), ban);
+  assert.equal(lookups, 0);
+  assert.equal(sent.length, 0);
+  await setFeature(db, 'g1', 'logging', { enabled: true, config: { channels: { default: 'LOG' } } });
+  await handler('guildBanAdd')(ctxWith(sent, []), ban);
+  assert.equal(lookups, 1);
+  assert.equal(sent.length, 1);
+});

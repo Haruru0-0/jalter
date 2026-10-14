@@ -39,3 +39,13 @@ test('returns null when executor is missing', async () => {
   const g = guildWith([{ target: { id: 'u1' }, executor: null, createdTimestamp: NOW - 1000 }]);
   assert.equal(await findExecutor(g, 22, 'u1', NOW), null);
 });
+
+test('filter skips a newer entry that fails it and takes the older passing one', async () => {
+  const g = guildWith([
+    { target: { id: 'u1' }, executor: { id: 'timeout-mod' }, createdTimestamp: NOW - 4000, changes: [{ key: 'communication_disabled_until' }] },
+    { target: { id: 'u1' }, executor: { id: 'nick-mod' }, createdTimestamp: NOW - 1000, changes: [{ key: 'nick' }] },
+  ]);
+  const onlyTimeout = (e) => e.changes?.some((c) => c.key === 'communication_disabled_until');
+  assert.equal(await findExecutor(g, 24, 'u1', NOW, onlyTimeout), 'timeout-mod');
+  assert.equal(await findExecutor(g, 24, 'u1', NOW), 'nick-mod');
+});

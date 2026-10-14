@@ -3,7 +3,7 @@ import { getLang, t } from '../../i18n/index.js';
 import { sendLog, safe } from './send-log.js';
 import { findExecutor } from './audit.js';
 import {
-  formatMessageEdit, formatMessageDelete, formatPurge, formatInvite, withExecutor,
+  formatMessageEdit, formatMessageDelete, formatPurge, formatInvite,
 } from './format.js';
 
 export const INVITE_RE = /(discord\.gg|discord(?:app)?\.com\/invite)\/\S+/i;
@@ -23,11 +23,9 @@ const onMessageUpdate = safe('messageUpdate', async (ctx, oldM, newM) => {
 const onMessageDelete = safe('messageDelete', async (ctx, message) => {
   if (!message.guildId || message.author?.bot) return;
   const lang = await getLang(ctx.db, message.guildId);
-  const executorId = message.author
-    ? await findExecutor(message.guild, AuditLogEvent.MessageDelete, message.author.id)
-    : null;
-  const embed = withExecutor(formatMessageDelete(message, lang), executorId, lang);
-  await sendLog(ctx, message.guildId, 'messageDelete', embed, {
+  const authorId = message.author?.id;
+  await sendLog(ctx, message.guildId, 'messageDelete', formatMessageDelete(message, lang), {
+    executor: authorId ? () => findExecutor(message.guild, AuditLogEvent.MessageDelete, authorId) : null,
     sourceChannelId: message.channelId,
     ignore: { channelId: message.channelId, userId: message.author?.id, content: message.content },
   });

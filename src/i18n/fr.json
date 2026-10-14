@@ -228,6 +228,7 @@
   "logging.statusNotSet": "non défini",
   "logging.statusFallback": "utilise {category}",
   "logging.statusNone": "aucun",
+  "logging.statusMore": "…et {count} de plus",
   "logging.statusDisabled": "Événements désactivés",
   "logging.statusIgnoredChannels": "Salons ignorés",
   "logging.statusIgnoredMembers": "Membres ignorés",
