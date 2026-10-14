@@ -15,7 +15,7 @@ Jalter is a Discord bot with a modular design. Most features are off by default 
   - `/autorole timed add delay:<time> role:<role>` gives a role to a new human only after a delay, such as `30m`, `2h` or `1d` (1 minute to 30 days). `/autorole timed remove role:<role>` cancels it, including for members already waiting.
   - `/autorole reassign state:on|off` (off by default): a member who leaves gets their roles back if they return within 30 days. Blacklisted, managed and above-the-bot roles are never remembered.
   - `/autorole blacklist add|remove role:<role>` keeps a role from being given back to members who leave and return.
-- Logging: messages (edits and deletes), members (joins, leaves, nickname and role changes) and server changes (channels, roles, emojis). No voice logging yet.
+- Logging: 24 events in six categories (messages, members, join, server, voice, mod). Messages: delete, edit, bulk delete, invite posted. Members: role, avatar and name changes, ban, unban, timeout and timeout removed. Join and leave. Server: channels, roles, emojis, server settings. Voice: join, move, leave. Each event can be turned off with `/logging event`; message logs can skip channels, members and prefixes (`/logging ignore`, `prefix-add`). `/logging setup` creates the channels, `/logging status` shows everything, `/logging export` and `import` copy toggles and prefixes between servers. Ban, unban, timeout, channel and role changes and some deletes show who did it when the bot has View Audit Log; without it the log is still sent, just without the "By" field. The `mod` category is selectable but nothing logs to it yet (modlog and cases come with moderation).
 - Bot manager role: `/panel manager-role` lets a role use the setup commands. Only members with Manage Server can set or clear it, and @everyone or bot-managed roles are refused.
 - Info: `/userinfo`, `/avatar`, `/banner`, `/serverinfo`.
 
@@ -48,9 +48,9 @@ Postgres only listens on this computer (`127.0.0.1`). Before hosting the bot any
 
 1. Go to the Discord developer portal and create an application.
 2. Open the Bot tab, create the bot and copy its token into `.env`.
-3. Under Privileged Gateway Intents enable Server Members and Message Content. The bot also uses the Guilds, Guild Messages and Guild Expressions (emoji events, used by logging) intents; those are not privileged, so they are granted automatically and need no switch in the portal.
+3. Under Privileged Gateway Intents enable Server Members and Message Content. The bot also uses the Guilds, Guild Messages, Guild Expressions (emoji events), Guild Moderation (ban and unban events) and Guild Voice States (voice events) intents, the last three used by logging; those are not privileged, so they are granted automatically and need no switch in the portal.
 4. Copy the application ID into `.env` as `CLIENT_ID`.
-5. Invite the bot with the `bot` and `applications.commands` scopes and these permissions: View Channels, Send Messages, Read Message History, Embed Links, Attach Files, Manage Roles. Read Message History lets the bot fetch stored images from the media channel.
+5. Invite the bot with the `bot` and `applications.commands` scopes and these permissions: View Channels, Send Messages, Read Message History, Embed Links, Attach Files, Manage Roles. Read Message History lets the bot fetch stored images from the media channel. Add View Audit Log if you want logs to show who banned, timed out or deleted something, and Manage Channels if you want `/logging setup` to create the log channels.
 
 ## Tests
 
@@ -84,6 +84,12 @@ Run these on a test server with the bot invited and started. Confirm each item.
 14. `/autorole reassign state:on`, give a member a role, let them leave and rejoin: the roles come back. With `state:off` they do not.
 15. With `reassign` on, give a member a role, then `/autorole blacklist add` that role. Have the member leave and rejoin: they do not get the role back. `blacklist remove` allows it again.
 16. `/logging set messages`: edit and delete a message and see the log; edits inside the log channel itself are not logged.
+    a. `/logging event event:messageEdit enabled:false`, edit a message: nothing is logged. `enabled:true` brings it back. `/logging status` lists the disabled events.
+    b. `/logging ignore channel:<channel>`, `/logging ignore member:<member>` and `/logging prefix-add prefix:!`: deleting or editing a message in that channel, by that member, or starting with `!`, is not logged. `unignore` and `prefix-remove` undo each.
+    c. `/logging set voice` then join, switch and leave a voice channel: three logs. Muting or deafening yourself logs nothing.
+    d. With View Audit Log granted, ban a test member, then unban and time out: each log has a "By" field with you. Remove View Audit Log from the bot and repeat: the logs still arrive without "By".
+    e. `/logging setup` creates a private "Logs" category with log-messages, log-members, log-joins, log-server and log-voice and points the categories at them. Running it again creates a second new "Logs" category and channels and leaves the old ones in place; delete them yourself if unwanted.
+    f. `/logging export`, then on another test server `/logging import code:<code>`: event toggles and prefixes are copied (channels and ignored members are not). `/logging import code:garbage` shows an error and changes nothing.
 17. `/info enable`, then `/userinfo`, `/avatar`, `/banner`, `/serverinfo` work; with `/info disable` they refuse.
 18. Delete the greet channel, run `/test greet`: the bot does not crash.
 19. Stop and restart the bot, then run `docker compose restart`: all settings are still there.
