@@ -206,5 +206,11 @@
   "logging.timeoutRemoved": "Timeout removed",
   "logging.timeoutUntil": "Timed out until",
   "logging.avatarChanged": "Avatar changed",
-  "logging.usernameChanged": "Username changed"
+  "logging.usernameChanged": "Username changed",
+  "logging.guildUpdated": "Server updated",
+  "logging.icon": "Icon",
+  "logging.iconChanged": "Icon changed",
+  "logging.voiceJoined": "Joined voice",
+  "logging.voiceMoved": "Moved voice channel",
+  "logging.voiceLeft": "Left voice"
 }

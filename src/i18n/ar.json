@@ -206,5 +206,11 @@
   "logging.timeoutRemoved": "تمت إزالة الكتم المؤقت",
   "logging.timeoutUntil": "مكتوم حتى",
   "logging.avatarChanged": "تم تغيير الصورة الرمزية",
-  "logging.usernameChanged": "تم تغيير اسم المستخدم"
+  "logging.usernameChanged": "تم تغيير اسم المستخدم",
+  "logging.guildUpdated": "تم تحديث السيرفر",
+  "logging.icon": "الأيقونة",
+  "logging.iconChanged": "تم تغيير الأيقونة",
+  "logging.voiceJoined": "انضم إلى الصوت",
+  "logging.voiceMoved": "انتقل إلى قناة صوتية أخرى",
+  "logging.voiceLeft": "غادر الصوت"
 }

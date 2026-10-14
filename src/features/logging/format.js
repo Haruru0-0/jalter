@@ -86,3 +86,14 @@ export function timeoutTransition(oldTs, newTs, now = Date.now()) {
   if (newActive) return newTs === oldTs ? null : 'timeout';
   return oldActive ? 'timeoutRemoved' : null;
 }
+
+// Classifies a voice channel change. Only the channel matters: mute, deafen
+// and stream changes keep the same channel and return null.
+export function voiceTransition(oldChannelId, newChannelId) {
+  const from = oldChannelId ?? null;
+  const to = newChannelId ?? null;
+  if (from === to) return null;
+  if (!from) return 'voiceJoin';
+  if (!to) return 'voiceLeave';
+  return 'voiceMove';
+}

@@ -1,24 +1,27 @@
-import { Events } from 'discord.js';
+import { Events, AuditLogEvent } from 'discord.js';
 import { getLang, t } from '../../i18n/index.js';
 import { sendLog, safe } from './send-log.js';
-import { formatRename, truncate } from './format.js';
+import { formatRename, truncate, withExecutor } from './format.js';
+import { findExecutor } from './audit.js';
 
 const onChannelCreate = safe('channelCreate', async (ctx, channel) => {
   if (!channel.guildId) return;
   const lang = await getLang(ctx.db, channel.guildId);
-  await sendLog(ctx, channel.guildId, 'channelCreate', {
+  const executor = await findExecutor(channel.guild, AuditLogEvent.ChannelCreate, channel.id);
+  await sendLog(ctx, channel.guildId, 'channelCreate', withExecutor({
     title: t(lang, 'logging.channelCreated'),
     description: `<#${channel.id}> (${channel.name})`,
-  }, { sourceChannelId: channel.id });
+  }, executor, lang), { sourceChannelId: channel.id });
 });
 
 const onChannelDelete = safe('channelDelete', async (ctx, channel) => {
   if (!channel.guildId) return;
   const lang = await getLang(ctx.db, channel.guildId);
-  await sendLog(ctx, channel.guildId, 'channelDelete', {
+  const executor = await findExecutor(channel.guild, AuditLogEvent.ChannelDelete, channel.id);
+  await sendLog(ctx, channel.guildId, 'channelDelete', withExecutor({
     title: t(lang, 'logging.channelDeleted'),
     description: truncate(channel.name),
-  }, { sourceChannelId: channel.id });
+  }, executor, lang), { sourceChannelId: channel.id });
 });
 
 const onChannelUpdate = safe('channelUpdate', async (ctx, oldC, newC) => {
@@ -30,18 +33,20 @@ const onChannelUpdate = safe('channelUpdate', async (ctx, oldC, newC) => {
 
 const onRoleCreate = safe('roleCreate', async (ctx, role) => {
   const lang = await getLang(ctx.db, role.guild.id);
-  await sendLog(ctx, role.guild.id, 'roleCreate', {
+  const executor = await findExecutor(role.guild, AuditLogEvent.RoleCreate, role.id);
+  await sendLog(ctx, role.guild.id, 'roleCreate', withExecutor({
     title: t(lang, 'logging.roleCreated'),
     description: `<@&${role.id}> (${role.name})`,
-  });
+  }, executor, lang));
 });
 
 const onRoleDelete = safe('roleDelete', async (ctx, role) => {
   const lang = await getLang(ctx.db, role.guild.id);
-  await sendLog(ctx, role.guild.id, 'roleDelete', {
+  const executor = await findExecutor(role.guild, AuditLogEvent.RoleDelete, role.id);
+  await sendLog(ctx, role.guild.id, 'roleDelete', withExecutor({
     title: t(lang, 'logging.roleDeleted'),
     description: truncate(role.name),
-  });
+  }, executor, lang));
 });
 
 const onRoleUpdate = safe('roleUpdate', async (ctx, oldR, newR) => {
@@ -82,7 +87,19 @@ const onEmojiUpdate = safe('emojiUpdate', async (ctx, oldE, newE) => {
     formatRename(t(lang, 'logging.emojiRenamed'), oldE.name, newE.name, lang));
 });
 
+const onGuildUpdate = safe('guildUpdate', async (ctx, oldG, newG) => {
+  const renamed = oldG.name !== newG.name;
+  const iconChanged = oldG.icon !== newG.icon;
+  if (!renamed && !iconChanged) return;
+  const lang = await getLang(ctx.db, newG.id);
+  const fields = [];
+  if (renamed) fields.push({ name: t(lang, 'logging.name'), value: `${truncate(oldG.name)} → ${truncate(newG.name)}` });
+  if (iconChanged) fields.push({ name: t(lang, 'logging.icon'), value: t(lang, 'logging.iconChanged') });
+  await sendLog(ctx, newG.id, 'guildUpdate', { title: t(lang, 'logging.guildUpdated'), fields });
+});
+
 export const events = [
+  { name: Events.GuildUpdate, execute: onGuildUpdate },
   { name: Events.ChannelCreate, execute: onChannelCreate },
   { name: Events.ChannelDelete, execute: onChannelDelete },
   { name: Events.ChannelUpdate, execute: onChannelUpdate },

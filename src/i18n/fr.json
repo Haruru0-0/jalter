@@ -206,5 +206,11 @@
   "logging.timeoutRemoved": "Exclusion temporaire levée",
   "logging.timeoutUntil": "Exclu jusqu'à",
   "logging.avatarChanged": "Avatar modifié",
-  "logging.usernameChanged": "Nom d'utilisateur modifié"
+  "logging.usernameChanged": "Nom d'utilisateur modifié",
+  "logging.guildUpdated": "Serveur modifié",
+  "logging.icon": "Icône",
+  "logging.iconChanged": "Icône modifiée",
+  "logging.voiceJoined": "A rejoint le vocal",
+  "logging.voiceMoved": "A changé de salon vocal",
+  "logging.voiceLeft": "A quitté le vocal"
 }
