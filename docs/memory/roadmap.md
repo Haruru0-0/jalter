@@ -14,7 +14,7 @@ Full detail: `docs/tiered-powers/specs/2026-10-14-feature-roadmap.md`. Original 
 - **Shared scheduler (Step 0)**: built and merged into `autorole-upgrade` (pushed to origin; migration 005 runs on the next bot start) (spec: `docs/tiered-powers/specs/2026-10-14-scheduler-design.md`, plan: `docs/tiered-powers/plans/`). `scheduled_jobs` table, one 30 s ticker, at-least-once with retries; auto role's timed roles run on it and migration 005 moved waiting `pending_roles` rows over. See [[architecture]]. Moderation timed actions (temp ban, timed mute) are the next consumer.
 
 ## In progress
-- **Moderation (Phase 2 steps 1 and 2)**: design written and awaiting approval: `docs/tiered-powers/specs/2026-10-14-moderation-design.md` (YAGPDB-style commands, numbered cases, mod log through the `mod` logging category, timed bans and mutes on the scheduler). Next: owner approval, then plan.
+- **Moderation (Phase 2 steps 1 and 2)**: design approved and plan written (10 tasks, not started): spec `docs/tiered-powers/specs/2026-10-14-moderation-design.md`, plan `docs/tiered-powers/plans/2026-10-14-moderation.md` (YAGPDB-style commands, numbered cases, mod log through the `mod` logging category, timed bans and mutes on the scheduler). Next: choose subagent-driven or native execution, then run the plan.
 
 ## Planned, not built
 - Everything in the build order above except logging and the scheduler.
