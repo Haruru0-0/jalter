@@ -1,6 +1,6 @@
 # Shared scheduler: design
 
-Step 0 of the feature roadmap (`2026-10-14-feature-roadmap.md`). Status: awaiting approval.
+Step 0 of the feature roadmap (`2026-10-14-feature-roadmap.md`). Status: built (branch `scheduler`; code in `src/core/scheduler.js`).
 
 ## Intent and why
 
