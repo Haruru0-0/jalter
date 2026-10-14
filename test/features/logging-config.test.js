@@ -44,3 +44,12 @@ test('settings round-trip and bad codes are rejected', () => {
   assert.equal(decodeSettings(enc({ v: 1, disabledEvents: ['constructor'], prefixes: [] })), null);
   assert.equal(decodeSettings('a'.repeat(2001)), null);
 });
+
+test('decodeSettings rejects empty prefixes', () => {
+  const enc = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  assert.equal(decodeSettings(enc({ v: 1, disabledEvents: [], prefixes: [''] })), null);
+});
+
+test('isIgnored skips empty-string prefixes', () => {
+  assert.equal(isIgnored({ ignore: { prefixes: [''] } }, { content: 'hello' }), false);
+});
