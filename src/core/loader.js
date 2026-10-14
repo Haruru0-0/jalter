@@ -5,6 +5,8 @@ export function collectModules(modules) {
   const commands = new Map();
   const components = new Map();
   const events = [];
+  const jobs = new Map();
+  const housekeeping = [];
   for (const mod of modules) {
     for (const command of mod.commands ?? []) {
       const name = command.data.name;
@@ -17,8 +19,13 @@ export function collectModules(modules) {
       }
     }
     events.push(...(mod.events ?? []));
+    for (const [type, handler] of Object.entries(mod.jobs ?? {})) {
+      if (jobs.has(type)) throw new Error(`Duplicate job type: ${type}`);
+      jobs.set(type, handler);
+    }
+    housekeeping.push(...(mod.housekeeping ?? []));
   }
-  return { commands, components, events };
+  return { commands, components, events, jobs, housekeeping };
 }
 
 export async function routeInteraction(interaction, ctx, registry) {

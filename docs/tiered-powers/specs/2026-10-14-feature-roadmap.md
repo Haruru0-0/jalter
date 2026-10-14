@@ -12,7 +12,7 @@ Several later features need the same groundwork. Building these once avoids doin
 
 | Piece | Needed by | Notes |
 |---|---|---|
-| Shared scheduler (generalise the autorole ticker) | temp ban, timed timeout, reminders, birthdays, stats channels, anti-raid end, ticket auto-close | Autorole's ticker is the starting point |
+| Shared scheduler (built: `src/core/scheduler.js`, autorole timed roles run on it) | temp ban, timed timeout, reminders, birthdays, stats channels, anti-raid end, ticket auto-close | Autorole's ticker is the starting point |
 | Mod-case store (case numbers, mod-action log category) | warn, kick, ban, timeout, auto-mod, anti-raid, info (warnings field) | Logging already has the category stub |
 | New intents: GuildModeration, GuildVoiceStates, GuildMessageReactions | moderation/bans, leveling (voice), starboard, reaction roles | Add only when the first feature needing each ships |
 | Bigger invite permissions: Kick, Ban, Moderate Members, Manage Messages, Manage Channels, Manage Nicknames | grouped under the features below | Update README invite list per phase |

@@ -26,6 +26,26 @@ test('collectModules gathers events', () => {
   assert.equal(r.events.length, 2);
 });
 
+test('collectModules gathers jobs and housekeeping and rejects a duplicate job type', () => {
+  const h1 = async () => {};
+  const h2 = async () => {};
+  const hk1 = async () => {};
+  const hk2 = async () => {};
+  const r = collectModules([
+    { jobs: { a: h1 }, housekeeping: [hk1] },
+    { jobs: { b: h2 }, housekeeping: [hk2] },
+    {},
+  ]);
+  assert.equal(r.jobs.get('a'), h1);
+  assert.equal(r.jobs.get('b'), h2);
+  assert.equal(r.jobs.size, 2);
+  assert.deepEqual(r.housekeeping, [hk1, hk2]);
+  assert.throws(
+    () => collectModules([{ jobs: { a: h1 } }, { jobs: { a: h2 } }]),
+    /Duplicate job type: a/,
+  );
+});
+
 test('a button reaches the handler registered for its prefix with the full id', async () => {
   let seen;
   const registry = collectModules([{

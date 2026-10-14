@@ -1,28 +1,15 @@
+import { scheduleJob, cancelJobs } from '../../core/scheduler.js';
+
+export const GRANT_JOB = 'autorole.grant';
+
 export async function queueRole(db, guildId, userId, roleId, dueAtMs) {
-  await db.query(
-    `INSERT INTO pending_roles (guild_id, user_id, role_id, due_at) VALUES ($1, $2, $3, $4)
-     ON CONFLICT (guild_id, user_id, role_id) DO UPDATE SET due_at = EXCLUDED.due_at`,
-    [guildId, userId, roleId, new Date(dueAtMs)],
-  );
+  await scheduleJob(db, {
+    guildId, type: GRANT_JOB, key: `${userId}:${roleId}`, payload: { userId, roleId }, dueAt: dueAtMs,
+  });
 }
 
-export async function takeDue(db, nowMs, limit = 100) {
-  const { rows } = await db.query(
-    `DELETE FROM pending_roles WHERE ctid IN (
-       SELECT ctid FROM pending_roles WHERE due_at <= $1
-       ORDER BY due_at LIMIT $2 FOR UPDATE SKIP LOCKED)
-     RETURNING guild_id, user_id, role_id, due_at`,
-    [new Date(nowMs), limit],
-  );
-  return rows
-    .sort((a, b) => a.due_at - b.due_at)
-    .map((r) => ({ guildId: r.guild_id, userId: r.user_id, roleId: r.role_id }));
-}
-
-export async function cancelRole(db, guildId, roleId) {
-  const { rowCount } = await db.query(
-    'DELETE FROM pending_roles WHERE guild_id = $1 AND role_id = $2', [guildId, roleId]);
-  return rowCount;
+export function cancelRole(db, guildId, roleId) {
+  return cancelJobs(db, { guildId, type: GRANT_JOB, payload: { roleId } });
 }
 
 export async function rememberRoles(db, guildId, userId, roleIds, nowMs) {

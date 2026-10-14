@@ -1,7 +1,7 @@
 import { Events } from 'discord.js';
 import { getFeature } from '../../db/settings.js';
 import { readConfig } from './config.js';
-import { queueRole, takeDue, rememberRoles, takeRemembered, forgetRoles, purgeOld } from './store.js';
+import { queueRole, rememberRoles, takeRemembered, forgetRoles, purgeOld } from './store.js';
 
 export const MEMORY_MAX_AGE_MS = 30 * 24 * 3600 * 1000;
 
@@ -71,51 +71,34 @@ export async function rememberMemberRoles(ctx, member, { now = Date.now() } = {}
   }
 }
 
-export async function runDue(ctx, { now = Date.now() } = {}) {
+/** Scheduler handler. Returning means the job is finished; throwing makes the scheduler retry. */
+export async function grantTimedRole(ctx, job) {
+  const { guildId } = job;
+  const { userId, roleId } = job.payload;
+  const { enabled, config } = await getFeature(ctx.db, guildId, 'autorole');
+  if (!enabled) return;
+  if (!readConfig(config).timed.some((t) => t.roleId === roleId)) return;
+  const guild = ctx.client.guilds.cache.get(guildId);
+  if (!guild) return;
   try {
-    // Before the client is ready the guild cache is cold: leave the rows for a later tick.
-    if (ctx.client.isReady?.() === false) return;
-    // Rows are deleted before the role is given, so a crash mid-run loses at most the batch (fine for a 30 s ticker).
-    const due = await takeDue(ctx.db, now);
-    const configs = new Map();
-    for (const { guildId, userId, roleId } of due) {
-      try {
-        if (!configs.has(guildId)) {
-          const { enabled, config } = await getFeature(ctx.db, guildId, 'autorole');
-          configs.set(guildId, enabled ? readConfig(config) : null);
-        }
-        const cfg = configs.get(guildId);
-        if (!cfg || !cfg.timed.some((t) => t.roleId === roleId)) continue;
-        const guild = ctx.client.guilds.cache.get(guildId);
-        if (!guild) continue;
-        const member = await guild.members.fetch(userId);
-        await member.roles.add(roleId);
-      } catch (err) {
-        if (err.code === UNKNOWN_MEMBER || err.code === UNKNOWN_ROLE) continue;
-        console.warn(`Auto role failed in ${guildId}: ${err.message}`);
-      }
-    }
-    await purgeOld(ctx.db, now, MEMORY_MAX_AGE_MS);
+    const member = await guild.members.fetch(userId);
+    await member.roles.add(roleId);
   } catch (err) {
-    console.warn(`Auto role run failed: ${err.message}`);
+    if (err.code === UNKNOWN_MEMBER || err.code === UNKNOWN_ROLE) return;
+    if (err.status >= 400 && err.status < 500 && err.status !== 429) {
+      console.warn(`Auto role failed in ${guildId}: ${err.message}`);
+      return;
+    }
+    throw err;
   }
 }
 
-export function startTicker(ctx, { intervalMs = 30000 } = {}) {
-  let running = false;
-  const timer = setInterval(async () => {
-    if (running) return;
-    running = true;
-    try {
-      await runDue(ctx);
-    } catch (err) {
-      console.warn(`Auto role ticker failed: ${err.message}`);
-    } finally {
-      running = false;
-    }
-  }, intervalMs);
-  timer.unref();
-  return { stop: () => clearInterval(timer) };
+export async function purgeRememberedRoles(ctx, { now = Date.now() } = {}) {
+  try {
+    await purgeOld(ctx.db, now, MEMORY_MAX_AGE_MS);
+  } catch (err) {
+    console.warn(`Auto role memory purge failed: ${err.message}`);
+  }
 }
 
 export const events = [
