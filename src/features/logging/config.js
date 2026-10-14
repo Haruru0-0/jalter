@@ -69,3 +69,13 @@ export function removeIgnore(config, kind, id) {
   ignore[kind] = ignore[kind].filter((x) => x !== id);
   return ignore;
 }
+
+export function setupPlan() {
+  return [
+    { name: 'log-messages', category: 'messages' },
+    { name: 'log-members', category: 'members' },
+    { name: 'log-joins', category: 'join' },
+    { name: 'log-server', category: 'server' },
+    { name: 'log-voice', category: 'voice' },
+  ];
+}

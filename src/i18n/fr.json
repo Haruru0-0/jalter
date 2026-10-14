@@ -231,5 +231,10 @@
   "logging.statusDisabled": "Événements désactivés",
   "logging.statusIgnoredChannels": "Salons ignorés",
   "logging.statusIgnoredMembers": "Membres ignorés",
-  "logging.statusPrefixes": "Préfixes ignorés"
+  "logging.statusPrefixes": "Préfixes ignorés",
+  "logging.setupFailed": "Je n'ai pas pu créer les salons de logs. Donnez-moi la permission Gérer les salons et réessayez.",
+  "logging.setupDone": "Les logs sont configurés dans {category}. Chaque type de log a son propre salon.",
+  "logging.exportDone": "Le code de vos réglages de logs (événements activés et préfixes ignorés) :\n```{code}```",
+  "logging.importInvalid": "Ce code de logs n'est pas valide. Rien n'a été modifié.",
+  "logging.importDone": "Les réglages d'événements et les préfixes ignorés ont été importés."
 }

@@ -1,11 +1,11 @@
-import { SlashCommandBuilder, ChannelType } from 'discord.js';
+import { SlashCommandBuilder, ChannelType, PermissionFlagsBits, MessageFlags } from 'discord.js';
 import { getFeature, setFeature } from '../../db/settings.js';
 import { guard } from '../../core/guard.js';
 import { handleToggle, toggleSubcommands } from '../../core/toggle.js';
 import { ephemeral } from '../../core/replies.js';
 import { t } from '../../i18n/index.js';
 import { CATEGORIES, EVENTS } from './events.js';
-import { toggleEvent, addIgnore, removeIgnore } from './config.js';
+import { toggleEvent, addIgnore, removeIgnore, setupPlan, encodeSettings, decodeSettings } from './config.js';
 
 const categoryChoices = CATEGORIES.map((c) => ({ name: c, value: c }));
 const eventChoices = [...Object.keys(EVENTS), 'all'].map((e) => ({ name: e, value: e }));
@@ -50,6 +50,14 @@ const data = toggleSubcommands(
     s.setName('prefix-remove').setDescription('Stop ignoring a message prefix')
       .addStringOption((o) =>
         o.setName('prefix').setDescription('The prefix to remove').setRequired(true).setMaxLength(10)))
+  .addSubcommand((s) =>
+    s.setName('setup').setDescription('Create a private Logs category with a channel for each kind of log'))
+  .addSubcommand((s) =>
+    s.setName('export').setDescription('Get a code that copies your event toggles and prefixes elsewhere'))
+  .addSubcommand((s) =>
+    s.setName('import').setDescription('Apply a code from /logging export to this server')
+      .addStringOption((o) =>
+        o.setName('code').setDescription('The code from /logging export').setRequired(true).setMaxLength(2000)))
   .addSubcommand((s) =>
     s.setName('status').setDescription('Show the logging channels, toggles and ignore lists'));
 
@@ -125,6 +133,35 @@ async function runPrefix(interaction, ctx, lang, config, sub) {
   await interaction.reply(ephemeral(t(lang, key, { prefix })));
 }
 
+async function runSetup(interaction, ctx, lang, config) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const { guild } = interaction;
+  const created = [];
+  try {
+    const category = await guild.channels.create({
+      name: 'Logs',
+      type: ChannelType.GuildCategory,
+      permissionOverwrites: [
+        { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+        { id: guild.members.me.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
+      ],
+    });
+    created.push(category);
+    const channels = { ...(config.channels ?? {}) };
+    for (const { name, category: key } of setupPlan()) {
+      const channel = await guild.channels.create({ name, type: ChannelType.GuildText, parent: category.id });
+      created.push(channel);
+      channels[key] = channel.id;
+    }
+    await setFeature(ctx.db, interaction.guildId, 'logging', { enabled: true, config: { channels } });
+  } catch {
+    for (const channel of created.reverse()) await channel.delete?.().catch(() => {});
+    await interaction.editReply(t(lang, 'logging.setupFailed'));
+    return;
+  }
+  await interaction.editReply(t(lang, 'logging.setupDone', { category: `<#${created[0].id}>` }));
+}
+
 async function execute(interaction, ctx) {
   const sub = interaction.options.getSubcommand();
   if (sub === 'enable' || sub === 'disable') return handleToggle(interaction, ctx, 'logging');
@@ -133,6 +170,22 @@ async function execute(interaction, ctx) {
   const { enabled, config } = await getFeature(ctx.db, interaction.guildId, 'logging');
   if (sub === 'status') {
     await interaction.reply(ephemeral({ embeds: [statusEmbed(lang, enabled, config)] }));
+    return;
+  }
+  if (sub === 'setup') return runSetup(interaction, ctx, lang, config);
+  if (sub === 'export') {
+    await interaction.reply(ephemeral(t(lang, 'logging.exportDone', { code: encodeSettings(config) })));
+    return;
+  }
+  if (sub === 'import') {
+    const decoded = decodeSettings(interaction.options.getString('code', true));
+    if (!decoded) {
+      await interaction.reply(ephemeral(t(lang, 'logging.importInvalid')));
+      return;
+    }
+    const ignore = { ...(config.ignore ?? {}), prefixes: decoded.prefixes };
+    await setFeature(ctx.db, interaction.guildId, 'logging', { config: { disabledEvents: decoded.disabledEvents, ignore } });
+    await interaction.reply(ephemeral(t(lang, 'logging.importDone')));
     return;
   }
   if (sub === 'event') {

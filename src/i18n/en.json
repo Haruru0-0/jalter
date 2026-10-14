@@ -231,5 +231,10 @@
   "logging.statusDisabled": "Disabled events",
   "logging.statusIgnoredChannels": "Ignored channels",
   "logging.statusIgnoredMembers": "Ignored members",
-  "logging.statusPrefixes": "Ignored prefixes"
+  "logging.statusPrefixes": "Ignored prefixes",
+  "logging.setupFailed": "I could not create the log channels. Give me the Manage Channels permission and try again.",
+  "logging.setupDone": "Logging is set up in {category}. Each kind of log has its own channel there.",
+  "logging.exportDone": "Your logging settings code (event toggles and ignored prefixes):\n```{code}```",
+  "logging.importInvalid": "That is not a valid logging code. Nothing was changed.",
+  "logging.importDone": "Imported the event toggles and ignored prefixes."
 }

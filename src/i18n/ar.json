@@ -231,5 +231,10 @@
   "logging.statusDisabled": "الأحداث المعطّلة",
   "logging.statusIgnoredChannels": "القنوات المتجاهلة",
   "logging.statusIgnoredMembers": "الأعضاء المتجاهلون",
-  "logging.statusPrefixes": "البادئات المتجاهلة"
+  "logging.statusPrefixes": "البادئات المتجاهلة",
+  "logging.setupFailed": "تعذر إنشاء قنوات السجل. امنحني صلاحية إدارة القنوات وحاول مرة أخرى.",
+  "logging.setupDone": "تم إعداد السجلات في {category}. لكل نوع من السجلات قناته الخاصة.",
+  "logging.exportDone": "رمز إعدادات السجلات (الأحداث المفعلة والبادئات المتجاهلة):\n```{code}```",
+  "logging.importInvalid": "رمز السجلات هذا غير صالح. لم يتم تغيير أي شيء.",
+  "logging.importDone": "تم استيراد إعدادات الأحداث والبادئات المتجاهلة."
 }
