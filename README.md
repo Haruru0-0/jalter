@@ -5,6 +5,7 @@ Jalter is a Discord bot with a modular design. Most features are off by default 
 ## Phase 1 features
 
 - Panel: `/panel overview` shows which features are on, off or coming later (always on).
+- Help: `/help` lists every feature with its commands and whether it is on; `/help feature:<name>` shows all commands of one feature (always on, anyone can use it).
 - Language: English, French and Arabic, set per server (always on).
 - Media: store images for the server with `/media add` and use them by name. Uploading a file straight into the storage channel does not register it; only `/media add` does.
 - Embeds (always available): save named embeds with `/embed create`, edit them with buttons or `/embed edit`, and post one with `/embed show` (in the channel you pick, default the current one). Use one in a message with `{embed:name}`.
@@ -46,6 +47,8 @@ Postgres only listens on this computer (`127.0.0.1`). Before hosting the bot any
 
 ## Discord developer portal
 
+Step-by-step with troubleshooting: [docs/discord-bot-setup.md](docs/discord-bot-setup.md). The short version:
+
 1. Go to the Discord developer portal and create an application.
 2. Open the Bot tab, create the bot and copy its token into `.env`.
 3. Under Privileged Gateway Intents enable Server Members and Message Content. The bot also uses the Guilds, Guild Messages, Guild Expressions (emoji events), Guild Moderation (ban and unban events) and Guild Voice States (voice events) intents, the last three used by logging; those are not privileged, so they are granted automatically and need no switch in the portal.
@@ -65,6 +68,8 @@ The tests use Postgres, so run `docker compose up -d` first.
 One branch per phase. Phase 1 lives on `phase-1`. Phase 2 starts with `git switch -c phase-2` from `phase-1`.
 
 ## Manual check on a test server
+
+A tick-box checklist for every feature is in [docs/testing-checklist.md](docs/testing-checklist.md). The numbered list below is the original short version.
 
 Run these on a test server with the bot invited and started. Confirm each item.
 
@@ -92,4 +97,5 @@ Run these on a test server with the bot invited and started. Confirm each item.
     f. `/logging export`, then on another test server `/logging import code:<code>`: event toggles and prefixes are copied (channels and ignored members are not). `/logging import code:garbage` shows an error and changes nothing.
 17. `/info enable`, then `/userinfo`, `/avatar`, `/banner`, `/serverinfo` work; with `/info disable` they refuse.
 18. Delete the greet channel, run `/test greet`: the bot does not crash.
-19. Stop and restart the bot, then run `docker compose restart`: all settings are still there.
+19. `/help` lists the features with On/Off and their commands; `/help feature:autorole` lists every autorole command; `/help feature:nonsense` says there is no such feature.
+20. Stop and restart the bot, then run `docker compose restart`: all settings are still there.
