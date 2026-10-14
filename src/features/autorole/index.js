@@ -11,7 +11,7 @@ import {
 } from './config.js';
 import { parseDuration, formatDuration, MIN_DELAY, MAX_DELAY } from './duration.js';
 import { cancelRole } from './store.js';
-import { events } from './assign.js';
+import { events, grantTimedRole, purgeRememberedRoles } from './assign.js';
 
 const roleOption = (description) => (o) => o.setName('role').setDescription(description).setRequired(true);
 
@@ -186,3 +186,5 @@ async function execute(interaction, ctx) {
 
 export const commands = [{ data, execute }];
 export { events };
+export const jobs = { 'autorole.grant': grantTimedRole };
+export const housekeeping = [purgeRememberedRoles];

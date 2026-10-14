@@ -66,7 +66,7 @@ test('required options come before optional ones and all descriptions are 1-100 
 
 let db;
 before(async () => { db = await testDb(); });
-beforeEach(async () => { await db.query('TRUNCATE guild_settings, pending_roles, remembered_roles'); });
+beforeEach(async () => { await db.query('TRUNCATE guild_settings, scheduled_jobs, remembered_roles'); });
 after(async () => { await db.end(); });
 
 const ROLES = {
@@ -172,7 +172,7 @@ test('a change drops roles that no longer exist in the guild, and their pending 
   const { config } = await state();
   assert.deepEqual(config.roles, ['r1', 'r2']);
   assert.deepEqual([config.botRoles, config.blacklist, config.timed], [[], [], []]);
-  const { rows } = await db.query('SELECT * FROM pending_roles');
+  const { rows } = await db.query("SELECT * FROM scheduled_jobs WHERE type = 'autorole.grant'");
   assert.equal(rows.length, 0);
 });
 
@@ -235,7 +235,7 @@ test('timed add stores the delay; timed remove deletes it and cancels pending gr
   await queueRole(db, 'g1', 'u1', 'r1', Date.now() + 60000);
   await run(fake('timed remove', { roles: { role: 'r1' } }));
   assert.deepEqual((await state()).config.timed, []);
-  const { rows } = await db.query('SELECT * FROM pending_roles');
+  const { rows } = await db.query("SELECT * FROM scheduled_jobs WHERE type = 'autorole.grant'");
   assert.equal(rows.length, 0);
   const again = fake('timed remove', { roles: { role: 'r1' } });
   await run(again);

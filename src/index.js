@@ -5,7 +5,7 @@ import { openDb } from './db/index.js';
 import { modules } from './modules.js';
 import { collectModules, routeInteraction } from './core/loader.js';
 import { fetchGuildMembers } from './core/members.js';
-import { startTicker } from './features/autorole/assign.js';
+import { startScheduler } from './core/scheduler.js';
 
 process.on('unhandledRejection', (err) => console.error('Unhandled rejection:', err));
 
@@ -43,7 +43,7 @@ client.on(Events.InteractionCreate, (interaction) => routeInteraction(interactio
 client.on(Events.Error, (err) => console.error('Discord client error:', err));
 client.once(Events.ClientReady, async (c) => {
   console.log(`Logged in as ${c.user.tag}`);
-  startTicker(ctx);
+  startScheduler(ctx, registry);
   for (const guild of c.guilds.cache.values()) await fetchGuildMembers(guild);
 });
 client.on(Events.GuildCreate, (guild) => fetchGuildMembers(guild));

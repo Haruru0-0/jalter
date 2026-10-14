@@ -2,16 +2,19 @@ import { test, before, beforeEach, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { Events } from 'discord.js';
 import {
-  assignAutoRole, rememberMemberRoles, runDue, startTicker, events, MEMORY_MAX_AGE_MS,
+  assignAutoRole, rememberMemberRoles, grantTimedRole, purgeRememberedRoles, events, MEMORY_MAX_AGE_MS,
 } from '../../src/features/autorole/assign.js';
 import { setFeature } from '../../src/db/settings.js';
+import { runDueJobs } from '../../src/core/scheduler.js';
+import { collectModules } from '../../src/core/loader.js';
+import * as autorole from '../../src/features/autorole/index.js';
 import { queueRole, takeRemembered, rememberRoles } from '../../src/features/autorole/store.js';
 import { testDb } from '../helpers/db.js';
 
 const realWarn = console.warn;
 let db;
 before(async () => { db = await testDb(); });
-beforeEach(async () => { await db.query('TRUNCATE guild_settings, pending_roles, remembered_roles'); });
+beforeEach(async () => { await db.query('TRUNCATE guild_settings, scheduled_jobs, remembered_roles'); });
 after(async () => { console.warn = realWarn; await db.end(); });
 
 const NOW = 1_800_000_000_000;
@@ -101,7 +104,7 @@ test('(c) feature off adds nothing', async () => {
   const m = fakeMember(fakeGuild());
   await assignAutoRole(ctxFor(), m);
   assert.deepEqual(m.added, []);
-  const { rows } = await db.query('SELECT * FROM pending_roles');
+  const { rows } = await db.query("SELECT * FROM scheduled_jobs WHERE type = 'autorole.grant'");
   assert.equal(rows.length, 0);
 });
 
@@ -122,53 +125,71 @@ test('(e) timed roles queue for humans only; rejoin keeps one row', async () => 
   const human = fakeMember(g);
   await assignAutoRole(ctxFor(), human, { now: NOW });
   await assignAutoRole(ctxFor(), fakeMember(g, { id: 'u2', bot: true }), { now: NOW });
-  let { rows } = await db.query('SELECT * FROM pending_roles');
+  let { rows } = await db.query("SELECT * FROM scheduled_jobs WHERE type = 'autorole.grant'");
   assert.equal(rows.length, 1);
-  assert.equal(rows[0].user_id, 'u1');
+  assert.equal(rows[0].payload.userId, 'u1');
   assert.equal(rows[0].due_at.getTime(), NOW + 90_000);
   await assignAutoRole(ctxFor(), fakeMember(g), { now: NOW + 5000 });
-  ({ rows } = await db.query('SELECT * FROM pending_roles'));
+  ({ rows } = await db.query("SELECT * FROM scheduled_jobs WHERE type = 'autorole.grant'"));
   assert.equal(rows.length, 1);
   assert.equal(rows[0].due_at.getTime(), NOW + 95_000);
 });
 
-test('(f) runDue gives due roles, skips future ones and removed timed roles', async () => {
+const jobFor = (userId, roleId, guildId = 'g1') =>
+  ({ id: 1, guildId, type: 'autorole.grant', key: `${userId}:${roleId}`, attempts: 1, payload: { userId, roleId } });
+
+test('(f) grantTimedRole gives the role and ignores a role removed from the timed list', async () => {
   await enable({ timed: [{ roleId: 't1', seconds: 60 }, { roleId: 'h2', seconds: 60 }] });
   const g = fakeGuild();
   const m = fakeMember(g);
-  await queueRole(db, 'g1', 'u1', 't1', NOW - 1000);
-  await queueRole(db, 'g1', 'u1', 'h2', NOW + 60_000);
-  await queueRole(db, 'g1', 'u1', 'x1', NOW - 1000); // no longer a timed role
   g.members.fetch = async () => m;
-  await runDue(ctxFor([g]), { now: NOW });
+  await grantTimedRole(ctxFor([g]), jobFor('u1', 't1'));
+  await grantTimedRole(ctxFor([g]), jobFor('u1', 'x1')); // no longer a timed role
   assert.deepEqual(m.added, ['t1']);
-  const { rows } = await db.query('SELECT role_id FROM pending_roles');
-  assert.deepEqual(rows.map((r) => r.role_id), ['h2']);
 });
 
-test('(g) runDue drops a row for a member who left', async () => {
+test('(g) grantTimedRole finishes quietly for a member who left', async () => {
   await enable({ timed: [{ roleId: 't1', seconds: 60 }] });
   const g = fakeGuild();
-  await queueRole(db, 'g1', 'gone', 't1', NOW - 1000);
   await withWarnings(async (warnings) => {
-    await runDue(ctxFor([g]), { now: NOW });
+    await grantTimedRole(ctxFor([g]), jobFor('gone', 't1'));
     assert.deepEqual(warnings, []);
   });
-  const { rows } = await db.query('SELECT * FROM pending_roles');
-  assert.equal(rows.length, 0);
 });
 
-test('runDue warns on an unexpected error and drops the row', async () => {
+test('grantTimedRole finishes quietly for an unknown role', async () => {
   await enable({ timed: [{ roleId: 't1', seconds: 60 }] });
   const g = fakeGuild();
-  g.members.fetch = async () => { throw new Error('boom'); };
-  await queueRole(db, 'g1', 'u1', 't1', NOW - 1000);
+  const m = fakeMember(g);
+  m.roles.add = async () => { throw Object.assign(new Error('Unknown Role'), { code: 10011, status: 404 }); };
+  g.members.fetch = async () => m;
   await withWarnings(async (warnings) => {
-    await runDue(ctxFor([g]), { now: NOW });
-    assert.equal(warnings.length, 1);
+    await grantTimedRole(ctxFor([g]), jobFor('u1', 't1'));
+    assert.deepEqual(warnings, []);
   });
-  const { rows } = await db.query('SELECT * FROM pending_roles');
-  assert.equal(rows.length, 0);
+});
+
+test('grantTimedRole returns after a warning on a 403 (missing permission or role above the bot)', async () => {
+  await enable({ timed: [{ roleId: 't1', seconds: 60 }] });
+  const g = fakeGuild();
+  const m = fakeMember(g);
+  m.roles.add = async () => { throw Object.assign(new Error('Missing Permissions'), { code: 50013, status: 403 }); };
+  g.members.fetch = async () => m;
+  await withWarnings(async (warnings) => {
+    await grantTimedRole(ctxFor([g]), jobFor('u1', 't1'));
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /Missing Permissions/);
+  });
+});
+
+test('grantTimedRole rethrows a network error and a 500 so the scheduler retries', async () => {
+  await enable({ timed: [{ roleId: 't1', seconds: 60 }] });
+  for (const err of [new Error('ECONNRESET'), Object.assign(new Error('Server error'), { status: 500 }),
+    Object.assign(new Error('Rate limited'), { status: 429 })]) {
+    const g = fakeGuild();
+    g.members.fetch = async () => { throw err; };
+    await assert.rejects(grantTimedRole(ctxFor([g]), jobFor('u1', 't1')), err);
+  }
 });
 
 test('(h) reassign off remembers and re-gives nothing, and clears an old memory at join', async () => {
@@ -258,65 +279,58 @@ test('(l) a deleted role is not re-given', async () => {
   assert.deepEqual(m.added, ['h2']);
 });
 
-test('(m) ticker never overlaps runs, and stops', async () => {
+test('grantTimedRole finishes quietly when the guild is not in the cache', async () => {
   await enable({ timed: [{ roleId: 't1', seconds: 60 }] });
-  let starts = 0;
-  let release;
-  const gate = new Promise((r) => { release = r; });
-  const countingDb = {
-    query: async (sql, params) => {
-      if (sql.includes('DELETE FROM pending_roles')) {
-        starts += 1;
-        if (starts === 1) await gate;
-      }
-      return db.query(sql, params);
-    },
-  };
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  const ticker = startTicker({ db: countingDb, client: { guilds: { cache: new Map() } } }, { intervalMs: 10 });
-  await sleep(80);
-  assert.equal(starts, 1, 'ticks while the first run is blocked do not start another');
-  release();
-  await sleep(80);
-  assert.ok(starts > 1, 'a later tick starts a new run');
-  ticker.stop();
-  await sleep(30);
-  const settled = starts;
-  await sleep(60);
-  assert.equal(starts, settled, 'no runs start after stop');
-});
-
-test('runDue leaves rows alone while the client is not ready', async () => {
-  await enable({ timed: [{ roleId: 't1', seconds: 60 }] });
-  await queueRole(db, 'g1', 'u1', 't1', NOW - 1000);
-  const ctx = { db, client: { isReady: () => false, guilds: { cache: new Map() } } };
-  await runDue(ctx, { now: NOW });
-  const { rows } = await db.query('SELECT * FROM pending_roles');
-  assert.equal(rows.length, 1);
-});
-
-test('runDue drops a row quietly when the client is ready and the guild is unknown', async () => {
-  await enable({ timed: [{ roleId: 't1', seconds: 60 }] });
-  await queueRole(db, 'g1', 'u1', 't1', NOW - 1000);
   const ctx = { db, client: { isReady: () => true, guilds: { cache: new Map() } } };
   await withWarnings(async (warnings) => {
-    await runDue(ctx, { now: NOW });
+    await grantTimedRole(ctx, jobFor('u1', 't1'));
     assert.deepEqual(warnings, []);
   });
-  const { rows } = await db.query('SELECT * FROM pending_roles');
-  assert.equal(rows.length, 0);
 });
 
-test('runDue drops a due row when the feature is disabled', async () => {
+test('grantTimedRole finishes without granting when the feature is disabled', async () => {
   await enable({ timed: [{ roleId: 't1', seconds: 60 }] }, false);
   const g = fakeGuild();
   const m = fakeMember(g);
   g.members.fetch = async () => m;
-  await queueRole(db, 'g1', 'u1', 't1', NOW - 1000);
-  await runDue(ctxFor([g]), { now: NOW });
+  await grantTimedRole(ctxFor([g]), jobFor('u1', 't1'));
   assert.deepEqual(m.added, []);
-  const { rows } = await db.query('SELECT * FROM pending_roles');
-  assert.equal(rows.length, 0);
+});
+
+test('purgeRememberedRoles removes memories older than 30 days', async () => {
+  await rememberRoles(db, 'g1', 'old', ['h1'], NOW - 31 * DAY);
+  await rememberRoles(db, 'g1', 'new', ['h2'], NOW - DAY);
+  await purgeRememberedRoles(ctxFor(), { now: NOW });
+  const { rows } = await db.query('SELECT user_id FROM remembered_roles');
+  assert.deepEqual(rows.map((r) => r.user_id), ['new']);
+});
+
+test('purgeRememberedRoles warns instead of throwing when the database fails', async () => {
+  const broken = { db: { query: async () => { throw new Error('db down'); } } };
+  await withWarnings(async (warnings) => {
+    await purgeRememberedRoles(broken, { now: NOW });
+    assert.equal(warnings.length, 1);
+  });
+});
+
+test('the scheduler grants a due timed role through the autorole jobs and housekeeping', async () => {
+  assert.equal(autorole.jobs['autorole.grant'], grantTimedRole);
+  assert.deepEqual(autorole.housekeeping, [purgeRememberedRoles]);
+  await enable({ timed: [{ roleId: 't1', seconds: 60 }, { roleId: 'h2', seconds: 60 }] });
+  const g = fakeGuild();
+  const m = fakeMember(g);
+  g.members.fetch = async () => m;
+  await queueRole(db, 'g1', 'u1', 't1', NOW - 1000);
+  await queueRole(db, 'g1', 'u1', 'h2', NOW + 60_000);
+  await rememberRoles(db, 'g1', 'stale', ['h1'], NOW - 31 * DAY);
+  const registry = collectModules([autorole]);
+  const ctx = { ...ctxFor([g]) };
+  ctx.client.isReady = () => true;
+  await runDueJobs(ctx, registry, { now: NOW });
+  assert.deepEqual(m.added, ['t1']);
+  const { rows } = await db.query("SELECT payload->>'roleId' AS role_id FROM scheduled_jobs");
+  assert.deepEqual(rows.map((r) => r.role_id), ['h2']);
+  assert.equal((await db.query('SELECT * FROM remembered_roles')).rows.length, 0);
 });
 
 test('a remembered role that is also timed is given and not queued', async () => {
@@ -325,7 +339,7 @@ test('a remembered role that is also timed is given and not queued', async () =>
   const m = fakeMember(fakeGuild());
   await assignAutoRole(ctxFor(), m, { now: NOW });
   assert.deepEqual(m.added, ['t1']);
-  const { rows } = await db.query('SELECT role_id FROM pending_roles');
+  const { rows } = await db.query("SELECT payload->>'roleId' AS role_id FROM scheduled_jobs WHERE type = 'autorole.grant'");
   assert.deepEqual(rows.map((r) => r.role_id), ['h2']);
 });
 
@@ -335,14 +349,4 @@ test('a memory holding the guild id never gives @everyone', async () => {
   const m = fakeMember(fakeGuild());
   await assignAutoRole(ctxFor(), m, { now: NOW });
   assert.deepEqual(m.added, ['h2']);
-});
-
-test('ticker catches an error thrown by a run', async () => {
-  const broken = { db: { query: async () => { throw new Error('db down'); } }, client: { guilds: { cache: new Map() } } };
-  await withWarnings(async (warnings) => {
-    const ticker = startTicker(broken, { intervalMs: 10 });
-    await new Promise((r) => setTimeout(r, 60));
-    ticker.stop();
-    assert.ok(warnings.length >= 1);
-  });
 });
