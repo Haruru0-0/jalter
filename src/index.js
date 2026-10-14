@@ -25,6 +25,7 @@ const client = new Client({
 });
 const ctx = { db, client };
 const registry = collectModules(modules);
+ctx.commands = registry.commands;
 
 for (const event of registry.events) {
   const run = async (...args) => {

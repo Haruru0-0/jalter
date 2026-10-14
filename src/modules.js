@@ -1,4 +1,5 @@
 import * as panel from './features/panel/index.js';
+import * as help from './features/help/index.js';
 import * as language from './features/language/index.js';
 import * as media from './features/media/index.js';
 import * as embeds from './features/embeds/index.js';
@@ -8,4 +9,4 @@ import * as autorole from './features/autorole/index.js';
 import * as logging from './features/logging/index.js';
 import * as info from './features/info/index.js';
 
-export const modules = [panel, language, media, embeds, post, greet, autorole, logging, info];
+export const modules = [panel, help, language, media, embeds, post, greet, autorole, logging, info];

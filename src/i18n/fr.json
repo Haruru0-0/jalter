@@ -237,5 +237,9 @@
   "logging.setupDone": "Les logs sont configurés dans {category}. Chaque type de log a son propre salon.",
   "logging.exportDone": "Le code de vos réglages de logs (événements activés et préfixes ignorés) :\n```{code}```",
   "logging.importInvalid": "Ce code de logs n'est pas valide. Rien n'a été modifié.",
-  "logging.importDone": "Les réglages d'événements et les préfixes ignorés ont été importés."
+  "logging.importDone": "Les réglages d'événements et les préfixes ignorés ont été importés.",
+  "feature.help": "Aide",
+  "help.title": "Commandes",
+  "help.more": "Utilisez /help feature:<nom> pour voir toutes les commandes d’une fonctionnalité.",
+  "help.unknown": "Aucune fonctionnalité nommée « {name} ». Lancez /help pour les voir toutes."
 }

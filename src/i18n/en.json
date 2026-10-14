@@ -237,5 +237,9 @@
   "logging.setupDone": "Logging is set up in {category}. Each kind of log has its own channel there.",
   "logging.exportDone": "Your logging settings code (event toggles and ignored prefixes):\n```{code}```",
   "logging.importInvalid": "That is not a valid logging code. Nothing was changed.",
-  "logging.importDone": "Imported the event toggles and ignored prefixes."
+  "logging.importDone": "Imported the event toggles and ignored prefixes.",
+  "feature.help": "Help",
+  "help.title": "Commands",
+  "help.more": "Use /help feature:<name> to see every command of one feature.",
+  "help.unknown": "There is no feature called \"{name}\". Run /help to see them all."
 }
