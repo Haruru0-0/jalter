@@ -89,3 +89,71 @@ export async function countDueOtherTypes(db, nowMs, types) {
   );
   return res.rows.map((r) => r.type);
 }
+
+const warnedTypes = new Set();
+
+async function runHousekeeping(ctx, housekeeping, now) {
+  for (const fn of housekeeping ?? []) {
+    try {
+      await fn(ctx, { now });
+    } catch (err) {
+      console.warn(`Housekeeping failed: ${err.message}`);
+    }
+  }
+}
+
+async function runJob(ctx, handler, job, now) {
+  try {
+    await handler(ctx, job);
+  } catch (err) {
+    const info = `type ${job.type}, guild ${job.guildId}, attempt ${job.attempts}`;
+    const result = await failJob(ctx.db, job, now);
+    if (result === 'dropped') {
+      console.warn(`Scheduled job dropped after ${job.attempts} attempts (${info}): ${err.message}`);
+    } else {
+      console.warn(`Scheduled job failed, will retry (${info}): ${err.message}`);
+    }
+    return;
+  }
+  await completeJob(ctx.db, job.id);
+}
+
+export async function runDueJobs(ctx, { jobs, housekeeping }, { now = Date.now() } = {}) {
+  try {
+    if (ctx.client?.isReady?.() === false) return;
+    await runHousekeeping(ctx, housekeeping, now);
+    const types = [...jobs.keys()];
+    for (const type of await countDueOtherTypes(ctx.db, now, types)) {
+      if (warnedTypes.has(type)) continue;
+      warnedTypes.add(type);
+      console.warn(`Scheduled jobs of type "${type}" are due but no handler is registered`);
+    }
+    const due = await claimDue(ctx.db, now, { types });
+    for (const job of due) {
+      try {
+        await runJob(ctx, jobs.get(job.type), job, now);
+      } catch (err) {
+        console.warn(`Scheduled job bookkeeping failed (type ${job.type}, id ${job.id}): ${err.message}`);
+      }
+    }
+  } catch (err) {
+    console.warn(`Scheduler run failed: ${err.message}`);
+  }
+}
+
+export function startScheduler(ctx, registry, { intervalMs = 30000 } = {}) {
+  let running = false;
+  const timer = setInterval(async () => {
+    if (running) return;
+    running = true;
+    try {
+      await runDueJobs(ctx, registry);
+    } catch (err) {
+      console.warn(`Scheduler tick failed: ${err.message}`);
+    } finally {
+      running = false;
+    }
+  }, intervalMs);
+  timer.unref();
+  return { stop: () => clearInterval(timer) };
+}
