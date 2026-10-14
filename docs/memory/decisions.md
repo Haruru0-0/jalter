@@ -10,3 +10,4 @@ Record choices that are not obvious from the code, with the reason.
 - Autorole: timed roles and sticky memory (`reassign`, 30 days) live in autorole, not a separate "stickyroles" feature. Blacklisted, managed and above-the-bot roles are never remembered.
 - Postgres binds to `127.0.0.1` only; change the default password `bot` before hosting anywhere reachable.
 - Tests run with `--test-concurrency=1` because they share the database.
+- Scheduler (proposed, not built): jobs are at-least-once. A handler returning means done; throwing means retry (up to 5 times with backoff). Handlers must be idempotent and swallow permanent Discord errors. Jobs with no registered handler wait untouched. See `docs/tiered-powers/specs/2026-10-14-scheduler-design.md`.

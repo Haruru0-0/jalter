@@ -13,7 +13,7 @@ Full detail: `docs/tiered-powers/specs/2026-10-14-feature-roadmap.md`. Original 
 - **Logging Carl-parity** (plan: `docs/tiered-powers/plans/2026-10-14-logging-carl-parity.md`): built and merged into `autorole-upgrade` (not yet deployed: run `npm run deploy` to register the new subcommands). See [[features-built]]. Modlog and cases are deliberately left for Phase 2 (mod-case store), which can log to the existing `mod` category.
 
 ## In progress
-- **Scheduler (Step 0)**: brainstorming started 2026-10-14, no design written yet. Next: design, then plan in `docs/tiered-powers/plans/`.
+- **Scheduler (Step 0)**: design written and awaiting approval: `docs/tiered-powers/specs/2026-10-14-scheduler-design.md` (shared `scheduled_jobs` table, one ticker, at-least-once with retries, autorole timed roles move onto it). Next: owner approval, then plan.
 
 ## Planned, not built
 - Everything in the build order above except logging.
