@@ -30,6 +30,22 @@ export function formatMessageDelete(message, lang) {
   };
 }
 
+export function formatPurge(count, channelId, lang) {
+  return {
+    title: t(lang, 'logging.messagesPurged'),
+    description: `<#${channelId}>`,
+    fields: [{ name: t(lang, 'logging.count'), value: String(count) }],
+  };
+}
+
+export function formatInvite(message, lang) {
+  return {
+    title: t(lang, 'logging.invitePosted'),
+    description: `${message.author?.username ?? '?'} (<@${message.author?.id}>) in <#${message.channelId}> [${t(lang, 'logging.jump')}](${message.url ?? ''})`,
+    fields: [{ name: t(lang, 'logging.content'), value: truncate(message.content) }],
+  };
+}
+
 export function diffRoles(oldIds, newIds) {
   const before = new Set(oldIds);
   const after = new Set(newIds);
