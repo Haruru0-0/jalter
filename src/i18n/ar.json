@@ -125,6 +125,7 @@
   "logging.content": "المحتوى",
   "logging.rolesAdded": "الرتب المضافة",
   "logging.rolesRemoved": "الرتب المزالة",
+  "logging.by": "بواسطة",
   "logging.name": "الاسم",
   "logging.permissions": "الصلاحيات",
   "logging.permissionsChanged": "تم تغيير الصلاحيات.",

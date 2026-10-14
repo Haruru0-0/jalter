@@ -57,3 +57,8 @@ export function formatRename(title, oldName, newName, lang) {
     ],
   };
 }
+
+export function withExecutor(embed, executorId, lang) {
+  if (!executorId) return embed;
+  return { ...embed, fields: [...(embed.fields ?? []), { name: t(lang, 'logging.by'), value: `<@${executorId}>` }] };
+}
