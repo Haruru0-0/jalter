@@ -45,6 +45,11 @@
 **Interfaces:**
 - Produces: `src/core/duration.js` exporting exactly what `src/features/autorole/duration.js` exports today (`MIN_DELAY`, `MAX_DELAY`, `parseDuration`, `formatDuration`), unchanged.
 
+```bash
+git mv src/features/autorole/duration.js src/core/duration.js
+git mv test/features/autorole-duration.test.js test/core/duration.test.js
+```
+
 - [ ] **Step 1:** `git mv src/features/autorole/duration.js src/core/duration.js`; update the import in `src/features/autorole/index.js` to `../../core/duration.js` and in `test/features/autorole-duration.test.js` to `../../src/core/duration.js`. Move the test to `test/core/duration.test.js` (`git mv`, fix its import to `../../src/core/duration.js`).
 - [ ] **Step 2:** `grep -rn "autorole/duration" src test` returns nothing; run `npm test` — expect all green with the same test count.
 - [ ] **Step 3: Commit** `refactor: move the duration helper to core`.
