@@ -59,21 +59,23 @@ export async function claimDue(db, nowMs, { types, limit = 100 }) {
   return res.rows.map(toJob).sort((a, b) => a.dueAt - b.dueAt || Number(a.id) - Number(b.id));
 }
 
-export async function completeJob(db, id) {
-  await db.query('DELETE FROM scheduled_jobs WHERE id = $1', [id]);
+// Both match on the claimed attempts too: a reschedule of the same key resets attempts to 0 while
+// a claimed job always has at least 1, so a stale finish leaves the rescheduled row alone.
+export async function completeJob(db, job) {
+  await db.query('DELETE FROM scheduled_jobs WHERE id = $1 AND attempts = $2', [job.id, job.attempts]);
 }
 
 export async function failJob(db, job, nowMs) {
   if (job.attempts >= MAX_ATTEMPTS) {
-    await completeJob(db, job.id);
+    await completeJob(db, job);
     return 'dropped';
   }
   const delay = BACKOFF_MS[Math.min(job.attempts - 1, BACKOFF_MS.length - 1)];
   await db.query(
     `UPDATE scheduled_jobs
      SET due_at = to_timestamp(($2::float8 + $3::float8) / 1000.0), claimed_until = NULL
-     WHERE id = $1`,
-    [job.id, nowMs, delay],
+     WHERE id = $1 AND attempts = $4`,
+    [job.id, nowMs, delay, job.attempts],
   );
   return 'retry';
 }
@@ -115,7 +117,7 @@ async function runJob(ctx, handler, job, now) {
     }
     return;
   }
-  await completeJob(ctx.db, job.id);
+  await completeJob(ctx.db, job);
 }
 
 export async function runDueJobs(ctx, { jobs, housekeeping }, { now = Date.now() } = {}) {

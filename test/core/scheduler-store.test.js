@@ -76,8 +76,30 @@ test('two concurrent claimDue calls return disjoint jobs', async () => {
 test('completeJob deletes the row', async () => {
   await scheduleJob(db, { guildId: 'g', type: 't', dueAt: NOW });
   const [job] = await claimDue(db, NOW, { types: ['t'] });
-  await completeJob(db, job.id);
+  await completeJob(db, job);
   assert.equal(await count(), 0);
+});
+
+test('completing or failing a stale claimed job leaves a rescheduled row alone', async () => {
+  const rescheduled = async () =>
+    (await db.query(`SELECT attempts, claimed_until, (EXTRACT(EPOCH FROM due_at)*1000)::bigint AS d
+      FROM scheduled_jobs WHERE key = 'k'`)).rows;
+  for (const finish of [
+    (job) => completeJob(db, job),
+    (job) => failJob(db, job, NOW),
+    (job) => failJob(db, { ...job, attempts: MAX_ATTEMPTS }, NOW),
+  ]) {
+    await db.query('TRUNCATE scheduled_jobs RESTART IDENTITY');
+    await scheduleJob(db, { guildId: 'g', type: 't', key: 'k', dueAt: NOW });
+    const [stale] = await claimDue(db, NOW, { types: ['t'] });
+    await scheduleJob(db, { guildId: 'g', type: 't', key: 'k', dueAt: NOW + 50000 });
+    await finish(stale);
+    const rows = await rescheduled();
+    assert.equal(rows.length, 1);
+    assert.equal(Number(rows[0].d), NOW + 50000);
+    assert.equal(rows[0].attempts, 0);
+    assert.equal(rows[0].claimed_until, null);
+  }
 });
 
 test('failJob reschedules with growing backoff and clears the claim', async () => {
@@ -87,6 +109,7 @@ test('failJob reschedules with growing backoff and clears the claim', async () =
   const row = (await db.query('SELECT claimed_until FROM scheduled_jobs')).rows[0];
   assert.equal(await dueMs(), NOW + 60000);
   assert.equal(row.claimed_until, null);
+  await db.query('UPDATE scheduled_jobs SET attempts = 3');
   await failJob(db, { ...job, attempts: 3 }, NOW);
   assert.equal(await dueMs(), NOW + 900000);
 });

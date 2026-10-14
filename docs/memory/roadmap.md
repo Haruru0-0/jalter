@@ -14,7 +14,7 @@ Full detail: `docs/tiered-powers/specs/2026-10-14-feature-roadmap.md`. Original 
 - **Shared scheduler (Step 0)**: built on branch `scheduler` (spec: `docs/tiered-powers/specs/2026-10-14-scheduler-design.md`, plan: `docs/tiered-powers/plans/`). `scheduled_jobs` table, one 30 s ticker, at-least-once with retries; auto role's timed roles run on it and migration 005 moved waiting `pending_roles` rows over. See [[architecture]]. Moderation timed actions (temp ban, timed mute) are the next consumer.
 
 ## Planned, not built
-- Everything in the build order above except logging.
+- Everything in the build order above except logging and the scheduler.
 
 ## Dependencies worth remembering
 - Verification must exist before anti-raid (lockdown raises verification).
