@@ -1,6 +1,6 @@
 import { test, before, beforeEach, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { sendLog } from '../../src/features/logging/index.js';
+import { sendLog } from '../../src/features/logging/send-log.js';
 import { setFeature } from '../../src/db/settings.js';
 import { testDb } from '../helpers/db.js';
 
@@ -19,37 +19,76 @@ const logCfg = { channels: { messages: 'LOG', members: 'LOG2' } };
 test('sends to the category channel', async () => {
   const sent = [];
   await setFeature(db, 'g1', 'logging', { enabled: true, config: logCfg });
-  await sendLog(ctxWith(async (p) => { sent.push(p); }), 'g1', 'messages', embed, 'other');
+  await sendLog(ctxWith(async (p) => { sent.push(p); }), 'g1', 'messageDelete', embed, { sourceChannelId: 'other' });
   assert.equal(sent.length, 1);
 });
 
 test('ignores events that happen inside a log channel (no feedback loop)', async () => {
   const sent = [];
   await setFeature(db, 'g1', 'logging', { enabled: true, config: logCfg });
-  await sendLog(ctxWith(async (p) => { sent.push(p); }), 'g1', 'messages', embed, 'LOG');
+  await sendLog(ctxWith(async (p) => { sent.push(p); }), 'g1', 'messageDelete', embed, { sourceChannelId: 'LOG' });
   assert.equal(sent.length, 0);
 });
 
 test('does nothing when logging is off or the category is unset', async () => {
   const sent = [];
-  await sendLog(ctxWith(async (p) => { sent.push(p); }), 'g1', 'messages', embed, 'x');
+  await sendLog(ctxWith(async (p) => { sent.push(p); }), 'g1', 'messageDelete', embed, { sourceChannelId: 'x' });
   await setFeature(db, 'g1', 'logging', { enabled: true, config: logCfg });
-  await sendLog(ctxWith(async (p) => { sent.push(p); }), 'g1', 'server', embed, 'x');
+  await sendLog(ctxWith(async (p) => { sent.push(p); }), 'g1', 'roleCreate', embed, { sourceChannelId: 'x' });
   assert.equal(sent.length, 0);
 });
 
 test('a failing send does not throw', async () => {
   await setFeature(db, 'g1', 'logging', { enabled: true, config: logCfg });
-  await sendLog(ctxWith(async () => { throw new Error('Missing Permissions'); }), 'g1', 'messages', embed, 'x');
+  await sendLog(ctxWith(async () => { throw new Error('Missing Permissions'); }), 'g1', 'messageDelete', embed, { sourceChannelId: 'x' });
 });
 
 test('a deleted log channel does not throw', async () => {
   await setFeature(db, 'g1', 'logging', { enabled: true, config: logCfg });
   const ctx = { db, client: { channels: { fetch: async () => { throw new Error('Unknown Channel'); } } } };
-  await sendLog(ctx, 'g1', 'messages', embed, 'x');
+  await sendLog(ctx, 'g1', 'messageDelete', embed, { sourceChannelId: 'x' });
 });
 
 test('a database failure does not throw', async () => {
   const ctx = { db: { query: async () => { throw new Error('db down'); } }, client: {} };
-  await sendLog(ctx, 'g1', 'messages', embed, 'x');
+  await sendLog(ctx, 'g1', 'messageDelete', embed, { sourceChannelId: 'x' });
+});
+
+test('an event listed in disabledEvents sends nothing', async () => {
+  const sent = [];
+  await setFeature(db, 'g1', 'logging', { enabled: true, config: { ...logCfg, disabledEvents: ['messageDelete'] } });
+  await sendLog(ctxWith(async (p) => { sent.push(p); }), 'g1', 'messageDelete', embed);
+  await sendLog(ctxWith(async (p) => { sent.push(p); }), 'g1', 'messageEdit', embed);
+  assert.equal(sent.length, 1);
+});
+
+test('memberJoin falls back to the members channel', async () => {
+  const fetched = [];
+  const channel = { isTextBased: () => true, send: async () => {} };
+  const ctx = { db, client: { channels: { fetch: async (id) => { fetched.push(id); return channel; } } } };
+  await setFeature(db, 'g1', 'logging', { enabled: true, config: logCfg });
+  await sendLog(ctx, 'g1', 'memberJoin', embed);
+  assert.deepEqual(fetched, ['LOG2']);
+});
+
+test('an unset category falls back to the default channel', async () => {
+  const fetched = [];
+  const channel = { isTextBased: () => true, send: async () => {} };
+  const ctx = { db, client: { channels: { fetch: async (id) => { fetched.push(id); return channel; } } } };
+  await setFeature(db, 'g1', 'logging', { enabled: true, config: { channels: { default: 'DEF' } } });
+  await sendLog(ctx, 'g1', 'voiceJoin', embed);
+  assert.deepEqual(fetched, ['DEF']);
+});
+
+test('an ignore hit sends nothing', async () => {
+  const sent = [];
+  const cfg = { ...logCfg, ignore: { channels: ['C1'], members: ['U1'], prefixes: ['!'] } };
+  await setFeature(db, 'g1', 'logging', { enabled: true, config: cfg });
+  const ctx = ctxWith(async (p) => { sent.push(p); });
+  await sendLog(ctx, 'g1', 'messageDelete', embed, { ignore: { channelId: 'C1' } });
+  await sendLog(ctx, 'g1', 'messageDelete', embed, { ignore: { userId: 'U1' } });
+  await sendLog(ctx, 'g1', 'messageDelete', embed, { ignore: { content: '!ping' } });
+  assert.equal(sent.length, 0);
+  await sendLog(ctx, 'g1', 'messageDelete', embed, { ignore: { channelId: 'C2', userId: 'U2', content: 'hi' } });
+  assert.equal(sent.length, 1);
 });

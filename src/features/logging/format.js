@@ -30,6 +30,22 @@ export function formatMessageDelete(message, lang) {
   };
 }
 
+export function formatPurge(count, channelId, lang) {
+  return {
+    title: t(lang, 'logging.messagesPurged'),
+    description: `<#${channelId}>`,
+    fields: [{ name: t(lang, 'logging.count'), value: String(count) }],
+  };
+}
+
+export function formatInvite(message, lang) {
+  return {
+    title: t(lang, 'logging.invitePosted'),
+    description: `${message.author?.username ?? '?'} (<@${message.author?.id}>) in <#${message.channelId}> [${t(lang, 'logging.jump')}](${message.url ?? ''})`,
+    fields: [{ name: t(lang, 'logging.content'), value: truncate(message.content) }],
+  };
+}
+
 export function diffRoles(oldIds, newIds) {
   const before = new Set(oldIds);
   const after = new Set(newIds);
@@ -56,4 +72,28 @@ export function formatRename(title, oldName, newName, lang) {
       { name: t(lang, 'logging.after'), value: truncate(newName) },
     ],
   };
+}
+
+export function withExecutor(embed, executorId, lang) {
+  if (!executorId) return embed;
+  return { ...embed, fields: [...(embed.fields ?? []), { name: t(lang, 'logging.by'), value: `<@${executorId}>` }] };
+}
+
+// Classifies a communicationDisabledUntil change. Timestamps are ms or null.
+export function timeoutTransition(oldTs, newTs, now = Date.now()) {
+  const oldActive = oldTs != null && oldTs > now;
+  const newActive = newTs != null && newTs > now;
+  if (newActive) return newTs === oldTs ? null : 'timeout';
+  return oldActive ? 'timeoutRemoved' : null;
+}
+
+// Classifies a voice channel change. Only the channel matters: mute, deafen
+// and stream changes keep the same channel and return null.
+export function voiceTransition(oldChannelId, newChannelId) {
+  const from = oldChannelId ?? null;
+  const to = newChannelId ?? null;
+  if (from === to) return null;
+  if (!from) return 'voiceJoin';
+  if (!to) return 'voiceLeave';
+  return 'voiceMove';
 }
