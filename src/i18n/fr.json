@@ -199,5 +199,12 @@
   "greet.testFailed": "Je n'ai pas pu publier le message de test. Vérifiez mes permissions dans le salon.",
   "greet.kind.greet": "Accueil",
   "greet.kind.leave": "Départ",
-  "greet.kind.boost": "Boost"
+  "greet.kind.boost": "Boost",
+  "logging.memberBanned": "Membre banni",
+  "logging.memberUnbanned": "Membre débanni",
+  "logging.memberTimedOut": "Membre exclu temporairement",
+  "logging.timeoutRemoved": "Exclusion temporaire levée",
+  "logging.timeoutUntil": "Exclu jusqu'à",
+  "logging.avatarChanged": "Avatar modifié",
+  "logging.usernameChanged": "Nom d'utilisateur modifié"
 }

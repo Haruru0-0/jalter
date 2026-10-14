@@ -199,5 +199,12 @@
   "greet.testFailed": "تعذر إرسال الرسالة التجريبية. تحقق من صلاحياتي في القناة.",
   "greet.kind.greet": "الترحيب",
   "greet.kind.leave": "المغادرة",
-  "greet.kind.boost": "التعزيز"
+  "greet.kind.boost": "التعزيز",
+  "logging.memberBanned": "تم حظر عضو",
+  "logging.memberUnbanned": "تم إلغاء حظر عضو",
+  "logging.memberTimedOut": "تم كتم عضو مؤقتًا",
+  "logging.timeoutRemoved": "تمت إزالة الكتم المؤقت",
+  "logging.timeoutUntil": "مكتوم حتى",
+  "logging.avatarChanged": "تم تغيير الصورة الرمزية",
+  "logging.usernameChanged": "تم تغيير اسم المستخدم"
 }

@@ -199,5 +199,12 @@
   "greet.testFailed": "I could not post the test message. Check my permissions in the channel.",
   "greet.kind.greet": "Greet",
   "greet.kind.leave": "Leave",
-  "greet.kind.boost": "Boost"
+  "greet.kind.boost": "Boost",
+  "logging.memberBanned": "Member banned",
+  "logging.memberUnbanned": "Member unbanned",
+  "logging.memberTimedOut": "Member timed out",
+  "logging.timeoutRemoved": "Timeout removed",
+  "logging.timeoutUntil": "Timed out until",
+  "logging.avatarChanged": "Avatar changed",
+  "logging.usernameChanged": "Username changed"
 }

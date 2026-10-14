@@ -78,3 +78,11 @@ export function withExecutor(embed, executorId, lang) {
   if (!executorId) return embed;
   return { ...embed, fields: [...(embed.fields ?? []), { name: t(lang, 'logging.by'), value: `<@${executorId}>` }] };
 }
+
+// Classifies a communicationDisabledUntil change. Timestamps are ms or null.
+export function timeoutTransition(oldTs, newTs, now = Date.now()) {
+  const oldActive = oldTs != null && oldTs > now;
+  const newActive = newTs != null && newTs > now;
+  if (newActive) return newTs === oldTs ? null : 'timeout';
+  return oldActive ? 'timeoutRemoved' : null;
+}
