@@ -330,5 +330,14 @@
   "moderation.settings.permitted_exists": "هذه الرتبة مسموح لها بالفعل.",
   "moderation.settings.permitted_added": "يمكن للرتبة {role} الآن استخدام جميع أوامر الإشراف، بغض النظر عن صلاحياتها في ديسكورد.",
   "moderation.settings.permitted_missing": "هذه الرتبة ليست في قائمة الرتب المسموح لها.",
-  "moderation.settings.permitted_removed": "لم تعد {role} رتبة مسموحًا لها."
+  "moderation.settings.permitted_removed": "لم تعد {role} رتبة مسموحًا لها.",
+  "moderation.tools.err.not_allowed": "تحتاج إلى صلاحية ديسكورد المناسبة أو دور مسموح لفعل ذلك.",
+  "moderation.tools.err.no_view": "لا يمكنك استخدام هذا في قناة لا تستطيع رؤيتها.",
+  "moderation.tools.err.bot_missing": "تنقصني صلاحيات في تلك القناة. أحتاج إلى عرض القناة وإرسال الرسائل وصلاحية هذا الإجراء.",
+  "moderation.tools.err.bad_channel": "لا يمكن استخدام هذه القناة لهذا الإجراء.",
+  "moderation.tools.log.title": "أداة القناة: {tool}",
+  "moderation.tools.log.moderator": "المشرف",
+  "moderation.tools.log.channel": "القناة",
+  "moderation.tools.log.reason": "السبب",
+  "moderation.tools.notice_failed": "ملاحظة: تعذر علي نشر الإشعار في القناة."
 }

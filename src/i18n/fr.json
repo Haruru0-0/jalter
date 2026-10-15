@@ -330,5 +330,14 @@
   "moderation.settings.permitted_exists": "Ce rôle est déjà autorisé.",
   "moderation.settings.permitted_added": "{role} peut maintenant utiliser toutes les commandes de modération, quelles que soient ses permissions Discord.",
   "moderation.settings.permitted_missing": "Ce rôle n’est pas dans la liste des rôles autorisés.",
-  "moderation.settings.permitted_removed": "{role} n’est plus un rôle autorisé."
+  "moderation.settings.permitted_removed": "{role} n’est plus un rôle autorisé.",
+  "moderation.tools.err.not_allowed": "Il vous faut la permission Discord correspondante ou un rôle autorisé pour faire cela.",
+  "moderation.tools.err.no_view": "Vous ne pouvez pas l'utiliser dans un salon que vous ne voyez pas.",
+  "moderation.tools.err.bot_missing": "Il me manque des permissions dans ce salon. Il me faut Voir le salon, Envoyer des messages et la permission propre à cette action.",
+  "moderation.tools.err.bad_channel": "Ce salon ne peut pas être utilisé pour cela.",
+  "moderation.tools.log.title": "Outil de salon : {tool}",
+  "moderation.tools.log.moderator": "Modérateur",
+  "moderation.tools.log.channel": "Salon",
+  "moderation.tools.log.reason": "Raison",
+  "moderation.tools.notice_failed": "Remarque : je n'ai pas pu publier l'annonce dans le salon."
 }

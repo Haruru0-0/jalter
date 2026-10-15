@@ -330,5 +330,14 @@
   "moderation.settings.permitted_exists": "That role is already permitted.",
   "moderation.settings.permitted_added": "{role} can now use every moderation command, whatever its Discord permissions.",
   "moderation.settings.permitted_missing": "That role is not in the permitted list.",
-  "moderation.settings.permitted_removed": "{role} is no longer a permitted role."
+  "moderation.settings.permitted_removed": "{role} is no longer a permitted role.",
+  "moderation.tools.err.not_allowed": "You need the matching Discord permission or a permitted role to do that.",
+  "moderation.tools.err.no_view": "You cannot use this in a channel you cannot see.",
+  "moderation.tools.err.bot_missing": "I am missing permissions in that channel. I need View Channel, Send Messages and the permission for this action.",
+  "moderation.tools.err.bad_channel": "That channel cannot be used for this.",
+  "moderation.tools.log.title": "Channel tool: {tool}",
+  "moderation.tools.log.moderator": "Moderator",
+  "moderation.tools.log.channel": "Channel",
+  "moderation.tools.log.reason": "Reason",
+  "moderation.tools.notice_failed": "Note: I could not post the notice in the channel."
 }

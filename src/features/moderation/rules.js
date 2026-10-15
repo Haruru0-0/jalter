@@ -9,6 +9,11 @@ export const ACTION_PERMISSIONS = {
   kick: 'KickMembers',
   ban: 'BanMembers',
   unban: 'BanMembers',
+  purge: 'ManageMessages',
+  purgeall: 'ManageChannels',
+  slowmode: 'ManageChannels',
+  lock: 'ManageChannels',
+  unlock: 'ManageChannels',
 };
 
 const MIN_SECONDS = 60;

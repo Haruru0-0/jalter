@@ -90,3 +90,23 @@ test('checkDuration caps every action at 10 years', () => {
   assert.deepEqual(checkDuration('mute', 315_360_000), { ok: true });
   assert.deepEqual(checkDuration('ban', Number.NaN), { ok: false, reason: 'too_short' });
 });
+
+test('ACTION_PERMISSIONS maps the channel tool actions', () => {
+  assert.equal(ACTION_PERMISSIONS.purge, 'ManageMessages');
+  for (const a of ['purgeall', 'slowmode', 'lock', 'unlock']) assert.equal(ACTION_PERMISSIONS[a], 'ManageChannels', a);
+});
+
+test('canUseAction for channel tools', () => {
+  const cfg = { permittedRoles: ['P'] };
+  assert.equal(canUseAction(member('a', 1, { perms: ['ManageMessages'] }), 'purge', cfg), true);
+  assert.equal(canUseAction(member('a', 1, { perms: ['ManageChannels'] }), 'purge', cfg), false);
+  assert.equal(canUseAction(member('a', 1, { perms: ['ManageMessages'] }), 'lock', cfg), false);
+  for (const a of ['purgeall', 'slowmode', 'lock', 'unlock']) {
+    assert.equal(canUseAction(member('a', 1, { perms: ['ManageChannels'] }), a, cfg), true, a);
+    assert.equal(canUseAction(member('a', 1), a, cfg), false, a);
+  }
+  for (const a of ['purge', 'purgeall', 'slowmode', 'lock', 'unlock']) {
+    assert.equal(canUseAction(member('a', 1, { roles: ['P'] }), a, cfg), true, a);
+  }
+  assert.equal(canUseAction(member('a', 1, { perms: ['ManageChannels'] }), 'nuke', cfg), false);
+});
