@@ -1,6 +1,6 @@
 # Moderation (Phase 2, step 1): design
 
-Status: awaiting approval. Roadmap: `2026-10-14-feature-roadmap.md`, Phase 2 steps 1 and 2 (cases, commands and timed actions are built together here).
+Status: built on branch `phase-2` (Tasks 1 to 9 of the plan; final review pending). Roadmap: `2026-10-14-feature-roadmap.md`, Phase 2 steps 1 and 2 (cases, commands and timed actions are built together here).
 
 ## Intent and why
 

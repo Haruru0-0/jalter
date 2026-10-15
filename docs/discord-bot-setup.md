@@ -32,7 +32,8 @@ The other intents Jalter uses (Guilds, Guild Messages, Guild Expressions, Guild 
 2. Under **Scopes** tick `bot` and `applications.commands`.
 3. Under **Bot Permissions** tick:
    - View Channels, Send Messages, Read Message History, Embed Links, Attach Files (core)
-   - Manage Roles (auto role)
+   - Manage Roles (auto role and the moderation mute role)
+   - Kick Members, Ban Members, Moderate Members (moderation: `/kick`, `/ban` and `/unban`, `/timeout` and `/untimeout`)
    - View Audit Log (logging "By" field; optional)
    - Manage Channels (`/logging setup`; optional)
 4. Copy the generated URL, open it, choose your server and click **Authorize**.
