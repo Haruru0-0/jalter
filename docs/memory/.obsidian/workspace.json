@@ -11,10 +11,12 @@
             "id": "5fea0404e59d0f99",
             "type": "leaf",
             "state": {
-              "type": "graph",
-              "state": {},
-              "icon": "lucide-git-fork",
-              "title": "Graph view"
+              "type": "pdf",
+              "state": {
+                "file": "file:C:/Users/ahmad/Desktop/cv-ahmad-kanaan-original.pdf"
+              },
+              "icon": "lucide-file-text",
+              "title": "cv-ahmad-kanaan-original"
             }
           }
         ]
