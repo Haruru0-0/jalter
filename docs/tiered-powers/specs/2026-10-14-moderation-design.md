@@ -1,6 +1,6 @@
 # Moderation (Phase 2, step 1): design
 
-Status: awaiting approval. Roadmap: `2026-10-14-feature-roadmap.md`, Phase 2 steps 1 and 2 (cases, commands and timed actions are built together here).
+Status: built on branch `phase-2` (Tasks 1 to 9 of the plan; final review pending). Roadmap: `2026-10-14-feature-roadmap.md`, Phase 2 steps 1 and 2 (cases, commands and timed actions are built together here).
 
 ## Intent and why
 
@@ -77,7 +77,7 @@ Exact command and option shapes within the list above, table layout and the safe
 - **Permitted roles:** one list per server; a member with a listed role may use every moderation action command (warn, warnings management, timeout, untimeout, mute, unmute, kick, ban, unban, reason) even without the matching Discord permission. It does not bypass the "feature is off" check, `reason-required`, or the who-can-be-acted-on rules, and it never grants `/moderation` settings. Commands are registered with no default member permission so permitted-role holders can see them; the check happens in code. This is a deliberate privilege grant by the server admin, as in YAGPDB.
 - **Mute state:** a user is "currently muted" when their latest mute case has no later unmute case and has not ended; no separate table. `/mute` with no mute role configured (or a deleted role) is refused with a message; it does not fall back to a timeout. A timed unmute whose role or member is gone finishes quietly.
 - **Automatic expiry:** when a timed ban or mute ends, the handler creates an unban or unmute case attributed to the bot user and posts it to the mod log, reason "Timed action expired".
-- **Limits:** durations are at least 1 minute; timeout at most 28 days; ban and mute have no maximum. `/ban` on an already-banned user and `/mute` on an already-muted user are refused. A new timed ban or mute on a user with a pending one replaces it.
+- **Limits:** durations are at least 1 minute; timeout at most 28 days; ban and mute at most 10 years (a sanity cap added in the final review so end times stay storable). `/ban` on an already-banned user and `/mute` on an already-muted user are refused. A new timed ban or mute on a user with a pending one replaces it.
 - **Warnings are mutated, not re-cased:** `edit`, `delete` and `clear` change the warn case(s) only and post nothing to the mod log. `/warnings top` counts all active warnings (no expiry). `/reason` may edit any case type and any moderator may use it, and always requires a non-empty reason.
 - **Order of operations:** DM the offender first (best effort) for kick and ban, and for the other actions as well to keep one rule; then do the Discord action; create the case (and number) only after the action succeeds, so failed attempts consume no case numbers; then post the mod log. If the action succeeded but saving the case failed, the moderator is told the action happened but was not recorded, and the error is logged.
 - **`reason-required`** applies to warn, timeout, mute, kick and ban. The undo actions (`untimeout`, `unmute`, `unban`) and `/warnings clear` never require one.

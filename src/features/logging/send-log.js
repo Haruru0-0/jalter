@@ -7,25 +7,27 @@ import { isEventEnabled, isIgnored, resolveChannelId } from './config.js';
 export async function sendLog(ctx, guildId, event, embed, opts = {}) {
   try {
     const { enabled, config } = await getFeature(ctx.db, guildId, 'logging');
-    if (!enabled) return;
-    if (!isEventEnabled(config, event)) return;
-    if (opts.ignore && isIgnored(config, opts.ignore)) return;
+    if (!enabled) return null;
+    if (!isEventEnabled(config, event)) return null;
+    if (opts.ignore && isIgnored(config, opts.ignore)) return null;
     const channelId = resolveChannelId(config, event);
-    if (!channelId) return;
-    if (opts.sourceChannelId && Object.values(config.channels ?? {}).includes(opts.sourceChannelId)) return;
+    if (!channelId) return null;
+    if (opts.sourceChannelId && Object.values(config.channels ?? {}).includes(opts.sourceChannelId)) return null;
     const channel = await fetchSendable(ctx.client, channelId);
     if (!channel) {
       console.warn(`Log channel for ${event} missing in guild ${guildId}`);
-      return;
+      return null;
     }
     let finalEmbed = embed;
     if (opts.executor) {
       const executorId = await opts.executor().catch(() => null);
       if (executorId) finalEmbed = withExecutor(embed, executorId, await getLang(ctx.db, guildId));
     }
-    await trySend(channel, { embeds: [{ ...finalEmbed, timestamp: new Date().toISOString() }], allowedMentions: { parse: [] } });
+    const message = await trySend(channel, { embeds: [{ ...finalEmbed, timestamp: new Date().toISOString() }], allowedMentions: { parse: [] } });
+    return message ? { channelId: message.channelId, messageId: message.id } : null;
   } catch (err) {
     console.warn(`Could not write log in ${guildId}: ${err.message}`);
+    return null;
   }
 }
 

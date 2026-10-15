@@ -8,7 +8,7 @@ Automated tests (`npm test`, needs `docker compose up -d`) cover the code. This 
 
 - [ ] `npm run deploy` printed `Registered N commands ...`, `npm start` printed `Logged in as <bot>`.
 - [ ] The bot's role is above every role you will test giving.
-- [ ] The bot has View Audit Log and Manage Channels (for the logging tests).
+- [ ] The bot has View Audit Log and Manage Channels (for the logging tests), and Kick Members, Ban Members and Moderate Members (for the moderation tests).
 
 ## 1. Panel and permissions
 
@@ -132,9 +132,74 @@ Set up a log channel first: `/logging setup` (needs Manage Channels) or `/loggin
 - [ ] `/info enable`, then `/userinfo`, `/avatar`, `/banner`, `/serverinfo` all work.
 - [ ] `/info disable`: those commands refuse.
 
-## 11. Permissions and robustness
+## 11. Moderation
+
+Needs the bot to have Kick Members, Ban Members, Moderate Members and Manage Roles, with its role above the test accounts. Use a spare account as the target.
+
+### Enable and settings
+
+- [ ] `npm run deploy` was run after updating (registers the new commands) and the bot was restarted (migration 006 creates the case tables).
+- [ ] Before `/moderation enable`, `/warn` replies that the feature is off. `/moderation enable` turns it on.
+- [ ] `/logging set category:mod channel:<channel>` (with logging enabled) so cases are posted.
+- [ ] `/moderation status` shows reasons required on, DMs on, timeout default 10m, ban delete days 0, no mute role and no permitted roles.
+- [ ] `/moderation reason-required state:off` and `/moderation dm state:off` change and show in `status`; set them back on for the steps below.
+- [ ] `/moderation timeout-default duration:5m` works; `30s` and `40d` are refused.
+- [ ] `/moderation ban-delete-days days:1` works (0 to 7 only).
+- [ ] `/moderation mute-role role:<role>` works; @everyone, a bot-managed role and a role above the bot are refused. With `apply:true` the role is denied Send Messages, Add Reactions and Speak in the channels the bot can manage, and the reply counts successes and failures.
+- [ ] A normal member cannot run the `/moderation` settings.
+
+### Commands and cases
+
+- [ ] `/warn user:<target> reason:test` replies with a case number (1 on a fresh server) and posts an embed in the mod log. The next action gets the next number.
+- [ ] A refused or failed action does not use a case number.
+- [ ] With reasons required, `/warn` without a reason is refused; with it off it works and the log shows "no reason".
+- [ ] `/timeout user:<target> duration:5m reason:test` times the target out; without a duration it uses the default. `/untimeout` removes it. A timeout of 40d is refused.
+- [ ] `/mute` without a mute role set is refused. With one set, `/mute` gives the role; `/mute` again is refused as already muted; `/unmute` removes it.
+- [ ] `/kick` removes the member. `/ban user:<target>` bans (the user does not have to be in the server); `delete_days` deletes their recent messages. `/ban` again is refused as already banned. `/unban` unbans; unbanning someone who is not banned is refused.
+- [ ] A bad duration such as `abc` or `30s` is refused with a message.
+- [ ] `/reason case:<n> reason:<text>` changes the reason and the mod log message for that case is edited. An unknown case number is refused.
+
+### DMs
+
+- [ ] With DMs on, the target receives a message (with the reason and duration) for warn, timeout, mute, kick and ban, before the action happens.
+- [ ] With the target's DMs closed, the action still works and the moderator is told the DM failed.
+- [ ] With DMs off, nothing is sent.
+
+### Timed ban and mute
+
+- [ ] `/ban user:<target> duration:1m`: after about a minute (the scheduler ticks every 30 seconds) the user is unbanned and an "unban" case ("expired") appears in the mod log.
+- [ ] `/mute user:<target> duration:1m`: after about a minute the mute role is removed and an "unmute" case ("expired") is logged.
+- [ ] `/unban` or `/unmute` before the time is up: nothing happens at the original end time (no second case).
+- [ ] A mute with no duration is permanent. A new timed `/mute` after an `/unmute` ends at the new time.
+- [ ] A timed ban or mute still ends if `/moderation disable` was run in the meantime.
+
+### Rejoin while muted
+
+- [ ] Mute a member, have them leave and rejoin: the mute role is back. After `/unmute`, or after a timed mute has ended, rejoining does not give it back.
+- [ ] With the feature disabled or no mute role set, nothing is re-applied.
+
+### Hierarchy refusals
+
+- [ ] Each action on the server owner, on yourself and on the bot is refused with its own message.
+- [ ] A moderator cannot act on a member whose top role is equal to or above theirs (the server owner is exempt from this check).
+- [ ] Nobody can act on a member whose top role is equal to or above the bot's.
+- [ ] `/kick`, `/timeout`, `/untimeout`, `/mute` and `/unmute` on a user who left the server are refused as not in the server; `/warn`, `/ban` and `/unban` still work by user ID.
+
+### Permitted role and permissions
+
+- [ ] A member with only Moderate Members can use `/warn`, `/timeout`, `/untimeout`, `/mute`, `/unmute`, `/warnings` and `/reason` but not `/kick` or `/ban`; Kick Members allows `/kick`, Ban Members allows `/ban` and `/unban`.
+- [ ] A member with none of these is refused. `/moderation permitted-role-add role:<role>` lets a member with that role use all of the moderation commands; `permitted-role-remove` takes it away. Adding the same role twice, @everyone, or an 11th role is refused. A permitted role does not grant the `/moderation` settings and does not bypass the hierarchy rules or required reasons.
+- [ ] The replies to the action commands are only visible to the moderator.
+
+### Warnings visibility
+
+- [ ] `/warnings list` (no user) shows your own active warnings. A normal member can list their own but is refused for another user.
+- [ ] A moderator can run `/warnings list user:<target>`, `edit id:<n> reason:<text>`, `delete id:<n>`, `clear user:<target>` and `top`. The id is the warning's case number. Deleted and cleared warnings disappear from the list, and edits, deletes and clears post nothing to the mod log.
+- [ ] A long list is cut with a "more" line instead of failing.
+
+## 12. Permissions and robustness
 
 - [ ] Every setup reply is ephemeral (only you see it).
-- [ ] A normal member cannot run `/logging`, `/autorole`, `/set`, `/media` setup commands.
+- [ ] A normal member cannot run `/logging`, `/autorole`, `/set`, `/media` or `/moderation` setup commands.
 - [ ] Stop the bot and start it again, then run `docker compose restart`: all settings are still there.
 - [ ] The console shows no unhandled errors during the steps above.

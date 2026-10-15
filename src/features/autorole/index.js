@@ -9,7 +9,7 @@ import {
   readConfig, addRole, removeRole, addTimed, removeTimed, addBlacklist, removeBlacklist,
   setReassign, isValidRoleId, pruneRoles, LIMITS, MAX_TIMED,
 } from './config.js';
-import { parseDuration, formatDuration, MIN_DELAY, MAX_DELAY } from './duration.js';
+import { parseDuration, formatDuration, MIN_DELAY, MAX_DELAY } from '../../core/duration.js';
 import { cancelRole, GRANT_JOB } from './store.js';
 import { events, grantTimedRole, purgeRememberedRoles } from './assign.js';
 

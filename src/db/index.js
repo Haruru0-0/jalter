@@ -36,6 +36,6 @@ export async function openDb(databaseUrl) {
 
 export async function resetDb(pool) {
   await pool.query(
-    'TRUNCATE guild_settings, embeds, media_items, remembered_roles, scheduled_jobs RESTART IDENTITY',
+    'TRUNCATE guild_settings, embeds, media_items, remembered_roles, scheduled_jobs, mod_cases, mod_counters RESTART IDENTITY',
   );
 }
