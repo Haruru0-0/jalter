@@ -288,5 +288,19 @@
   "moderation.done": "Done: {type}. Case #{number}.",
   "moderation.done.warn": "Warning #{number} recorded (case #{number}).",
   "moderation.done.duration": "Duration: {duration}",
-  "moderation.done.nocase": "Done: {type}."
+  "moderation.done.nocase": "Done: {type}.",
+  "moderation.err.not_allowed": "You need the matching Discord permission or a permitted role to do that.",
+  "moderation.err.no_such_warning": "There is no active warning with that id.",
+  "moderation.err.no_such_case": "There is no case with that number.",
+  "moderation.warnings.none": "No active warnings for <@{user}>.",
+  "moderation.warnings.header": "Active warnings for <@{user}> ({count}):",
+  "moderation.warnings.line": "#{number} {date} by <@{moderator}>: {reason}",
+  "moderation.warnings.more": "... and {count} more",
+  "moderation.warnings.edited": "Warning #{number} updated.",
+  "moderation.warnings.deleted": "Warning #{number} deleted.",
+  "moderation.warnings.cleared": "Cleared {count} active warning(s) for <@{user}>.",
+  "moderation.warnings.top_none": "No one has active warnings.",
+  "moderation.warnings.top_header": "Most active warnings:",
+  "moderation.warnings.top_line": "{rank}. <@{user}>: {count}",
+  "moderation.reason.done": "Reason updated for case #{number}."
 }

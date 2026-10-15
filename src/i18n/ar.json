@@ -288,5 +288,19 @@
   "moderation.done": "تم: {type}. القضية رقم {number}.",
   "moderation.done.warn": "تم تسجيل التحذير رقم {number} (القضية رقم {number}).",
   "moderation.done.duration": "المدة: {duration}",
-  "moderation.done.nocase": "تم: {type}."
+  "moderation.done.nocase": "تم: {type}.",
+  "moderation.err.not_allowed": "تحتاج إلى صلاحية ديسكورد المناسبة أو دور مسموح لفعل ذلك.",
+  "moderation.err.no_such_warning": "لا يوجد تحذير نشط بهذا المعرف.",
+  "moderation.err.no_such_case": "لا توجد قضية بهذا الرقم.",
+  "moderation.warnings.none": "لا توجد تحذيرات نشطة لـ <@{user}>.",
+  "moderation.warnings.header": "التحذيرات النشطة لـ <@{user}> ({count}):",
+  "moderation.warnings.line": "#{number} {date} بواسطة <@{moderator}>: {reason}",
+  "moderation.warnings.more": "... و{count} أخرى",
+  "moderation.warnings.edited": "تم تعديل التحذير رقم {number}.",
+  "moderation.warnings.deleted": "تم حذف التحذير رقم {number}.",
+  "moderation.warnings.cleared": "تم مسح {count} تحذير نشط لـ <@{user}>.",
+  "moderation.warnings.top_none": "لا أحد لديه تحذيرات نشطة.",
+  "moderation.warnings.top_header": "أكثر التحذيرات النشطة:",
+  "moderation.warnings.top_line": "{rank}. <@{user}>: {count}",
+  "moderation.reason.done": "تم تحديث السبب للقضية رقم {number}."
 }

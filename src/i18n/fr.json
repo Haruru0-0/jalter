@@ -288,5 +288,19 @@
   "moderation.done": "Fait : {type}. Cas n°{number}.",
   "moderation.done.warn": "Avertissement n°{number} enregistré (cas n°{number}).",
   "moderation.done.duration": "Durée : {duration}",
-  "moderation.done.nocase": "Fait : {type}."
+  "moderation.done.nocase": "Fait : {type}.",
+  "moderation.err.not_allowed": "Il vous faut la permission Discord correspondante ou un rôle autorisé pour faire cela.",
+  "moderation.err.no_such_warning": "Aucun avertissement actif avec cet identifiant.",
+  "moderation.err.no_such_case": "Aucun dossier avec ce numéro.",
+  "moderation.warnings.none": "Aucun avertissement actif pour <@{user}>.",
+  "moderation.warnings.header": "Avertissements actifs de <@{user}> ({count}) :",
+  "moderation.warnings.line": "#{number} {date} par <@{moderator}> : {reason}",
+  "moderation.warnings.more": "... et {count} de plus",
+  "moderation.warnings.edited": "Avertissement #{number} modifié.",
+  "moderation.warnings.deleted": "Avertissement #{number} supprimé.",
+  "moderation.warnings.cleared": "{count} avertissement(s) actif(s) effacé(s) pour <@{user}>.",
+  "moderation.warnings.top_none": "Personne n'a d'avertissement actif.",
+  "moderation.warnings.top_header": "Plus d'avertissements actifs :",
+  "moderation.warnings.top_line": "{rank}. <@{user}> : {count}",
+  "moderation.reason.done": "Raison mise à jour pour le dossier #{number}."
 }
