@@ -23,6 +23,7 @@ function world({ fail = false, existing = [] } = {}) {
   const channels = new Map(existing.map((id) => [id, { id, isTextBased: () => true, send: async () => ({}) }]));
   const created = [];
   const sent = [];
+  const deleted = [];
   const guild = {
     id: 'g1',
     roles: { everyone: { id: 'everyone' } },
@@ -35,6 +36,7 @@ function world({ fail = false, existing = [] } = {}) {
         const ch = {
           id, ...opts, isTextBased: () => opts.type === 0,
           send: async (p) => { sent.push({ id, p }); return { id: 'm', channelId: id }; },
+          delete: async () => { deleted.push(id); channels.delete(id); },
         };
         created.push(ch);
         channels.set(id, ch);
@@ -47,7 +49,7 @@ function world({ fail = false, existing = [] } = {}) {
     guilds: { cache: new Map([['g1', guild]]), fetch: async () => guild },
     channels: { fetch: async (id) => { const c = channels.get(id); if (!c) throw new Error('Unknown Channel'); return c; } },
   };
-  return { ctx: { db, client }, created, sent, channels };
+  return { ctx: { db, client }, created, sent, channels, deleted };
 }
 const embed = { title: 't' };
 const enable = (config = {}) => setFeature(db, 'g1', 'logging', { enabled: true, config });
@@ -159,4 +161,31 @@ test('the backoff is per category and a success is never delayed', async () => {
   assert.ok(await sendLog(w.ctx, 'g1', 'roleCreate', embed, { sourceChannelId: 'x' }));
   assert.ok(await sendLog(w.ctx, 'g1', 'roleCreate', embed, { sourceChannelId: 'x' }));
   assert.equal(w.created.filter((c) => c.type === 0).length, 1);
+});
+
+test('two categories at once keep both channels and create one Logs category', async () => {
+  const w = world();
+  await enable();
+  await Promise.all([
+    sendLog(w.ctx, 'g1', 'messageDelete', embed, { sourceChannelId: 'x' }),
+    sendLog(w.ctx, 'g1', 'roleCreate', embed, { sourceChannelId: 'x' }),
+    sendLog(w.ctx, 'g1', 'messageDelete', embed, { sourceChannelId: 'x' }),
+  ]);
+  const { config } = await getFeature(db, 'g1', 'logging');
+  assert.ok(config.channels.messages);
+  assert.ok(config.channels.server);
+  assert.equal(w.created.filter((c) => c.type === 4).length, 1);
+  assert.equal(w.created.filter((c) => c.type === 0).length, 2);
+  assert.equal(config.categoryId, w.created.find((c) => c.type === 4).id);
+});
+
+test('if saving fails after creation, the new channel and category are deleted and nothing throws', async () => {
+  const w = world();
+  await enable();
+  const original = db.query.bind(db);
+  const proxy = { ...w.ctx, db: new Proxy(db, { get: (t, k) => (k === 'query'
+    ? (sql, ...a) => (/INSERT/i.test(String(sql)) ? Promise.reject(new Error('db down')) : original(sql, ...a))
+    : t[k]) }) };
+  assert.equal(await sendLog(proxy, 'g1', 'messageDelete', embed, { sourceChannelId: 'x' }), null);
+  assert.equal(w.deleted.length, 2);
 });

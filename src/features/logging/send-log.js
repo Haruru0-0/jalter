@@ -1,17 +1,18 @@
 import { getFeature, setFeature } from '../../db/settings.js';
-import { ensureChannel, ensurePrivateCategory, singleFlight, withBackoff } from '../../core/auto-channel.js';
+import { ensureChannel, ensurePrivateCategory, serialize, withBackoff } from '../../core/auto-channel.js';
 import { categoryOf } from './events.js';
 import { fetchSendable, trySend } from '../../core/send.js';
 import { getLang } from '../../i18n/index.js';
 import { withExecutor } from './format.js';
 import { isEventEnabled, isIgnored, resolveChannelId } from './config.js';
 
-// Creates the log channel for an event's category (one run at a time per guild and category) and saves it.
-// Returns the channel id, or null when creation failed. Never throws.
+// Creates the log channel for an event's category and saves it. The whole logging creation path runs one
+// at a time per guild (categories share the Logs category and the saved config), with a failure backoff per
+// category. Returns the channel id, or null when creation failed. Never throws.
 async function createLogChannel(ctx, guildId, event) {
   const category = categoryOf(event);
-  const key = `${guildId}:${category}`;
-  return singleFlight(key, () => withBackoff(key, async () => {
+  return serialize(`${guildId}:logging`, () => withBackoff(`${guildId}:${category}`, async () => {
+    const made = [];
     try {
       const { config } = await getFeature(ctx.db, guildId, 'logging');
       const existing = resolveChannelId(config, event);
@@ -22,18 +23,24 @@ async function createLogChannel(ctx, guildId, event) {
       if (!parent) {
         const created = await ensurePrivateCategory(guild, 'Logs');
         if (!created) return null;
+        made.push(created);
         categoryId = created.id;
       }
       const channel = await ensureChannel(guild, {
         name: category === 'default' ? 'logs' : `${category}-logs`,
         parentId: categoryId,
       });
-      if (!channel) return null;
+      if (!channel) {
+        for (const c of made) await c.delete?.().catch(() => {});
+        return null;
+      }
+      made.push(channel);
       const channels = { ...(config.channels ?? {}), [category]: channel.id };
       await setFeature(ctx.db, guildId, 'logging', { config: { channels, categoryId } });
       return channel.id;
     } catch (err) {
       console.warn(`Could not create log channel in ${guildId}: ${err.message}`);
+      for (const c of made.reverse()) await Promise.resolve(c.delete?.()).catch(() => {});
       return null;
     }
   }));

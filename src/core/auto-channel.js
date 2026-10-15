@@ -11,6 +11,18 @@ export function singleFlight(key, fn) {
   return promise;
 }
 
+const queues = new Map();
+
+/** Runs `fn` after every earlier call with the same key has finished; each caller gets its own result. */
+export function serialize(key, fn) {
+  const previous = queues.get(key) ?? Promise.resolve();
+  const run = previous.then(() => fn());
+  const tail = run.catch(() => {});
+  queues.set(key, tail);
+  tail.then(() => { if (queues.get(key) === tail) queues.delete(key); });
+  return run;
+}
+
 export const BACKOFF_MS = 10 * 60 * 1000;
 const retryAfter = new Map();
 let now = () => Date.now();

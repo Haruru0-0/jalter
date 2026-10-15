@@ -255,3 +255,17 @@ test('lazy creation backs off after a failure and retries after 10 minutes', asy
   await handleMember(f.ctx(), f.member, 'greet');
   assert.equal(attempts, 2);
 });
+
+test('lazy creation deletes the new channel when saving fails', async () => {
+  const f = fakeMember();
+  let deleted = 0;
+  f.member.guild.channels = { create: async () => ({ id: 'c7', delete: async () => { deleted += 1; } }) };
+  await setFeature(db, 'g1', 'greet', { enabled: true });
+  const original = db.query.bind(db);
+  const broken = new Proxy(db, { get: (t, k) => (k === 'query'
+    ? (sql, ...a) => (/INSERT/i.test(String(sql)) ? Promise.reject(new Error('db down')) : original(sql, ...a))
+    : t[k]) });
+  const ctx = { db: broken, client: { channels: { fetch: async () => f.channel } } };
+  assert.equal(await handleMember(ctx, f.member, 'greet'), 'no-channel');
+  assert.equal(deleted, 1);
+});

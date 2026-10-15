@@ -1,7 +1,6 @@
 import { Events } from 'discord.js';
-import { getFeature, setFeature } from '../../db/settings.js';
+import { getFeature } from '../../db/settings.js';
 import { fetchSendable, trySend } from '../../core/send.js';
-import { ensureChannel, singleFlight, withBackoff } from '../../core/auto-channel.js';
 import { safeMentions } from '../../core/mentions.js';
 import { buildVars, renderPlaceholders } from '../../core/placeholders.js';
 import { getEmbed, normalizeEmbedName } from '../embeds/store.js';
@@ -10,7 +9,7 @@ import { parseImageInput, resolveImage } from '../media/images.js';
 import { getLang } from '../../i18n/index.js';
 import { renderCard } from './card.js';
 import { DEFAULT_MESSAGE, DM_KINDS } from './kinds.js';
-import { AUTO_CHANNEL_NAME } from './config.js';
+import { createKindChannel } from './config.js';
 import { buildContent, ensureNotEmpty } from './message.js';
 
 // Text plus the optional embed and card. Throws when an image or the card cannot be built;
@@ -67,16 +66,8 @@ export async function handleMember(ctx, member, kind) {
     if (!enabled) return 'off';
     let channelId = config.channelId;
     if (!channelId) {
-      // Enabled but no channel chosen: make one (one run at a time per guild and kind) and remember it.
-      const key = `${member.guild.id}:${kind}`;
-      channelId = await singleFlight(key, () => withBackoff(key, async () => {
-        const fresh = await getFeature(ctx.db, member.guild.id, kind);
-        if (fresh.config.channelId) return fresh.config.channelId;
-        const created = await ensureChannel(member.guild, { name: AUTO_CHANNEL_NAME[kind] });
-        if (!created) return null;
-        await setFeature(ctx.db, member.guild.id, kind, { config: { channelId: created.id } });
-        return created.id;
-      }));
+      // Enabled but no channel chosen: make one and remember it (shares its lock and backoff with /set).
+      channelId = await createKindChannel(ctx.db, member.guild, kind);
       if (!channelId) return 'no-channel';
     }
     // A partial member (left while uncached) normally still carries its user.

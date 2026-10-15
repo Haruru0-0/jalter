@@ -165,3 +165,18 @@ test('status keeps every embed field value within 1024 characters', async () => 
   for (const f of embed.fields) assert.ok(f.value.length <= 1024, `${f.name}: ${f.value.length}`);
   assert.match(embed.fields[2].value, /more/);
 });
+
+test('setup stores the Logs category id for later auto-created channels', async () => {
+  await setFeature(db, 'g-setup', 'logging', { enabled: false, config: { channels: {} } });
+  let n = 0;
+  const i = fakeInteraction('setup', {}, {
+    guild: {
+      members: { me: { id: 'bot' } },
+      roles: { everyone: { id: 'g-setup' } },
+      channels: { create: async () => ({ id: `s${(n += 1)}` }) },
+    },
+  });
+  await commands[0].execute(i, { db });
+  const { config } = await getFeature(db, 'g-setup', 'logging');
+  assert.equal(config.categoryId, 's1');
+});

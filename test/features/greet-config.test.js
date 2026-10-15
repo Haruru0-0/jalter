@@ -2,6 +2,7 @@ import { test, before, beforeEach, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { setChannel, applyMessage, setCard, setBackground, setDm, getKindConfig } from '../../src/features/greet/config.js';
 import { DEFAULT_MESSAGE } from '../../src/features/greet/kinds.js';
+import { resetBackoff } from '../../src/core/auto-channel.js';
 import { testDb } from '../helpers/db.js';
 
 let db;
@@ -74,7 +75,7 @@ test('card, background and dm are saved; background null clears it and keeps the
 function fakeGuild({ fail = false } = {}) {
   const created = [];
   return {
-    created,
+    created, id: 'g1',
     channels: {
       create: async (opts) => {
         if (fail) throw new Error('Missing Permissions');
@@ -119,4 +120,18 @@ test('applyMessage falls back to saved-needs-channel when creation fails', async
     assert.equal(await applyMessage(db, 'g1', 'greet', 'hi', fakeGuild({ fail: true })), 'saved-needs-channel');
   } finally { console.warn = warn; }
   assert.equal((await getKindConfig(db, 'g1', 'greet')).enabled, false);
+});
+
+test('applyMessage creation backs off after a failure and shares the lock with the lazy path', async () => {
+  resetBackoff();
+  const g = fakeGuild({ fail: true });
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    await applyMessage(db, 'g1', 'greet', 'a', g);
+    let attempts = 0;
+    const counting = { id: 'g1', channels: { create: async () => { attempts += 1; return { id: 'z' }; } } };
+    assert.equal(await applyMessage(db, 'g1', 'greet', 'b', counting), 'saved-needs-channel');
+    assert.equal(attempts, 0);
+  } finally { console.warn = warn; resetBackoff(); }
 });

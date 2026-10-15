@@ -119,7 +119,8 @@ async function execute(interaction, ctx) {
       const { config } = await getKindConfig(ctx.db, guildId, kind);
       return interaction.showModal(messageModal(lang, kind, config.message));
     }
-    return interaction.reply(ephemeral(await saveMessage(ctx, lang, interaction.guild, kind, text)));
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    return interaction.editReply(await saveMessage(ctx, lang, interaction.guild, kind, text));
   }
 
   if (sub === 'card' || sub === 'dm') {
@@ -162,7 +163,8 @@ async function handle(interaction, ctx) {
   const lang = await guard(interaction, ctx, kind, { requireEnabled: false });
   if (!lang) return;
   const text = interaction.fields.getTextInputValue('text');
-  await interaction.reply(ephemeral(await saveMessage(ctx, lang, interaction.guild, kind, text)));
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  await interaction.editReply(await saveMessage(ctx, lang, interaction.guild, kind, text));
 }
 
 export const commands = [

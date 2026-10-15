@@ -168,7 +168,7 @@ async function runSetup(interaction, ctx, lang, config) {
       created.push(channel);
       channels[key] = channel.id;
     }
-    await setFeature(ctx.db, interaction.guildId, 'logging', { enabled: true, config: { channels } });
+    await setFeature(ctx.db, interaction.guildId, 'logging', { enabled: true, config: { channels, categoryId: category.id } });
   } catch (err) {
     console.warn(`Logging setup failed in ${interaction.guildId}: ${err.message}`);
     for (const channel of created.reverse()) await channel.delete?.().catch(() => {});

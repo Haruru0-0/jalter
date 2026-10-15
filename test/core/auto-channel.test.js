@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ChannelType } from 'discord.js';
-import { ensureChannel, ensurePrivateCategory, singleFlight } from '../../src/core/auto-channel.js';
+import { ensureChannel, ensurePrivateCategory, singleFlight, serialize } from '../../src/core/auto-channel.js';
 
 function fakeGuild({ fail = false } = {}) {
   const created = [];
@@ -58,4 +58,11 @@ test('singleFlight shares one run per key and clears when done', async () => {
 test('singleFlight clears the key when the run throws', async () => {
   await assert.rejects(singleFlight('boom', async () => { throw new Error('x'); }));
   assert.equal(await singleFlight('boom', async () => 'ok'), 'ok');
+});
+
+test('serialize runs same-key calls one after another and gives each its own result', async () => {
+  const order = [];
+  const run = (n) => serialize('s', async () => { order.push(`start${n}`); await new Promise((r) => setTimeout(r, 5)); order.push(`end${n}`); return n; });
+  assert.deepEqual(await Promise.all([run(1), run(2)]), [1, 2]);
+  assert.deepEqual(order, ['start1', 'end1', 'start2', 'end2']);
 });
