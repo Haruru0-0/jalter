@@ -339,5 +339,17 @@
   "moderation.tools.log.moderator": "Modérateur",
   "moderation.tools.log.channel": "Salon",
   "moderation.tools.log.reason": "Raison",
-  "moderation.tools.notice_failed": "Remarque : je n'ai pas pu publier l'annonce dans le salon."
+  "moderation.tools.notice_failed": "Remarque : je n'ai pas pu publier l'annonce dans le salon.",
+  "moderation.tools.err.failed": "Discord a refusé la modification, rien n'a donc été changé.",
+  "moderation.tools.notice.reason": "Raison : {reason}",
+  "moderation.tools.slowmode.off": "désactivé",
+  "moderation.tools.slowmode.reply": "Le mode lent dans {channel} est maintenant {value}.",
+  "moderation.tools.slowmode.notice": "Mode lent réglé sur {value} par {user}.",
+  "moderation.tools.slowmode.already": "Le mode lent dans {channel} est déjà {value}. Rien n'a changé.",
+  "moderation.tools.lock.reply": "{channel} est maintenant verrouillé.",
+  "moderation.tools.lock.notice": "Ce salon a été verrouillé par {user}.",
+  "moderation.tools.lock.already": "{channel} est déjà verrouillé. Rien n'a changé.",
+  "moderation.tools.unlock.reply": "{channel} est maintenant déverrouillé.",
+  "moderation.tools.unlock.notice": "Ce salon a été déverrouillé par {user}.",
+  "moderation.tools.unlock.already": "{channel} n'est pas verrouillé. Rien n'a changé."
 }

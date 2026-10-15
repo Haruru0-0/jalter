@@ -339,5 +339,17 @@
   "moderation.tools.log.moderator": "المشرف",
   "moderation.tools.log.channel": "القناة",
   "moderation.tools.log.reason": "السبب",
-  "moderation.tools.notice_failed": "ملاحظة: تعذر علي نشر الإشعار في القناة."
+  "moderation.tools.notice_failed": "ملاحظة: تعذر علي نشر الإشعار في القناة.",
+  "moderation.tools.err.failed": "رفض ديسكورد هذا التغيير، لذلك لم يتغير شيء.",
+  "moderation.tools.notice.reason": "السبب: {reason}",
+  "moderation.tools.slowmode.off": "متوقف",
+  "moderation.tools.slowmode.reply": "أصبح الوضع البطيء في {channel} الآن {value}.",
+  "moderation.tools.slowmode.notice": "تم ضبط الوضع البطيء على {value} بواسطة {user}.",
+  "moderation.tools.slowmode.already": "الوضع البطيء في {channel} هو بالفعل {value}. لم يتغير شيء.",
+  "moderation.tools.lock.reply": "تم قفل {channel} الآن.",
+  "moderation.tools.lock.notice": "تم قفل هذه القناة بواسطة {user}.",
+  "moderation.tools.lock.already": "{channel} مقفلة بالفعل. لم يتغير شيء.",
+  "moderation.tools.unlock.reply": "تم فتح {channel} الآن.",
+  "moderation.tools.unlock.notice": "تم فتح هذه القناة بواسطة {user}.",
+  "moderation.tools.unlock.already": "{channel} غير مقفلة. لم يتغير شيء."
 }

@@ -339,5 +339,17 @@
   "moderation.tools.log.moderator": "Moderator",
   "moderation.tools.log.channel": "Channel",
   "moderation.tools.log.reason": "Reason",
-  "moderation.tools.notice_failed": "Note: I could not post the notice in the channel."
+  "moderation.tools.notice_failed": "Note: I could not post the notice in the channel.",
+  "moderation.tools.err.failed": "Discord refused the change, so nothing was changed.",
+  "moderation.tools.notice.reason": "Reason: {reason}",
+  "moderation.tools.slowmode.off": "off",
+  "moderation.tools.slowmode.reply": "Slowmode in {channel} is now {value}.",
+  "moderation.tools.slowmode.notice": "Slowmode set to {value} by {user}.",
+  "moderation.tools.slowmode.already": "Slowmode in {channel} is already {value}. Nothing changed.",
+  "moderation.tools.lock.reply": "{channel} is now locked.",
+  "moderation.tools.lock.notice": "This channel was locked by {user}.",
+  "moderation.tools.lock.already": "{channel} is already locked. Nothing changed.",
+  "moderation.tools.unlock.reply": "{channel} is now unlocked.",
+  "moderation.tools.unlock.notice": "This channel was unlocked by {user}.",
+  "moderation.tools.unlock.already": "{channel} is not locked. Nothing changed."
 }
