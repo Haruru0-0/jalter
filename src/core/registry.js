@@ -17,7 +17,11 @@ export const FEATURES = [
   f('autorole', 1, 'autorole', { enableCommand: 'autorole add' }),
   f('logging', 1, 'logging', { enableCommand: 'logging set' }),
   f('info', 1, 'info', { commands: ['info', 'userinfo', 'avatar', 'banner', 'serverinfo'] }),
-  f('moderation', 2, null), f('automod', 2, null), f('antiraid', 2, null),
+  f('moderation', 2, 'moderation', {
+    commands: ['moderation', 'warn', 'warnings', 'timeout', 'untimeout', 'mute', 'unmute', 'kick', 'ban', 'unban', 'reason'],
+    enableCommand: 'moderation enable',
+  }),
+  f('automod', 2, null), f('antiraid', 2, null),
   f('verification', 2, null), f('stickyroles', 2, null),
   f('autoresponder', 3, null), f('reactionroles', 3, null), f('quote', 3, null),
   f('leveling', 4, null), f('tickets', 4, null), f('reminders', 4, null),

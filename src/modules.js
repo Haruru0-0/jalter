@@ -8,5 +8,6 @@ import * as greet from './features/greet/index.js';
 import * as autorole from './features/autorole/index.js';
 import * as logging from './features/logging/index.js';
 import * as info from './features/info/index.js';
+import * as moderation from './features/moderation/index.js';
 
-export const modules = [panel, help, language, media, embeds, post, greet, autorole, logging, info];
+export const modules = [panel, help, language, media, embeds, post, greet, autorole, logging, info, moderation];
