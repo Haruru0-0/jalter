@@ -9,6 +9,8 @@ import { t } from '../../i18n/index.js';
 import { readConfig, addPermittedRole, removePermittedRole, MAX_PERMITTED } from './config.js';
 import { actionCommands } from './commands-actions.js';
 import { warningCommands } from './commands-warnings.js';
+import { channelCommands } from './commands-channel.js';
+import { purgeCommand } from './commands-purge.js';
 import { events, jobs } from './actions.js';
 
 const TIMEOUT_MIN = 60;
@@ -162,5 +164,7 @@ async function execute(interaction, ctx) {
   }
 }
 
-export const commands = [{ data, execute }, ...actionCommands, ...warningCommands];
+const toolCommands = [purgeCommand, ...channelCommands];
+
+export const commands = [{ data, execute }, ...actionCommands, ...warningCommands, ...toolCommands];
 export { events, jobs };

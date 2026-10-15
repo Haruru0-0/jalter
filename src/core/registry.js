@@ -18,7 +18,8 @@ export const FEATURES = [
   f('logging', 1, 'logging', { enableCommand: 'logging set' }),
   f('info', 1, 'info', { commands: ['info', 'userinfo', 'avatar', 'banner', 'serverinfo'] }),
   f('moderation', 2, 'moderation', {
-    commands: ['moderation', 'warn', 'warnings', 'timeout', 'untimeout', 'mute', 'unmute', 'kick', 'ban', 'unban', 'reason'],
+    commands: ['moderation', 'warn', 'warnings', 'timeout', 'untimeout', 'mute', 'unmute', 'kick', 'ban', 'unban', 'reason',
+      'purge', 'slowmode', 'lock', 'unlock'],
     enableCommand: 'moderation enable',
   }),
   f('automod', 2, null), f('antiraid', 2, null),

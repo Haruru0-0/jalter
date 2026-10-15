@@ -9,11 +9,14 @@ import { buildHelp } from '../../src/features/help/index.js';
 import { buildPanelEmbed } from '../../src/features/panel/index.js';
 import { t } from '../../src/i18n/index.js';
 import { formatDuration } from '../../src/core/duration.js';
+import { FEATURES } from '../../src/core/registry.js';
 import { testDb } from '../helpers/db.js';
 
 const settings = commands[0];
 const json = settings.data.toJSON();
-const ALL = ['moderation', 'warn', 'warnings', 'timeout', 'untimeout', 'mute', 'unmute', 'kick', 'ban', 'unban', 'reason'];
+const ALL = ['moderation', 'warn', 'warnings', 'timeout', 'untimeout', 'mute', 'unmute', 'kick', 'ban', 'unban', 'reason',
+  'purge', 'slowmode', 'lock', 'unlock'];
+const TOOLS = ['purge', 'slowmode', 'lock', 'unlock'];
 
 // ---- structure ----
 
@@ -63,6 +66,27 @@ test('help lists every moderation command and the panel no longer says coming so
   for (const n of ALL) assert.ok(help.description.includes(`/${n}`), n);
   const { description } = buildPanelEmbed(new Map(), 'en');
   assert.match(description, /Moderation\*\*: Off \(\/moderation enable\)/);
+});
+
+test('every module has unique command names and component prefixes and purge registers its prefix', () => {
+  const names = modules.flatMap((m) => (m.commands ?? []).map((c) => c.data.name));
+  assert.equal(new Set(names).size, names.length);
+  const prefixes = modules.flatMap((m) => (m.commands ?? []).filter((c) => c.components).map((c) => c.components.prefix));
+  assert.equal(new Set(prefixes).size, prefixes.length);
+  const reg = collectModules(modules);
+  assert.equal(reg.components.get('purge')?.prefix, 'purge');
+  assert.equal(typeof reg.components.get('purge').handle, 'function');
+});
+
+test('help lists the channel tool commands', () => {
+  const { commands: reg } = collectModules(modules);
+  const help = buildHelp('en', new Map(), reg, 'moderation');
+  for (const n of TOOLS) assert.ok(help.description.includes(`/${n}`), n);
+});
+
+test('the registry moderation command list matches the module commands', () => {
+  const entry = FEATURES.find((f) => f.key === 'moderation');
+  assert.deepEqual([...entry.commands].sort(), commands.map((c) => c.data.name).sort());
 });
 
 // ---- handlers ----
