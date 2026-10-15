@@ -36,12 +36,15 @@ function repoint(feature, config, oldId, newId) {
 }
 
 export async function moveChannelId(db, guildId, oldId, newId) {
+  if (oldId === newId) return { moved: 0 };
   const client = await db.connect();
+  let releaseErr;
   try {
     await client.query('BEGIN');
     const { rows } = await client.query(
       `SELECT feature, config FROM guild_settings
-       WHERE guild_id = $1 AND feature = ANY($2::text[]) FOR UPDATE`,
+       WHERE guild_id = $1 AND feature = ANY($2::text[])
+       ORDER BY feature FOR UPDATE`,
       [guildId, ['logging', ...CHANNEL_ID_FEATURES]],
     );
     let moved = 0;
@@ -57,9 +60,13 @@ export async function moveChannelId(db, guildId, oldId, newId) {
     await client.query('COMMIT');
     return { moved };
   } catch (err) {
-    await client.query('ROLLBACK');
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackErr) {
+      releaseErr = rollbackErr;
+    }
     throw err;
   } finally {
-    client.release();
+    client.release(releaseErr);
   }
 }

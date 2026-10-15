@@ -39,8 +39,9 @@ test('replaces channelId for greet, leave, boost and media', async () => {
   const r = await moveChannelId(db, G, OLD, NEW);
   assert.deepEqual(r, { moved: 4 });
   for (const k of ['greet', 'leave', 'boost', 'media']) {
-    const { config } = await getFeature(db, G, k);
+    const { config, enabled } = await getFeature(db, G, k);
     assert.deepEqual(config, { channelId: NEW, extra: k });
+    assert.equal(enabled, true);
   }
 });
 
@@ -64,17 +65,27 @@ test('other guilds are untouched', async () => {
 });
 
 test('a failure rolls back every change', async () => {
+  // ORDER BY feature: boost, greet, leave. The second UPDATE fails after the first ran.
+  await setFeature(db, G, 'boost', { config: { channelId: OLD } });
   await setFeature(db, G, 'greet', { config: { channelId: OLD } });
-  await setFeature(db, G, 'leave', { config: { channelId: OLD } });
   let released = false;
+  let updates = 0;
   const wrapped = {
     connect: async () => {
       const client = await db.connect();
       const q = client.query.bind(client);
       return {
         query: async (sql, params) => {
-          if (typeof sql === 'string' && sql.startsWith('UPDATE') && params?.[2] === 'leave') {
-            throw new Error('boom');
+          if (typeof sql === 'string' && sql.startsWith('UPDATE')) {
+            updates += 1;
+            if (updates === 2) throw new Error('boom');
+            const res = await q(sql, params);
+            const mid = await q(
+              'SELECT config FROM guild_settings WHERE guild_id = $1 AND feature = $2',
+              [G, params[2]],
+            );
+            assert.equal(mid.rows[0].config.channelId, NEW);
+            return res;
           }
           return q(sql, params);
         },
@@ -83,9 +94,21 @@ test('a failure rolls back every change', async () => {
     },
   };
   await assert.rejects(moveChannelId(wrapped, G, OLD, NEW), /boom/);
+  assert.equal(updates, 2);
   assert.equal(released, true);
+  assert.equal((await getFeature(db, G, 'boost')).config.channelId, OLD);
   assert.equal((await getFeature(db, G, 'greet')).config.channelId, OLD);
-  assert.equal((await getFeature(db, G, 'leave')).config.channelId, OLD);
+});
+
+test('mixed move sums changed rows', async () => {
+  await setFeature(db, G, 'logging', { config: { channels: { default: OLD } } });
+  await setFeature(db, G, 'greet', { config: { channelId: OLD } });
+  assert.deepEqual(await moveChannelId(db, G, OLD, NEW), { moved: 2 });
+});
+
+test('oldId equal to newId is a no-op', async () => {
+  await setFeature(db, G, 'greet', { config: { channelId: OLD } });
+  assert.deepEqual(await moveChannelId(db, G, OLD, OLD), { moved: 0 });
 });
 
 test('mediaHoldsChannel', async () => {
