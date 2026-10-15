@@ -4,7 +4,7 @@ Full detail: `docs/tiered-powers/specs/2026-10-14-feature-roadmap.md`. Original 
 
 ## Build order
 1. **Step 0 shared pieces**: generic scheduler (done, see below), mod-case store (done, see Moderation below), extra intents (GuildModeration and GuildVoiceStates are already added by logging; GuildMessageReactions is still to come) and invite permissions - add each only when its first feature ships.
-2. **Phase 2 Moderation**, strict order: mod cases + warn/kick/ban/timeout and timed actions (both built on `phase-2`, see below) -> channel tools (purge, slowmode, lock) -> auto-mod -> verification -> anti-raid.
+2. **Phase 2 Moderation**, strict order: mod cases + warn/kick/ban/timeout and timed actions (both built and merged into `autorole-upgrade`, see below) -> channel tools (purge, slowmode, lock) -> auto-mod -> verification -> anti-raid.
 3. **Phase 3 Automation**, any order: autoresponder, reaction roles, quote.
 4. **Phase 4 Community**: scheduler group (reminders, birthdays, stats channels); event group (AFK, leveling, starboard); staff group (tickets, confessions). Extend `/userinfo` last (needs levels, warnings, birthdays).
 5. **Phase 5**: backup/restore, translate (needs an API key in `.env`).
@@ -14,7 +14,7 @@ Full detail: `docs/tiered-powers/specs/2026-10-14-feature-roadmap.md`. Original 
 - **Shared scheduler (Step 0)**: built and merged into `autorole-upgrade` (pushed to origin; migration 005 runs on the next bot start) (spec: `docs/tiered-powers/specs/2026-10-14-scheduler-design.md`, plan: `docs/tiered-powers/plans/`). `scheduled_jobs` table, one 30 s ticker, at-least-once with retries; auto role's timed roles run on it and migration 005 moved waiting `pending_roles` rows over. See [[architecture]]. Moderation timed actions (temp ban, timed mute) are the next consumer.
 
 ## In progress
-- **Moderation (Phase 2 steps 1 and 2)**: Tasks 1 to 9 of the plan are done on branch `phase-2` (cut from `autorole-upgrade`); the final review is next, then merge. Spec `docs/tiered-powers/specs/2026-10-14-moderation-design.md`, plan `docs/tiered-powers/plans/2026-10-14-moderation.md`. What exists: `/warn`, `/timeout`, `/untimeout`, `/mute`, `/unmute`, `/kick`, `/ban`, `/unban`, `/warnings`, `/reason` and `/moderation` settings, numbered cases, mod log through the hidden `modAction` event, timed bans and mutes on the scheduler, mute role restored on rejoin. See [[features-built]], [[architecture]], [[decisions]], [[gotchas]]. Before it works on a server: run `npm run deploy` (new commands) and restart the bot (migration 006 runs on start).
+- **Moderation (Phase 2 steps 1 and 2)**: All 10 plan tasks are built, reviewed and merged into `autorole-upgrade` (pushed to origin). Spec `docs/tiered-powers/specs/2026-10-14-moderation-design.md`, plan `docs/tiered-powers/plans/2026-10-14-moderation.md`. What exists: `/warn`, `/timeout`, `/untimeout`, `/mute`, `/unmute`, `/kick`, `/ban`, `/unban`, `/warnings`, `/reason` and `/moderation` settings, numbered cases, mod log through the hidden `modAction` event, timed bans and mutes on the scheduler, mute role restored on rejoin. See [[features-built]], [[architecture]], [[decisions]], [[gotchas]]. Before it works on a server: run `npm run deploy` (new commands) and restart the bot (migration 006 runs on start).
 
 ## Planned, not built
 - Everything in the build order above except logging, the scheduler and moderation (cases and timed actions).
