@@ -11,8 +11,11 @@
 #   scripts/mirror-to-gitlab.sh jalter Nebula   # only these repos
 #   DRY_RUN=1 scripts/mirror-to-gitlab.sh       # show what would happen, change nothing
 #
-# You are asked for a GitLab personal access token (scope: api). Input is hidden and the token
-# is only sent to gitlab.com and stored as a GitHub secret. It is never written to a file.
+# The GitLab personal access token (scope: api) comes from, in order: the GITLAB_TOKEN environment
+# variable, the Windows credential vault (saved by an earlier run), or a hidden prompt. After a prompt
+# you can save it in the vault (encrypted for your Windows account) so new repos need no typing.
+#   scripts/mirror-to-gitlab.sh --forget        # delete the saved token (do this when it expires)
+# The token is only sent to gitlab.com and stored as a GitHub secret. It is never written to a file.
 set -euo pipefail
 
 GITHUB_USER="${GITHUB_USER:-Haruru0-0}"
@@ -26,11 +29,38 @@ export PATH="$PATH:/c/Program Files/GitHub CLI"
 command -v gh >/dev/null || { echo "gh (GitHub CLI) is not installed or not on PATH"; exit 1; }
 gh auth status >/dev/null 2>&1 || { echo "Run 'gh auth login' first"; exit 1; }
 
+VAULT_RESOURCE="jalter-gitlab-mirror"
+PS_VAULT='[void][Windows.Security.Credentials.PasswordVault,Windows.Security.Credentials,ContentType=WindowsRuntime]; $v = New-Object Windows.Security.Credentials.PasswordVault;'
+
+vault_get() {
+  powershell.exe -NoProfile -Command "$PS_VAULT try { \$c = \$v.Retrieve('$VAULT_RESOURCE','token'); \$c.RetrievePassword(); \$c.Password } catch {}" 2>/dev/null | tr -d ''
+}
+vault_set() {
+  TOKEN_IN="$1" powershell.exe -NoProfile -Command "$PS_VAULT try { \$v.Remove(\$v.Retrieve('$VAULT_RESOURCE','token')) } catch {}; \$v.Add((New-Object Windows.Security.Credentials.PasswordCredential '$VAULT_RESOURCE','token',\$env:TOKEN_IN))" 2>/dev/null
+}
+vault_forget() {
+  powershell.exe -NoProfile -Command "$PS_VAULT try { \$v.Remove(\$v.Retrieve('$VAULT_RESOURCE','token')); 'removed' } catch { 'nothing saved' }" 2>/dev/null | tr -d ''
+}
+
+if [ "${1:-}" = "--forget" ]; then
+  echo "Saved GitLab token: $(vault_forget)"
+  exit 0
+fi
+
 if [ "$DRY_RUN" = "1" ]; then
   TOKEN="dry-run"
 else
-  read -rsp "GitLab personal access token (api scope): " TOKEN; echo
-  [ -n "$TOKEN" ] || { echo "No token given"; exit 1; }
+  TOKEN="${GITLAB_TOKEN:-}"
+  if [ -z "$TOKEN" ]; then
+    TOKEN="$(vault_get)"
+    [ -z "$TOKEN" ] || echo "Using the GitLab token saved in the Windows vault."
+  fi
+  if [ -z "$TOKEN" ]; then
+    read -rsp "GitLab personal access token (api scope): " TOKEN; echo
+    [ -n "$TOKEN" ] || { echo "No token given"; exit 1; }
+    read -rp "Save it in the Windows vault so you are not asked again? [y/N] " save
+    if [ "$save" = "y" ] || [ "$save" = "Y" ]; then vault_set "$TOKEN" && echo "Saved."; fi
+  fi
 fi
 
 read -r -d '' WORKFLOW <<'YAML' || true
