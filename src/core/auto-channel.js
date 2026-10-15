@@ -11,6 +11,28 @@ export function singleFlight(key, fn) {
   return promise;
 }
 
+export const BACKOFF_MS = 10 * 60 * 1000;
+const retryAfter = new Map();
+let now = () => Date.now();
+
+/** Tests only: replaces the clock (pass nothing to restore it) and forgets all failures. */
+export function resetBackoff(clock) {
+  retryAfter.clear();
+  now = clock ?? (() => Date.now());
+}
+
+/**
+ * Runs `fn` (which returns a truthy value on success and null on failure) unless this key failed less than
+ * 10 minutes ago, in which case it returns null without calling it. A success clears the failure.
+ */
+export async function withBackoff(key, fn) {
+  if ((retryAfter.get(key) ?? 0) > now()) return null;
+  const result = await fn();
+  if (result) retryAfter.delete(key);
+  else retryAfter.set(key, now() + BACKOFF_MS);
+  return result;
+}
+
 /** Creates a text channel (needs Manage Channels). Returns the channel, or null after a warning. Never throws. */
 export async function ensureChannel(guild, { name, parentId, type = ChannelType.GuildText }) {
   try {

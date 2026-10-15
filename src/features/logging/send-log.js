@@ -1,5 +1,5 @@
 import { getFeature, setFeature } from '../../db/settings.js';
-import { ensureChannel, ensurePrivateCategory, singleFlight } from '../../core/auto-channel.js';
+import { ensureChannel, ensurePrivateCategory, singleFlight, withBackoff } from '../../core/auto-channel.js';
 import { categoryOf } from './events.js';
 import { fetchSendable, trySend } from '../../core/send.js';
 import { getLang } from '../../i18n/index.js';
@@ -10,7 +10,8 @@ import { isEventEnabled, isIgnored, resolveChannelId } from './config.js';
 // Returns the channel id, or null when creation failed. Never throws.
 async function createLogChannel(ctx, guildId, event) {
   const category = categoryOf(event);
-  return singleFlight(`${guildId}:${category}`, async () => {
+  const key = `${guildId}:${category}`;
+  return singleFlight(key, () => withBackoff(key, async () => {
     try {
       const { config } = await getFeature(ctx.db, guildId, 'logging');
       const existing = resolveChannelId(config, event);
@@ -35,7 +36,7 @@ async function createLogChannel(ctx, guildId, event) {
       console.warn(`Could not create log channel in ${guildId}: ${err.message}`);
       return null;
     }
-  });
+  }));
 }
 
 export async function sendLog(ctx, guildId, event, embed, opts = {}) {

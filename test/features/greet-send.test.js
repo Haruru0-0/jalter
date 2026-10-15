@@ -4,6 +4,7 @@ import { Events } from 'discord.js';
 import { handleMember, events } from '../../src/features/greet/send.js';
 import { setFeature, getFeature } from '../../src/db/settings.js';
 import { createEmbed, saveEmbed } from '../../src/features/embeds/store.js';
+import { resetBackoff } from '../../src/core/auto-channel.js';
 import { testDb } from '../helpers/db.js';
 
 let db;
@@ -12,6 +13,7 @@ let warnings;
 before(async () => { db = await testDb(); });
 beforeEach(async () => {
   await db.query('TRUNCATE guild_settings, media_items, embeds');
+  resetBackoff();
   warn = console.warn;
   warnings = [];
   console.warn = (...args) => { warnings.push(args.join(' ')); };
@@ -237,4 +239,19 @@ test('lazy creation that fails gives no-channel', async () => {
   f.member.guild.channels = { create: async () => { throw new Error('Missing Permissions'); } };
   await setFeature(db, 'g1', 'greet', { enabled: true });
   assert.equal(await handleMember(f.ctx(), f.member, 'greet'), 'no-channel');
+});
+
+test('lazy creation backs off after a failure and retries after 10 minutes', async () => {
+  let t = 1_000_000;
+  resetBackoff(() => t);
+  const f = fakeMember();
+  let attempts = 0;
+  f.member.guild.channels = { create: async () => { attempts += 1; throw new Error('Missing Permissions'); } };
+  await setFeature(db, 'g1', 'greet', { enabled: true });
+  await handleMember(f.ctx(), f.member, 'greet');
+  await handleMember(f.ctx(), f.member, 'greet');
+  assert.equal(attempts, 1);
+  t += 11 * 60 * 1000;
+  await handleMember(f.ctx(), f.member, 'greet');
+  assert.equal(attempts, 2);
 });

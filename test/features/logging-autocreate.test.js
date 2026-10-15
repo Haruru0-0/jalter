@@ -2,6 +2,7 @@ import { test, before, beforeEach, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { sendLog } from '../../src/features/logging/send-log.js';
 import { setFeature, getFeature } from '../../src/db/settings.js';
+import { resetBackoff } from '../../src/core/auto-channel.js';
 import { testDb } from '../helpers/db.js';
 
 let db;
@@ -10,6 +11,7 @@ let warnings;
 before(async () => { db = await testDb(); });
 beforeEach(async () => {
   await db.query('TRUNCATE guild_settings');
+  resetBackoff();
   warn = console.warn;
   warnings = [];
   console.warn = (...a) => warnings.push(a.join(' '));
@@ -121,4 +123,40 @@ test('a stored categoryId that is gone gets a new category', async () => {
   assert.equal(w.created.find((c) => c.type === 0).parent, cat.id);
   const { config } = await getFeature(db, 'g1', 'logging');
   assert.equal(config.categoryId, cat.id);
+});
+
+test('after a failed creation, later events within 10 minutes make no create call and return null', async () => {
+  let t = 1_000_000;
+  resetBackoff(() => t);
+  const w = world({ fail: true });
+  let attempts = 0;
+  const guild = w.ctx.client.guilds.cache.get('g1');
+  const create = guild.channels.create;
+  guild.channels.create = async (o) => { attempts += 1; return create(o); };
+  await enable();
+  await sendLog(w.ctx, 'g1', 'messageDelete', embed, { sourceChannelId: 'x' });
+  const first = attempts;
+  t += 9 * 60 * 1000;
+  assert.equal(await sendLog(w.ctx, 'g1', 'messageDelete', embed, { sourceChannelId: 'x' }), null);
+  assert.equal(attempts, first);
+  assert.equal(warnings.length, 1);
+  t += 2 * 60 * 1000;
+  await sendLog(w.ctx, 'g1', 'messageDelete', embed, { sourceChannelId: 'x' });
+  assert.ok(attempts > first);
+});
+
+test('the backoff is per category and a success is never delayed', async () => {
+  let t = 1_000_000;
+  resetBackoff(() => t);
+  const w = world();
+  await enable();
+  const guild = w.ctx.client.guilds.cache.get('g1');
+  const create = guild.channels.create;
+  let fail = true;
+  guild.channels.create = async (o) => { if (fail) throw new Error('nope'); return create(o); };
+  await sendLog(w.ctx, 'g1', 'messageDelete', embed, { sourceChannelId: 'x' });
+  fail = false;
+  assert.ok(await sendLog(w.ctx, 'g1', 'roleCreate', embed, { sourceChannelId: 'x' }));
+  assert.ok(await sendLog(w.ctx, 'g1', 'roleCreate', embed, { sourceChannelId: 'x' }));
+  assert.equal(w.created.filter((c) => c.type === 0).length, 1);
 });

@@ -1,7 +1,7 @@
 import { Events } from 'discord.js';
 import { getFeature, setFeature } from '../../db/settings.js';
 import { fetchSendable, trySend } from '../../core/send.js';
-import { ensureChannel, singleFlight } from '../../core/auto-channel.js';
+import { ensureChannel, singleFlight, withBackoff } from '../../core/auto-channel.js';
 import { safeMentions } from '../../core/mentions.js';
 import { buildVars, renderPlaceholders } from '../../core/placeholders.js';
 import { getEmbed, normalizeEmbedName } from '../embeds/store.js';
@@ -68,14 +68,15 @@ export async function handleMember(ctx, member, kind) {
     let channelId = config.channelId;
     if (!channelId) {
       // Enabled but no channel chosen: make one (one run at a time per guild and kind) and remember it.
-      channelId = await singleFlight(`${member.guild.id}:${kind}`, async () => {
+      const key = `${member.guild.id}:${kind}`;
+      channelId = await singleFlight(key, () => withBackoff(key, async () => {
         const fresh = await getFeature(ctx.db, member.guild.id, kind);
         if (fresh.config.channelId) return fresh.config.channelId;
         const created = await ensureChannel(member.guild, { name: AUTO_CHANNEL_NAME[kind] });
         if (!created) return null;
         await setFeature(ctx.db, member.guild.id, kind, { config: { channelId: created.id } });
         return created.id;
-      });
+      }));
       if (!channelId) return 'no-channel';
     }
     // A partial member (left while uncached) normally still carries its user.
