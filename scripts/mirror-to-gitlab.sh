@@ -33,13 +33,13 @@ VAULT_RESOURCE="jalter-gitlab-mirror"
 PS_VAULT='[void][Windows.Security.Credentials.PasswordVault,Windows.Security.Credentials,ContentType=WindowsRuntime]; $v = New-Object Windows.Security.Credentials.PasswordVault;'
 
 vault_get() {
-  powershell.exe -NoProfile -Command "$PS_VAULT try { \$c = \$v.Retrieve('$VAULT_RESOURCE','token'); \$c.RetrievePassword(); \$c.Password } catch {}" 2>/dev/null | tr -d ''
+  powershell.exe -NoProfile -Command "$PS_VAULT try { \$c = \$v.Retrieve('$VAULT_RESOURCE','token'); \$c.RetrievePassword(); \$c.Password } catch {}" 2>/dev/null | awk '{ sub(/[[:cntrl:]]+$/, "") } 1'
 }
 vault_set() {
   TOKEN_IN="$1" powershell.exe -NoProfile -Command "$PS_VAULT try { \$v.Remove(\$v.Retrieve('$VAULT_RESOURCE','token')) } catch {}; \$v.Add((New-Object Windows.Security.Credentials.PasswordCredential '$VAULT_RESOURCE','token',\$env:TOKEN_IN))" 2>/dev/null
 }
 vault_forget() {
-  powershell.exe -NoProfile -Command "$PS_VAULT try { \$v.Remove(\$v.Retrieve('$VAULT_RESOURCE','token')); 'removed' } catch { 'nothing saved' }" 2>/dev/null | tr -d ''
+  powershell.exe -NoProfile -Command "$PS_VAULT try { \$v.Remove(\$v.Retrieve('$VAULT_RESOURCE','token')); 'removed' } catch { 'nothing saved' }" 2>/dev/null | awk '{ sub(/[[:cntrl:]]+$/, "") } 1'
 }
 
 if [ "${1:-}" = "--forget" ]; then
