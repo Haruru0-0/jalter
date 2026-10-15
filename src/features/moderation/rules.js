@@ -13,6 +13,7 @@ export const ACTION_PERMISSIONS = {
 
 const MIN_SECONDS = 60;
 const TIMEOUT_MAX_SECONDS = 2_419_200;
+const MAX_SECONDS = 315_360_000; // 10 years, for any timed action
 
 /** True when the member holds the Discord permission for the action or a permitted role. */
 export function canUseAction(member, action, config) {
@@ -38,7 +39,9 @@ export function checkTarget({ guild, actor, target, targetId, botMember }) {
 
 export function checkDuration(action, seconds) {
   if (seconds === null || seconds === undefined) return { ok: true };
-  if (!Number.isFinite(seconds) || seconds < MIN_SECONDS) return { ok: false, reason: 'too_short' };
+  if (Number.isNaN(seconds) || seconds < MIN_SECONDS) return { ok: false, reason: 'too_short' };
+  // The cap keeps end times storable: act first, fail to save later is worse than refusing.
+  if (!Number.isFinite(seconds) || seconds > MAX_SECONDS) return { ok: false, reason: 'too_long' };
   if (action === 'timeout' && seconds > TIMEOUT_MAX_SECONDS) return { ok: false, reason: 'too_long' };
   return { ok: true };
 }

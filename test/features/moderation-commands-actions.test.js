@@ -114,7 +114,7 @@ const last = (f) => f.calls.replies.at(-1).content;
 test('a member without permission or permitted role is refused', async () => {
   const f = fake({ perms: [], targets: { u1: member('u1', 1) } });
   await run('kick', f);
-  assert.equal(last(f), t('en', 'common.notAllowed'));
+  assert.equal(last(f), t('en', 'moderation.err.not_allowed'));
   assert.equal(f.calls.replies.length, 1);
 });
 
@@ -130,6 +130,22 @@ test('the feature being off gives the standard off message', async () => {
   const f = fake({ targets: { u1: member('u1', 1) } });
   await run('warn', f);
   assert.match(last(f), /This feature is off/);
+});
+
+test('duration options are at most 32 characters', () => {
+  for (const name of ['timeout', 'mute', 'ban']) {
+    const opt = byName(name).data.toJSON().options.find((o) => o.name === 'duration');
+    assert.equal(opt.max_length, 32, name);
+  }
+});
+
+test('a huge ban duration is refused before anything happens', async () => {
+  const f = fake({ opts: { duration: '1000000000d', reason: 'r' }, targets: { u1: member('u1', 1) } });
+  await run('ban', f);
+  assert.equal(last(f), t('en', 'moderation.err.too_long'));
+  assert.deepEqual(f.calls.discord, []);
+  assert.equal(Number((await db.query('SELECT count(*) FROM mod_cases')).rows[0].count), 0);
+  assert.equal(Number((await db.query('SELECT count(*) FROM scheduled_jobs')).rows[0].count), 0);
 });
 
 test('an unparseable duration is reported and nothing runs', async () => {
@@ -183,6 +199,16 @@ test('timeout with a duration parses it and shows it', async () => {
   await run('timeout', f);
   assert.match(last(f), /#1/);
   assert.match(last(f), /1h/);
+});
+
+test('a member lookup that fails for another reason stops the action instead of skipping hierarchy', async () => {
+  for (const name of ['ban', 'kick', 'warn']) {
+    const f = fake({ opts: { reason: 'r' } });
+    f.guild.members.fetch = async () => { throw err(503, 0); };
+    await assert.rejects(run(name, f), /x/, name);
+    assert.deepEqual(f.calls.discord, [], name);
+  }
+  assert.equal(Number((await db.query('SELECT count(*) FROM mod_cases')).rows[0].count), 0);
 });
 
 test('kick of a user not in the server reports not_in_server', async () => {

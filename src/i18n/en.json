@@ -262,7 +262,7 @@
   "moderation.err.not_banned": "That user is not banned.",
   "moderation.err.not_in_server": "That user is not in this server.",
   "moderation.err.too_short": "The duration must be at least 1 minute.",
-  "moderation.err.too_long": "A timeout can last at most 28 days.",
+  "moderation.err.too_long": "That duration is too long: a timeout can last at most 28 days, a mute or ban at most 10 years.",
   "moderation.err.discord_refused": "Discord refused the action. Check my permissions and role position.",
   "moderation.case.title": "Case #{number}: {type}",
   "moderation.case.target": "User",
@@ -327,7 +327,7 @@
   "moderation.settings.permitted_roles": "Permitted roles",
   "moderation.settings.permitted_full": "You can add at most {limit} permitted roles.",
   "moderation.settings.permitted_exists": "That role is already permitted.",
-  "moderation.settings.permitted_added": "{role} can now use the moderation commands it has permission for.",
+  "moderation.settings.permitted_added": "{role} can now use every moderation command, whatever its Discord permissions.",
   "moderation.settings.permitted_missing": "That role is not in the permitted list.",
   "moderation.settings.permitted_removed": "{role} is no longer a permitted role."
 }

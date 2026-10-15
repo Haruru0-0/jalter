@@ -262,7 +262,7 @@
   "moderation.err.not_banned": "Cet utilisateur n'est pas banni.",
   "moderation.err.not_in_server": "Cet utilisateur n'est pas sur ce serveur.",
   "moderation.err.too_short": "La durée doit être d'au moins 1 minute.",
-  "moderation.err.too_long": "Une exclusion temporaire dure 28 jours au maximum.",
+  "moderation.err.too_long": "Cette durée est trop longue : une exclusion temporaire dure 28 jours au maximum, un mute ou un bannissement 10 ans au maximum.",
   "moderation.err.discord_refused": "Discord a refusé l'action. Vérifiez mes permissions et la position de mon rôle.",
   "moderation.case.title": "Cas n°{number} : {type}",
   "moderation.case.target": "Utilisateur",
@@ -327,7 +327,7 @@
   "moderation.settings.permitted_roles": "Rôles autorisés",
   "moderation.settings.permitted_full": "Vous pouvez ajouter au maximum {limit} rôles autorisés.",
   "moderation.settings.permitted_exists": "Ce rôle est déjà autorisé.",
-  "moderation.settings.permitted_added": "{role} peut maintenant utiliser les commandes de modération pour lesquelles il a la permission.",
+  "moderation.settings.permitted_added": "{role} peut maintenant utiliser toutes les commandes de modération, quelles que soient ses permissions Discord.",
   "moderation.settings.permitted_missing": "Ce rôle n’est pas dans la liste des rôles autorisés.",
   "moderation.settings.permitted_removed": "{role} n’est plus un rôle autorisé."
 }

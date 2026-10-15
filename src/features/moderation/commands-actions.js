@@ -9,6 +9,7 @@ import { canUseAction } from './rules.js';
 import { runAction } from './actions.js';
 
 const REASON_MAX = 400;
+const DURATION_MAX = 32;
 
 const DEFS = [
   { name: 'warn', description: 'Warn a member', duration: false },
@@ -25,7 +26,8 @@ function build(def) {
   const b = new SlashCommandBuilder().setName(def.name).setDescription(def.description);
   b.addUserOption((o) => o.setName('user').setDescription('The user (mention or ID)').setRequired(true));
   if (def.duration) {
-    b.addStringOption((o) => o.setName('duration').setDescription('For example 30m, 2h or 7d; empty for the default'));
+    b.addStringOption((o) => o.setName('duration')
+      .setDescription('For example 30m, 2h or 7d; empty for the default').setMaxLength(DURATION_MAX));
   }
   if (def.deleteDays) {
     b.addIntegerOption((o) =>
@@ -35,12 +37,16 @@ function build(def) {
   return b;
 }
 
+const UNKNOWN_MEMBER = 10007;
+
 async function fetchMember(guild, id) {
   try {
     return await guild.members.fetch(id);
-  } catch {
-    // Not in the server (or the lookup failed): the engine decides what that means for the action.
-    return null;
+  } catch (err) {
+    // Not in the server: the engine decides what that means for the action. Any other failure
+    // must not pass as "not a member", or the hierarchy checks would be skipped.
+    if (err?.code === UNKNOWN_MEMBER) return null;
+    throw err;
   }
 }
 
@@ -67,7 +73,7 @@ function makeCommand(def) {
     const { config: raw } = await getFeature(ctx.db, interaction.guildId, 'moderation');
     const config = readConfig(raw);
     if (!canUseAction(interaction.member, type, config)) {
-      await interaction.reply(ephemeral(t(lang, 'common.notAllowed')));
+      await interaction.reply(ephemeral(t(lang, 'moderation.err.not_allowed')));
       return;
     }
 

@@ -28,8 +28,8 @@ function fakeMember(id, position, calls, opts = {}) {
     roles: {
       highest: { position },
       cache: { has: (r) => roleIds.has(r) },
-      add: async (r, why) => { calls.push(['roles.add', id, r, why]); if (opts.fail) throw opts.fail; },
-      remove: async (r, why) => { calls.push(['roles.remove', id, r, why]); if (opts.fail) throw opts.fail; },
+      add: async (r, why) => { calls.push(['roles.add', id, r, why]); if (opts.fail) throw opts.fail; roleIds.add(r); },
+      remove: async (r, why) => { calls.push(['roles.remove', id, r, why]); if (opts.fail) throw opts.fail; roleIds.delete(r); },
     },
     send: async (text) => { calls.push(['dm', id, text]); if (opts.dmFail) throw new Error('closed'); },
     timeout: async (ms, why) => { calls.push(['timeout', id, ms, why]); if (opts.fail) throw opts.fail; },
@@ -130,6 +130,7 @@ test('already_muted is refused', async () => {
   const res = await runAction(s.ctx, params(s, { type: 'mute', target }));
   assert.equal(res.reason, 'already_muted');
   assert.equal(await count(), 1);
+  assert.deepEqual(s.calls, []);
 });
 
 test('reason is required only for punishments and relaxed by config', async () => {
@@ -321,14 +322,16 @@ test('expiry runs even when the moderation feature is off, in the guild language
   assert.ok(c.reason.length > 0);
 });
 
+const expiredMute = () => createCase(db, {
+  guildId: 'g1', type: 'mute', targetId: 'u1', moderatorId: 'mod', reason: 'x',
+  durationMs: 60000, endsAt: Date.now() - 1000,
+});
+
 test('expireMute removes the role even after ends_at, and is a no-op once unmuted', async () => {
   const s = setup();
-  s.add('u1');
+  s.add('u1', 1, { roles: ['MUTE'] });
   await setFeature(db, 'g1', 'moderation', { enabled: true, config: { muteRoleId: 'MUTE' } });
-  await createCase(db, {
-    guildId: 'g1', type: 'mute', targetId: 'u1', moderatorId: 'mod', reason: 'x',
-    durationMs: 60000, endsAt: Date.now() - 1000,
-  });
+  await expiredMute();
   const job = { guildId: 'g1', payload: { userId: 'u1' } };
   await jobs['mod.unmute'](s.ctx, job);
   assert.equal(s.calls.filter((c) => c[0] === 'roles.remove').length, 1);
@@ -339,12 +342,58 @@ test('expireMute removes the role even after ends_at, and is a no-op once unmute
   assert.equal(await count(), 2);
 });
 
+test('expireMute leaves a permanent mute made after the timed mute ended alone', async () => {
+  const s = setup();
+  s.add('u1', 1, { roles: ['MUTE'] });
+  await setFeature(db, 'g1', 'moderation', { enabled: true, config: { muteRoleId: 'MUTE' } });
+  await expiredMute();
+  await createCase(db, { guildId: 'g1', type: 'mute', targetId: 'u1', moderatorId: 'mod', reason: 'again' });
+  await jobs['mod.unmute'](s.ctx, { guildId: 'g1', payload: { userId: 'u1' } });
+  assert.deepEqual(s.calls, []);
+  assert.equal(await count(), 2);
+  assert.equal((await getCase(db, 'g1', 2)).type, 'mute');
+});
+
+test('expireMute leaves a newer timed mute that has not ended alone', async () => {
+  const s = setup();
+  s.add('u1', 1, { roles: ['MUTE'] });
+  await setFeature(db, 'g1', 'moderation', { enabled: true, config: { muteRoleId: 'MUTE' } });
+  await expiredMute();
+  await createCase(db, {
+    guildId: 'g1', type: 'mute', targetId: 'u1', moderatorId: 'mod', reason: 'again',
+    durationMs: 3_600_000, endsAt: Date.now() + 3_600_000,
+  });
+  await jobs['mod.unmute'](s.ctx, { guildId: 'g1', payload: { userId: 'u1' } });
+  assert.deepEqual(s.calls, []);
+  assert.equal(await count(), 2);
+});
+
+test('expireMute removes the role of a timed mute whose case was never saved', async () => {
+  const s = setup();
+  s.add('u1', 1, { roles: ['MUTE'] });
+  await setFeature(db, 'g1', 'moderation', { enabled: true, config: { muteRoleId: 'MUTE' } });
+  await jobs['mod.unmute'](s.ctx, { guildId: 'g1', payload: { userId: 'u1' } });
+  assert.deepEqual(s.calls.map((c) => c.slice(0, 3)), [['roles.remove', 'u1', 'MUTE']]);
+  const c = await getCase(db, 'g1', 1);
+  assert.deepEqual([c.type, c.moderatorId], ['unmute', 'bot']);
+});
+
+test('expireMute does nothing when the member no longer has the mute role', async () => {
+  const s = setup();
+  s.add('u1');
+  await setFeature(db, 'g1', 'moderation', { enabled: true, config: { muteRoleId: 'MUTE' } });
+  await expiredMute();
+  await jobs['mod.unmute'](s.ctx, { guildId: 'g1', payload: { userId: 'u1' } });
+  assert.deepEqual(s.calls, []);
+  assert.equal(await count(), 1);
+});
+
 test('expireMute finishes quietly when the member or the role is gone', async () => {
   const s = setup();
   await setFeature(db, 'g1', 'moderation', { enabled: true, config: { muteRoleId: 'MUTE' } });
-  await createCase(db, { guildId: 'g1', type: 'mute', targetId: 'u1', moderatorId: 'mod', reason: 'x' });
+  await expiredMute();
   await jobs['mod.unmute'](s.ctx, { guildId: 'g1', payload: { userId: 'u1' } });
-  s.add('u1');
+  s.add('u1', 1, { roles: ['MUTE'] });
   s.guild.roles.cache.clear();
   await jobs['mod.unmute'](s.ctx, { guildId: 'g1', payload: { userId: 'u1' } });
   assert.deepEqual(s.calls, []);
@@ -357,13 +406,16 @@ test('a 403 finishes the job, a 500 throws so the scheduler retries', async () =
   const s2 = setup({ banned: ['u1'], botFail: discordError(500) });
   await assert.rejects(jobs['mod.unban'](s2.ctx, { guildId: 'g1', payload: { userId: 'u1' } }));
   const s3 = setup();
-  s3.add('u1', 1, { fail: discordError(500) });
+  s3.add('u1', 1, { fail: discordError(500), roles: ['MUTE'] });
   await setFeature(db, 'g1', 'moderation', { config: { muteRoleId: 'MUTE' } });
-  await createCase(db, { guildId: 'g1', type: 'mute', targetId: 'u1', moderatorId: 'mod', reason: 'x' });
+  await expiredMute();
   await assert.rejects(jobs['mod.unmute'](s3.ctx, { guildId: 'g1', payload: { userId: 'u1' } }));
   s3.members.get('u1').roles.remove = async () => { throw discordError(403, 50013); };
   await jobs['mod.unmute'](s3.ctx, { guildId: 'g1', payload: { userId: 'u1' } });
   assert.equal(await count(), 1);
+  const s4 = setup();
+  s4.guild.members.fetch = async () => { throw discordError(503); };
+  await assert.rejects(jobs['mod.unmute'](s4.ctx, { guildId: 'g1', payload: { userId: 'u1' } }));
 });
 
 test('the scheduler runs a due mod.unban end to end', async () => {

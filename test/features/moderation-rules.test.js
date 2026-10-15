@@ -79,3 +79,14 @@ test('checkDuration', () => {
   assert.deepEqual(checkDuration('timeout', null), { ok: true });
   assert.deepEqual(checkDuration('ban', null), { ok: true });
 });
+
+test('checkDuration caps every action at 10 years', () => {
+  for (const action of ['ban', 'mute', 'timeout']) {
+    assert.deepEqual(checkDuration(action, 315_360_001), { ok: false, reason: 'too_long' }, action);
+    assert.deepEqual(checkDuration(action, 1_000_000_000 * 86400), { ok: false, reason: 'too_long' }, action);
+    assert.deepEqual(checkDuration(action, Infinity), { ok: false, reason: 'too_long' }, action);
+  }
+  assert.deepEqual(checkDuration('ban', 315_360_000), { ok: true });
+  assert.deepEqual(checkDuration('mute', 315_360_000), { ok: true });
+  assert.deepEqual(checkDuration('ban', Number.NaN), { ok: false, reason: 'too_short' });
+});

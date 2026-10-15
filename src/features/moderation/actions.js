@@ -15,6 +15,7 @@ const UNKNOWN_BAN = 10026;
 const UNKNOWN_MEMBER = 10007;
 const UNKNOWN_ROLE = 10011;
 const AUDIT_REASON_MAX = 512;
+const EXPIRY_GRACE_MS = 1000;
 
 const UNBAN_JOB = 'mod.unban';
 const UNMUTE_JOB = 'mod.unmute';
@@ -192,14 +193,17 @@ export async function expireMute(ctx, job) {
   const guild = ctx.client.guilds.cache.get(job.guildId);
   if (!guild) return;
   const { userId } = job.payload;
-  // nowMs 0: the mute's own end time has passed by now, only a later unmute or a newer mute counts.
-  if (!(await isCurrentlyMuted(ctx.db, guild.id, userId, 0))) return;
+  // A newer mute that is still running (permanent, or ending later) owns the role now.
+  // The grace covers rounding between the job's due time and the case's end time.
+  if (await isCurrentlyMuted(ctx.db, guild.id, userId, Date.now() + EXPIRY_GRACE_MS)) return;
   const { config } = await getFeature(ctx.db, guild.id, 'moderation');
   const roleId = muteRoleOf(guild, readConfig(config));
   if (!roleId) return;
   const lang = await getLang(ctx.db, guild.id);
   try {
     const member = await guild.members.fetch(userId);
+    // Idempotent on the role itself, so a lost mute case still expires and a done one is not logged twice.
+    if (!member.roles.cache.has(roleId)) return;
     await member.roles.remove(roleId, auditReason(t(lang, 'moderation.expired')));
   } catch (err) {
     if (err?.code === UNKNOWN_MEMBER || err?.code === UNKNOWN_ROLE) return;

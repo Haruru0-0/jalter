@@ -262,7 +262,7 @@
   "moderation.err.not_banned": "هذا المستخدم غير محظور.",
   "moderation.err.not_in_server": "هذا المستخدم ليس في السيرفر.",
   "moderation.err.too_short": "يجب ألا تقل المدة عن دقيقة واحدة.",
-  "moderation.err.too_long": "أقصى مدة للكتم المؤقت هي 28 يوما.",
+  "moderation.err.too_long": "هذه المدة طويلة جدا: أقصى مدة للكتم المؤقت هي 28 يوما، وللكتم أو الحظر 10 سنوات.",
   "moderation.err.discord_refused": "رفض ديسكورد الإجراء. تحقق من صلاحياتي وموضع رتبتي.",
   "moderation.case.title": "القضية رقم {number}: {type}",
   "moderation.case.target": "المستخدم",
@@ -327,7 +327,7 @@
   "moderation.settings.permitted_roles": "الرتب المسموح لها",
   "moderation.settings.permitted_full": "يمكنك إضافة {limit} رتب مسموح لها كحد أقصى.",
   "moderation.settings.permitted_exists": "هذه الرتبة مسموح لها بالفعل.",
-  "moderation.settings.permitted_added": "يمكن للرتبة {role} الآن استخدام أوامر الإشراف التي لديها صلاحيتها.",
+  "moderation.settings.permitted_added": "يمكن للرتبة {role} الآن استخدام جميع أوامر الإشراف، بغض النظر عن صلاحياتها في ديسكورد.",
   "moderation.settings.permitted_missing": "هذه الرتبة ليست في قائمة الرتب المسموح لها.",
   "moderation.settings.permitted_removed": "لم تعد {role} رتبة مسموحًا لها."
 }
