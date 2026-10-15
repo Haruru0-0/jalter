@@ -243,3 +243,35 @@ test('/reason refuses an empty reason, an unknown case, and a member without per
   await run('reason', denied);
   assert.equal(last(denied), t('en', 'moderation.err.not_allowed'));
 });
+
+// ---- fix round 1 ----
+
+test('a long list stays within the 2000-char message limit and the tail count is right', async () => {
+  for (let i = 0; i < 25; i++) await warn('u1', 'x'.repeat(400));
+  const f = fake({ sub: 'list', opts: { user: 'u1' } });
+  await run('warnings', f);
+  const text = last(f);
+  assert.ok(text.length <= 2000, `length ${text.length}`);
+  const shown = text.split('\n').filter((l) => /^#\d+ /.test(l)).length;
+  assert.ok(shown > 0 && shown < 25);
+  assert.ok(text.endsWith(t('en', 'moderation.warnings.more', { count: 25 - shown })));
+});
+
+test('edit with a whitespace reason is refused and changes nothing', async () => {
+  await warn('u1', 'old');
+  const f = fake({ sub: 'edit', opts: { id: 1, reason: '   ' } });
+  await run('warnings', f);
+  assert.equal(last(f), t('en', 'moderation.err.reason_required'));
+  assert.equal((await getCase(db, 'g1', 1)).reason, 'old');
+});
+
+test('a permitted-role holder without Discord permission can list others and use /reason', async () => {
+  await setFeature(db, 'g1', 'moderation', { config: { permittedRoles: ['R'] } });
+  await warn('u1', 'spam');
+  const l = fake({ sub: 'list', opts: { user: 'u1' }, perms: [], roles: ['R'] });
+  await run('warnings', l);
+  assert.ok(last(l).includes('spam'));
+  const r = fake({ opts: { case: 1, reason: 'new' }, perms: [], roles: ['R'] });
+  await run('reason', r);
+  assert.equal((await getCase(db, 'g1', 1)).reason, 'new');
+});

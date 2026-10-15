@@ -14,6 +14,8 @@ const REASON_MAX = 400;
 const LIST_MAX = 25;
 const TOP_MAX = 10;
 const LINE_REASON_MAX = 100;
+// Discord caps message content at 2000; leave room for the tail line.
+const LIST_BUDGET = 1900;
 
 const warnings = new SlashCommandBuilder()
   .setName('warnings')
@@ -68,8 +70,16 @@ async function list(interaction, ctx, lang, config) {
   const rows = await listWarnings(ctx.db, interaction.guildId, userId);
   if (rows.length === 0) return reply(interaction, t(lang, 'moderation.warnings.none', { user: userId }));
   const lines = [t(lang, 'moderation.warnings.header', { user: userId, count: rows.length })];
-  for (const w of rows.slice(0, LIST_MAX)) lines.push(warningLine(lang, w));
-  if (rows.length > LIST_MAX) lines.push(t(lang, 'moderation.warnings.more', { count: rows.length - LIST_MAX }));
+  let shown = 0;
+  let length = lines[0].length;
+  for (const w of rows.slice(0, LIST_MAX)) {
+    const line = warningLine(lang, w);
+    if (length + line.length + 1 > LIST_BUDGET) break;
+    lines.push(line);
+    length += line.length + 1;
+    shown += 1;
+  }
+  if (rows.length > shown) lines.push(t(lang, 'moderation.warnings.more', { count: rows.length - shown }));
   return reply(interaction, lines.join('\n'));
 }
 
@@ -98,7 +108,7 @@ async function executeWarnings(interaction, ctx) {
   }
   const id = interaction.options.getInteger('id', true);
   if (sub === 'edit') {
-    const text = (interaction.options.getString('reason', true) ?? '').trim();
+    const text = interaction.options.getString('reason', true).trim();
     if (text === '') return reply(interaction, t(lang, 'moderation.err.reason_required'));
     const ok = await editWarning(ctx.db, guildId, id, text);
     return reply(interaction, ok
@@ -130,7 +140,7 @@ async function executeReason(interaction, ctx) {
   if (!canUseAction(interaction.member, 'reason', config)) return deny(interaction, lang);
 
   const number = interaction.options.getInteger('case', true);
-  const text = (interaction.options.getString('reason', true) ?? '').trim();
+  const text = interaction.options.getString('reason', true).trim();
   if (text === '') return reply(interaction, t(lang, 'moderation.err.reason_required'));
   const ok = await setCaseReason(ctx.db, interaction.guildId, number, text);
   if (!ok) return reply(interaction, t(lang, 'moderation.err.no_such_case'));
