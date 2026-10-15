@@ -1,6 +1,7 @@
 import { Events } from 'discord.js';
-import { getFeature } from '../../db/settings.js';
+import { getFeature, setFeature } from '../../db/settings.js';
 import { fetchSendable, trySend } from '../../core/send.js';
+import { ensureChannel, singleFlight } from '../../core/auto-channel.js';
 import { safeMentions } from '../../core/mentions.js';
 import { buildVars, renderPlaceholders } from '../../core/placeholders.js';
 import { getEmbed, normalizeEmbedName } from '../embeds/store.js';
@@ -9,6 +10,7 @@ import { parseImageInput, resolveImage } from '../media/images.js';
 import { getLang } from '../../i18n/index.js';
 import { renderCard } from './card.js';
 import { DEFAULT_MESSAGE, DM_KINDS } from './kinds.js';
+import { AUTO_CHANNEL_NAME } from './config.js';
 import { buildContent, ensureNotEmpty } from './message.js';
 
 // Text plus the optional embed and card. Throws when an image or the card cannot be built;
@@ -63,13 +65,25 @@ export async function handleMember(ctx, member, kind) {
   try {
     const { enabled, config } = await getFeature(ctx.db, member.guild.id, kind);
     if (!enabled) return 'off';
-    if (!config.channelId) return 'no-channel';
+    let channelId = config.channelId;
+    if (!channelId) {
+      // Enabled but no channel chosen: make one (one run at a time per guild and kind) and remember it.
+      channelId = await singleFlight(`${member.guild.id}:${kind}`, async () => {
+        const fresh = await getFeature(ctx.db, member.guild.id, kind);
+        if (fresh.config.channelId) return fresh.config.channelId;
+        const created = await ensureChannel(member.guild, { name: AUTO_CHANNEL_NAME[kind] });
+        if (!created) return null;
+        await setFeature(ctx.db, member.guild.id, kind, { config: { channelId: created.id } });
+        return created.id;
+      });
+      if (!channelId) return 'no-channel';
+    }
     // A partial member (left while uncached) normally still carries its user.
     if (!member.user) {
       console.warn(`Greet ${kind} skipped in ${member.guild.id}: member has no user data`);
       return 'send-failed';
     }
-    const channel = await fetchSendable(ctx.client, config.channelId);
+    const channel = await fetchSendable(ctx.client, channelId);
     if (!channel) {
       console.warn(`Channel for ${kind} missing in guild ${member.guild.id}`);
       return 'no-channel';

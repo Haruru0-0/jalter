@@ -2,7 +2,7 @@ import { test, before, beforeEach, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { Events } from 'discord.js';
 import { handleMember, events } from '../../src/features/greet/send.js';
-import { setFeature } from '../../src/db/settings.js';
+import { setFeature, getFeature } from '../../src/db/settings.js';
 import { createEmbed, saveEmbed } from '../../src/features/embeds/store.js';
 import { testDb } from '../helpers/db.js';
 
@@ -206,4 +206,35 @@ test('the boost handler fires only when premiumSince goes from null to a date', 
   assert.equal(f.sent.length, 1);
   assert.deepEqual(events.map((e) => e.name),
     [Events.GuildMemberAdd, Events.GuildMemberRemove, Events.GuildMemberUpdate]);
+});
+
+test('enabled without a channel creates one lazily, stores it and sends', async () => {
+  const f = fakeMember();
+  const created = [];
+  f.member.guild.channels = { create: async (o) => { created.push(o); return { id: 'c9', ...o }; } };
+  const ctx = { db, client: { channels: { fetch: async (id) => (id === 'c9' ? f.channel : null) } } };
+  await setFeature(db, 'g1', 'greet', { enabled: true });
+  assert.equal(await handleMember(ctx, f.member, 'greet'), 'sent');
+  assert.equal(created.length, 1);
+  assert.equal(created[0].name, 'welcome');
+  assert.equal(f.sent.length, 1);
+  const { config } = await getFeature(db, 'g1', 'greet');
+  assert.equal(config.channelId, 'c9');
+});
+
+test('a deleted configured channel is not recreated', async () => {
+  const f = fakeMember();
+  let creates = 0;
+  f.member.guild.channels = { create: async () => { creates += 1; return { id: 'zz' }; } };
+  const ctx = { db, client: { channels: { fetch: async () => null } } };
+  await on('greet');
+  assert.equal(await handleMember(ctx, f.member, 'greet'), 'no-channel');
+  assert.equal(creates, 0);
+});
+
+test('lazy creation that fails gives no-channel', async () => {
+  const f = fakeMember();
+  f.member.guild.channels = { create: async () => { throw new Error('Missing Permissions'); } };
+  await setFeature(db, 'g1', 'greet', { enabled: true });
+  assert.equal(await handleMember(f.ctx(), f.member, 'greet'), 'no-channel');
 });

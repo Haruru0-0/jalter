@@ -183,6 +183,7 @@
   "greet.messageSaved": "تم حفظ رسالة {kind}.",
   "greet.messageDisabled": "تم إيقاف رسالة {kind}.",
   "greet.messageNeedsChannel": "تم حفظ رسالة {kind} لكنها تبقى متوقفة حتى تختار قناة بالأمر {command}.",
+  "greet.messageSavedCreated": "تم حفظ رسالة {kind} وتفعيلها. أنشأت القناة {channel} لها؛ استخدم الأمر {command} لاختيار قناة أخرى.",
   "greet.embedMissing": "ملاحظة: لا يوجد إيمبد باسم `{name}` بعد، لذلك لن يظهر.",
   "greet.cardOn": "بطاقة {kind} مفعّلة.",
   "greet.cardOff": "بطاقة {kind} متوقفة.",

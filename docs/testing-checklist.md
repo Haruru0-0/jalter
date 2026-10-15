@@ -65,6 +65,7 @@ Repeat for `greet`, `leave` and `boost` (leave has no `dm` option).
 - [ ] `/set greet dm on`: the DM arrives (greet and boost only).
 - [ ] A real join, leave and server boost send the matching message.
 - [ ] Delete the greet channel, run `/test greet`: the bot does not crash.
+- [ ] Auto-create (bot has Manage Channels): on a fresh server, `/set greet message text:hi` creates a public `#welcome`, turns greet on and the reply mentions it; `/test greet` posts there. Same for `leave` (`#goodbye`) and `boost` (`#boosts`). With a channel chosen first (`/set greet channel`), nothing is created. Without Manage Channels the reply says the message is saved but off.
 
 ## 8. Auto role
 
@@ -81,6 +82,8 @@ Repeat for `greet`, `leave` and `boost` (leave has no `dm` option).
 Set up a log channel first: `/logging setup` (needs Manage Channels) or `/logging set category:messages channel:<channel>`.
 
 ### Messages
+
+- [ ] Auto-create: with logging on and no channel chosen for a category (and no default), the first event of that category (for example deleting a message) creates a private "Logs" category with `messages-logs` (`mod-logs`, `server-logs` and so on for other categories) and posts there. Further events reuse it; a chosen channel or default channel is used instead and nothing is created.
 
 - [ ] Edit and delete a message: both logs appear. Edits inside the log channel itself are not logged.
 - [ ] Delete a message as a moderator (View Audit Log granted): the log has a "By" field.

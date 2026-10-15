@@ -183,6 +183,7 @@
   "greet.messageSaved": "Le message {kind} est enregistré.",
   "greet.messageDisabled": "Le message {kind} est désactivé.",
   "greet.messageNeedsChannel": "Le message {kind} est enregistré mais reste désactivé tant que vous n'avez pas choisi un salon avec {command}.",
+  "greet.messageSavedCreated": "Le message {kind} est enregistré et activé. J'ai créé le salon {channel} pour lui ; utilisez {command} pour en choisir un autre.",
   "greet.embedMissing": "Remarque : il n'existe pas encore d'embed nommé `{name}`, il ne sera donc pas affiché.",
   "greet.cardOn": "La carte {kind} est activée.",
   "greet.cardOff": "La carte {kind} est désactivée.",

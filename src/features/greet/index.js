@@ -74,9 +74,13 @@ const SAVE_REPLY = {
 };
 
 // Saves the text and builds the reply, noting a missing {embed:name}.
-async function saveMessage(ctx, lang, guildId, kind, text) {
-  const result = await applyMessage(ctx.db, guildId, kind, text);
-  let reply = t(lang, SAVE_REPLY[result], { kind: t(lang, `greet.kind.${kind}`), command: `/set ${kind} channel` });
+async function saveMessage(ctx, lang, guild, kind, text) {
+  const guildId = guild.id;
+  const result = await applyMessage(ctx.db, guildId, kind, text, guild);
+  const vars = { kind: t(lang, `greet.kind.${kind}`), command: `/set ${kind} channel` };
+  let reply = result.status === 'created'
+    ? t(lang, 'greet.messageSavedCreated', { ...vars, channel: `<#${result.channelId}>` })
+    : t(lang, SAVE_REPLY[result], vars);
   if (result !== 'disabled') {
     for (const raw of extractEmbedRefs(text).names) {
       const name = normalizeEmbedName(raw);
@@ -115,7 +119,7 @@ async function execute(interaction, ctx) {
       const { config } = await getKindConfig(ctx.db, guildId, kind);
       return interaction.showModal(messageModal(lang, kind, config.message));
     }
-    return interaction.reply(ephemeral(await saveMessage(ctx, lang, guildId, kind, text)));
+    return interaction.reply(ephemeral(await saveMessage(ctx, lang, interaction.guild, kind, text)));
   }
 
   if (sub === 'card' || sub === 'dm') {
@@ -158,7 +162,7 @@ async function handle(interaction, ctx) {
   const lang = await guard(interaction, ctx, kind, { requireEnabled: false });
   if (!lang) return;
   const text = interaction.fields.getTextInputValue('text');
-  await interaction.reply(ephemeral(await saveMessage(ctx, lang, interaction.guildId, kind, text)));
+  await interaction.reply(ephemeral(await saveMessage(ctx, lang, interaction.guild, kind, text)));
 }
 
 export const commands = [

@@ -54,7 +54,7 @@ Step-by-step with troubleshooting: [docs/discord-bot-setup.md](docs/discord-bot-
 2. Open the Bot tab, create the bot and copy its token into `.env`.
 3. Under Privileged Gateway Intents enable Server Members and Message Content. The bot also uses the Guilds, Guild Messages, Guild Expressions (emoji events), Guild Moderation (ban and unban events) and Guild Voice States (voice events) intents, the last three used by logging; those are not privileged, so they are granted automatically and need no switch in the portal.
 4. Copy the application ID into `.env` as `CLIENT_ID`.
-5. Invite the bot with the `bot` and `applications.commands` scopes and these permissions: View Channels, Send Messages, Read Message History, Embed Links, Attach Files, Manage Roles, Kick Members, Ban Members, Moderate Members. Read Message History lets the bot fetch stored images from the media channel. Add View Audit Log if you want logs to show who banned, timed out or deleted something, and Manage Channels if you want `/logging setup` to create the log channels.
+5. Invite the bot with the `bot` and `applications.commands` scopes and these permissions: View Channels, Send Messages, Read Message History, Embed Links, Attach Files, Manage Roles, Kick Members, Ban Members, Moderate Members. Read Message History lets the bot fetch stored images from the media channel. Add View Audit Log if you want logs to show who banned, timed out or deleted something, and Manage Channels so the bot can create channels itself: `/logging setup`, and the log, welcome, goodbye and boost channels it makes when you did not choose one (a channel you choose is always used as is; nothing is created then).
 
 ## Tests
 

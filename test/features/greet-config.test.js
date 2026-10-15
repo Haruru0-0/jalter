@@ -70,3 +70,53 @@ test('card, background and dm are saved; background null clears it and keeps the
   assert.equal(config.channelId, 'c1');
   assert.equal(config.card, true);
 });
+
+function fakeGuild({ fail = false } = {}) {
+  const created = [];
+  return {
+    created,
+    channels: {
+      create: async (opts) => {
+        if (fail) throw new Error('Missing Permissions');
+        const ch = { id: `n${created.length + 1}`, ...opts };
+        created.push(ch);
+        return ch;
+      },
+    },
+  };
+}
+
+test('applyMessage with a guild and no channel creates a public channel, saves it and enables', async () => {
+  const guild = fakeGuild();
+  const result = await applyMessage(db, 'g1', 'greet', 'hi', guild);
+  assert.deepEqual(result, { status: 'created', channelId: 'n1' });
+  assert.equal(guild.created[0].name, 'welcome');
+  assert.equal(guild.created[0].permissionOverwrites, undefined);
+  const { enabled, config } = await getKindConfig(db, 'g1', 'greet');
+  assert.equal(enabled, true);
+  assert.equal(config.channelId, 'n1');
+  assert.equal(config.message, 'hi');
+});
+
+test('auto channel names: leave goodbye, boost boosts', async () => {
+  const guild = fakeGuild();
+  await applyMessage(db, 'g1', 'leave', 'bye', guild);
+  await applyMessage(db, 'g1', 'boost', 'thx', guild);
+  assert.deepEqual(guild.created.map((c) => c.name), ['goodbye', 'boosts']);
+});
+
+test('applyMessage with a chosen channel creates nothing', async () => {
+  const guild = fakeGuild();
+  await setChannel(db, 'g1', 'greet', 'c1');
+  assert.equal(await applyMessage(db, 'g1', 'greet', 'hi', guild), 'saved');
+  assert.equal(guild.created.length, 0);
+});
+
+test('applyMessage falls back to saved-needs-channel when creation fails', async () => {
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    assert.equal(await applyMessage(db, 'g1', 'greet', 'hi', fakeGuild({ fail: true })), 'saved-needs-channel');
+  } finally { console.warn = warn; }
+  assert.equal((await getKindConfig(db, 'g1', 'greet')).enabled, false);
+});

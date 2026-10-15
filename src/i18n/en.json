@@ -183,6 +183,7 @@
   "greet.messageSaved": "The {kind} message is saved.",
   "greet.messageDisabled": "The {kind} message is turned off.",
   "greet.messageNeedsChannel": "The {kind} message is saved but stays off until you choose a channel with {command}.",
+  "greet.messageSavedCreated": "The {kind} message is saved and turned on. I created {channel} for it; use {command} to pick another channel.",
   "greet.embedMissing": "Note: there is no embed named `{name}` yet, so it will not be shown.",
   "greet.cardOn": "The {kind} card is on.",
   "greet.cardOff": "The {kind} card is off.",

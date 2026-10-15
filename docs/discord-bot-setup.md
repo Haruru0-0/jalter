@@ -35,7 +35,7 @@ The other intents Jalter uses (Guilds, Guild Messages, Guild Expressions, Guild 
    - Manage Roles (auto role and the moderation mute role)
    - Kick Members, Ban Members, Moderate Members (moderation: `/kick`, `/ban` and `/unban`, `/timeout` and `/untimeout`)
    - View Audit Log (logging "By" field; optional)
-   - Manage Channels (`/logging setup`; optional)
+   - Manage Channels (`/logging setup`, and the log, welcome, goodbye and boost channels the bot creates when none was chosen; optional)
 4. Copy the generated URL, open it, choose your server and click **Authorize**.
 
 The bot appears offline until you start it.
