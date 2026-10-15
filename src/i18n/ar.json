@@ -351,5 +351,10 @@
   "moderation.tools.lock.already": "{channel} مقفلة بالفعل. لم يتغير شيء.",
   "moderation.tools.unlock.reply": "تم فتح {channel} الآن.",
   "moderation.tools.unlock.notice": "تم فتح هذه القناة بواسطة {user}.",
-  "moderation.tools.unlock.already": "{channel} غير مقفلة. لم يتغير شيء."
+  "moderation.tools.unlock.already": "{channel} غير مقفلة. لم يتغير شيء.",
+  "moderation.tools.purge.pick_one": "اختر إما عضوًا أو البوتات فقط، وليس كليهما.",
+  "moderation.tools.purge.reply": "تم حذف {count} رسالة.",
+  "moderation.tools.purge.none": "لم أجد أي رسائل لحذفها.",
+  "moderation.tools.purge.note_fewer": "تم العثور على {found} رسالة مطابقة فقط، أقل من {count} التي طلبتها.",
+  "moderation.tools.purge.note_skipped": "تم تجاهل {old} رسالة أقدم من 14 يومًا و{pinned} رسالة مثبتة."
 }

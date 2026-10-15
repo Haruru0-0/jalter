@@ -351,5 +351,10 @@
   "moderation.tools.lock.already": "{channel} est déjà verrouillé. Rien n'a changé.",
   "moderation.tools.unlock.reply": "{channel} est maintenant déverrouillé.",
   "moderation.tools.unlock.notice": "Ce salon a été déverrouillé par {user}.",
-  "moderation.tools.unlock.already": "{channel} n'est pas verrouillé. Rien n'a changé."
+  "moderation.tools.unlock.already": "{channel} n'est pas verrouillé. Rien n'a changé.",
+  "moderation.tools.purge.pick_one": "Choisissez soit un membre, soit les bots uniquement, pas les deux.",
+  "moderation.tools.purge.reply": "{count} messages supprimés.",
+  "moderation.tools.purge.none": "Je n'ai trouvé aucun message à supprimer.",
+  "moderation.tools.purge.note_fewer": "Seuls {found} messages correspondants ont été trouvés, moins que les {count} demandés.",
+  "moderation.tools.purge.note_skipped": "{old} messages de plus de 14 jours et {pinned} messages épinglés ont été ignorés."
 }

@@ -351,5 +351,10 @@
   "moderation.tools.lock.already": "{channel} is already locked. Nothing changed.",
   "moderation.tools.unlock.reply": "{channel} is now unlocked.",
   "moderation.tools.unlock.notice": "This channel was unlocked by {user}.",
-  "moderation.tools.unlock.already": "{channel} is not locked. Nothing changed."
+  "moderation.tools.unlock.already": "{channel} is not locked. Nothing changed.",
+  "moderation.tools.purge.pick_one": "Pick either a member or bots only, not both.",
+  "moderation.tools.purge.reply": "Deleted {count} messages.",
+  "moderation.tools.purge.none": "I found no messages to delete.",
+  "moderation.tools.purge.note_fewer": "Only {found} matching messages were found, fewer than the {count} you asked for.",
+  "moderation.tools.purge.note_skipped": "Skipped {old} messages older than 14 days and {pinned} pinned messages."
 }
