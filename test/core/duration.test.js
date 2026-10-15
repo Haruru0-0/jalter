@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseDuration, formatDuration, MIN_DELAY, MAX_DELAY } from '../../src/features/autorole/duration.js';
+import { parseDuration, formatDuration, MIN_DELAY, MAX_DELAY } from '../../src/core/duration.js';
 
 test('parseDuration reads single and combined units', () => {
   assert.equal(parseDuration('30m'), 1800);
