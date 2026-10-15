@@ -333,15 +333,55 @@ test('channel: refuses rules and community-updates channels, voice channels and 
   assert.equal(m.calls.replies[0].components, undefined);
 });
 
-test('channel: permission and bot-permission refusals; SendMessages and ManageRoles are required', async () => {
+test('channel: permission and bot-permission refusals; ManageRoles is required, SendMessages is not', async () => {
   const a = chanFake({ perms: [] });
   await purgeCommand.execute(a.slash, a.ctx);
   assert.equal(text(a.calls.replies[0]), t('en', 'moderation.tools.err.not_allowed'));
-  for (const missing of ['ManageChannels', 'SendMessages', 'ManageRoles', 'ViewChannel']) {
+  for (const missing of ['ManageChannels', 'ManageRoles', 'ViewChannel']) {
     const f = chanFake({ botPerms: ['ViewChannel', 'ManageChannels', 'SendMessages', 'ManageRoles'].filter((p) => p !== missing) });
     await purgeCommand.execute(f.slash, f.ctx);
     assert.equal(text(f.calls.replies[0]), t('en', 'moderation.tools.err.bot_missing'), missing);
   }
+  const s = chanFake({ botPerms: ['ViewChannel', 'ManageChannels', 'ManageRoles'] });
+  await purgeCommand.execute(s.slash, s.ctx);
+  assert.equal(s.calls.replies[0].components.length, 1);
+});
+
+test('channel: works on a locked channel (bot has no Send Messages); the notice failure is a note', async () => {
+  await seedIds();
+  const f = chanFake({ botPerms: ['ViewChannel', 'ManageChannels', 'ManageRoles'] });
+  const origClone = f.all.get('OLD').clone;
+  // The clone copies the @everyone deny, so the notice cannot be posted either.
+  f.all.get('OLD').clone = async (o) => { const c = await origClone(o); c.send = async () => { throw new Error('locked'); }; return c; };
+  await comps.handle(f.button(okId('mod', 'OLD', Date.now())), f.ctx);
+  assert.deepEqual(f.calls.deleted.map((d) => d[0]), ['OLD']);
+  const lastText = f.calls.updates.at(-1).content;
+  assert.ok(lastText.includes(t('en', 'moderation.tools.purge.done', { channel: '<#NEW>' })));
+  assert.ok(lastText.includes(t('en', 'moderation.tools.notice_failed')));
+  assert.equal(f.logs.length, 1);
+});
+
+test('confirm: an edit failure after the old channel is deleted never reports "failed"', async () => {
+  await seedIds();
+  // As when the confirm message lived in the purged channel: every edit after the delete fails.
+  const f = chanFake();
+  const b = f.button(okId('mod', 'OLD', Date.now()));
+  const attempts = [];
+  b.editReply = async (p) => { attempts.push(p); throw new Error('Unknown Channel'); };
+  await comps.handle(b, f.ctx);
+  assert.deepEqual(f.calls.deleted.map((d) => d[0]), ['OLD']);
+  assert.ok(attempts.length >= 1);
+  assert.ok(attempts.every((p) => p.content !== t('en', 'moderation.tools.err.failed')));
+});
+
+test('confirm: an edit failure on the old-delete-failed message never reports "failed"', async () => {
+  await seedIds();
+  const f = chanFake({ deleteThrows: true });
+  const b = f.button(okId('mod', 'OLD', Date.now()));
+  const attempts = [];
+  b.editReply = async (p) => { attempts.push(p); throw new Error('boom'); };
+  await comps.handle(b, f.ctx);
+  assert.ok(attempts.every((p) => p.content !== t('en', 'moderation.tools.err.failed')));
 });
 
 test('channel: shows the warning with the mention and two buttons carrying the ids', async () => {

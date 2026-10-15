@@ -5,6 +5,7 @@ import { ephemeral } from '../../core/replies.js';
 import { formatDuration } from '../../core/duration.js';
 import { t } from '../../i18n/index.js';
 import { readConfig } from './config.js';
+import { trySend } from '../../core/send.js';
 import { checkToolAccess, postNotice, logTool } from './tools-common.js';
 
 const REASON_MAX = 400;
@@ -34,7 +35,10 @@ function buildLock(name, description) {
       .setDescription('The channel (default: this one)').addChannelTypes(...LOCK_TYPES)));
 }
 
-/** Shared front half: guard, config, channel pick, access check. Returns null after replying on refusal. */
+/**
+ * Shared front half: guard, config, channel pick, access check. Returns null after replying on refusal.
+ * Send Messages is not required: a locked channel denies it to the bot too, and the notice is best effort.
+ */
 async function open(interaction, ctx, action, { types, extraBotPerms = () => [] }) {
   const lang = await guard(interaction, ctx, 'moderation', { requireManager: false });
   if (!lang) return null;
@@ -42,7 +46,7 @@ async function open(interaction, ctx, action, { types, extraBotPerms = () => [] 
   const config = readConfig(raw);
   const channel = interaction.options.getChannel('channel') ?? interaction.channel;
   const typeOk = Boolean(channel) && types.includes(channel.type);
-  const botPermissions = ['ViewChannel', isThread(channel) ? 'SendMessagesInThreads' : 'SendMessages', ...extraBotPerms(channel)];
+  const botPermissions = ['ViewChannel', ...extraBotPerms(channel)];
   const access = checkToolAccess({ interaction, action, config, channel: typeOk ? channel : null, botPermissions });
   if (!access.ok) {
     await interaction.reply(ephemeral(t(lang, `moderation.tools.err.${access.reason}`)));
@@ -51,10 +55,14 @@ async function open(interaction, ctx, action, { types, extraBotPerms = () => [] 
   return { lang, channel, reason: interaction.options.getString('reason') };
 }
 
-/** Back half: notice, log line, ephemeral reply. */
-async function finish(interaction, ctx, { lang, channel, reason }, { tool, detail, notice, reply }) {
-  const noticeText = reason ? `${notice}\n${t(lang, 'moderation.tools.notice.reason', { reason })}` : notice;
-  const posted = await postNotice(channel, { content: noticeText, allowedMentions: { parse: [] } });
+const noticePayload = (lang, reason, notice) => ({
+  content: reason ? `${notice}\n${t(lang, 'moderation.tools.notice.reason', { reason })}` : notice,
+  allowedMentions: { parse: [] },
+});
+
+/** Back half: notice (unless already posted), log line, ephemeral reply. */
+async function finish(interaction, ctx, { lang, channel, reason }, { tool, detail, notice, reply, posted: prePosted }) {
+  const posted = prePosted ?? await postNotice(channel, noticePayload(lang, reason, notice));
   await logTool(ctx, interaction.guild, lang, { tool, actorId: interaction.user.id, channelId: channel.id, detail, reason });
   const content = posted ? reply : `${reply}\n${t(lang, 'moderation.tools.notice_failed')}`;
   await interaction.editReply({ content });
@@ -106,6 +114,9 @@ function makeLockCommand(name, locking) {
       return;
     }
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const notice = t(lang, `moderation.tools.${name}.notice`, { user: `<@${interaction.user.id}>` });
+    // Lock posts first: once @everyone is denied, the bot usually cannot send there either.
+    const lockNotice = locking ? await trySend(channel, noticePayload(lang, reason, notice)) : null;
     try {
       await channel.permissionOverwrites.edit(
         interaction.guild.roles.everyone,
@@ -113,14 +124,22 @@ function makeLockCommand(name, locking) {
         { reason: reason ?? undefined },
       );
     } catch (err) {
+      if (lockNotice) {
+        try {
+          await lockNotice.delete();
+        } catch (delErr) {
+          console.warn(`Could not remove lock notice: ${delErr?.message}`);
+        }
+      }
       await failed(interaction, lang, err);
       return;
     }
     await finish(interaction, ctx, o, {
       tool: name,
       detail: null,
-      notice: t(lang, `moderation.tools.${name}.notice`, { user: `<@${interaction.user.id}>` }),
+      notice,
       reply: t(lang, `moderation.tools.${name}.reply`, { channel: mention }),
+      ...(locking ? { posted: Boolean(lockNotice) } : {}),
     });
   }
   return execute;

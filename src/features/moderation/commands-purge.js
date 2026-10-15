@@ -9,7 +9,8 @@ import { moveChannelId, mediaHoldsChannel } from './channel-move.js';
 
 const CONFIRM_TTL_MS = 120_000;
 const CHANNEL_TYPES = [ChannelType.GuildText, ChannelType.GuildAnnouncement];
-const CHANNEL_BOT_PERMISSIONS = ['ViewChannel', 'ManageChannels', 'SendMessages', 'ManageRoles'];
+// No SendMessages: a locked channel denies it to the bot too; the notice in the copy is best effort.
+const CHANNEL_BOT_PERMISSIONS = ['ViewChannel', 'ManageChannels', 'ManageRoles'];
 
 const REASON_MAX = 400;
 const COUNT_MAX = 100;
@@ -274,6 +275,15 @@ async function runConfirm(interaction, ctx, lang, userId, channelId, createdAt) 
       : t(lang, 'moderation.tools.purge.move_failed_clone_left', { channel: mention }));
     return;
   }
+  // From here on the channels have changed: a failed edit must never reach the "nothing was changed" path.
+  // (The confirm message may have lived in the channel just deleted.)
+  const finishChanged = async (content) => {
+    try {
+      await finish(content);
+    } catch (err) {
+      console.warn(`Purge channel: could not edit the result: ${err?.message}`);
+    }
+  };
   try {
     await old.delete(auditReason);
   } catch (err) {
@@ -282,15 +292,18 @@ async function runConfirm(interaction, ctx, lang, userId, channelId, createdAt) 
     await logTool(ctx, guild, lang, {
       tool: 'purge channel', actorId: userId, channelId: clone.id, detail: partial, reason,
     });
-    await finish(partial);
+    await finishChanged(partial);
     return;
   }
-  await postNotice(clone, { content: t(lang, 'moderation.tools.purge.notice') });
+  const posted = await postNotice(clone, { content: t(lang, 'moderation.tools.purge.notice') });
   const done = t(lang, 'moderation.tools.purge.done', { channel: mention });
   await logTool(ctx, guild, lang, {
     tool: 'purge channel', actorId: userId, channelId: clone.id, detail: done, reason,
   });
-  await finish(positionFailed ? `${done}\n${t(lang, 'moderation.tools.purge.position_failed')}` : done);
+  const lines = [done];
+  if (positionFailed) lines.push(t(lang, 'moderation.tools.purge.position_failed'));
+  if (!posted) lines.push(t(lang, 'moderation.tools.notice_failed'));
+  await finishChanged(lines.join('\n'));
 }
 
 export const purgeCommand = { data: buildPurge(), execute, components: { prefix: 'purge', handle } };

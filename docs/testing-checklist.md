@@ -208,12 +208,15 @@ Needs the bot to have Manage Messages and Read Message History in the test chann
 - [ ] `user:<member>` deletes only that member's messages; `bots:true` only bot messages. Giving both is refused.
 - [ ] A count larger than the matching messages deletes what exists and says fewer were found.
 - [ ] A pinned message and a message older than 14 days are kept, and the reply says how many were skipped.
-- [ ] Nothing matching replies that nothing was found. The mod log gets one "Channel tool: purge" line (moderator, channel, count, reason); no case number is used.
+- [ ] Nothing matching replies that nothing was found, and no mod log line is written.
+- [ ] A successful purge writes one "Channel tool: purge" line to the mod log (moderator, channel, count, reason); no case number is used.
 - [ ] Run in a voice or category channel, or without View Channel / Manage Messages for the bot: refused with a clear message.
 
 ### Channel tools: purge channel
 
-Needs the bot to have Manage Channels, Manage Roles, View Channel and Send Messages. Use a throwaway channel.
+Needs the bot to have Manage Channels, Manage Roles and View Channel (Send Messages is not required; without it the notice in the new channel is skipped and the reply says so). Use a throwaway channel.
+
+- [ ] Purging a channel locked with `/lock` works (the bot is not refused for missing Send Messages); the copy stays locked and the reply notes the notice could not be posted.
 
 - [ ] `/purge channel` shows a warning and Confirm and Cancel buttons only you can see. Cancel replies "Purge cancelled" and nothing changes.
 - [ ] Confirm deletes the channel and makes an empty copy with the same name, topic, permissions and position; a notice is posted in it and one "Channel tool: purge channel" line goes to the mod log.
@@ -228,8 +231,11 @@ Needs the bot to have Manage Channels, Manage Roles, View Channel and Send Messa
 
 - [ ] `/slowmode seconds:10` sets 10 s and posts a notice in the channel; running it again says nothing changed; `seconds:0` turns it off. More than 21600 is rejected by Discord. In a thread it needs Manage Threads for the bot.
 - [ ] `reason:<text>` is added to the channel notice and the mod log line.
-- [ ] `/lock` denies Send Messages for @everyone and posts a notice; a member without a bypass cannot type. Roles explicitly allowed to speak still can. `/lock` again says it is already locked.
-- [ ] `/unlock` removes the deny and posts a notice; on an unlocked channel it says it is not locked.
+The bot needs View Channel and Manage Channels (plus Manage Roles for lock and unlock, Manage Threads for slowmode in a thread). Send Messages is not required: a notice that cannot be posted only adds a note to the reply.
+
+- [ ] `/lock` posts its notice first, then denies Send Messages for @everyone; a member without a bypass cannot type. Roles explicitly allowed to speak still can. `/lock` again says it is already locked (not "missing permissions"). If the lock itself fails, the notice is removed again.
+- [ ] `/unlock` removes the deny and posts a notice; on an unlocked channel it says it is not locked. Test with a bot that is not Administrator and has no allow overwrite of its own: `/unlock` still works on a channel `/lock` locked.
+- [ ] `/slowmode` works in a locked channel (the reply notes that the notice could not be posted when the bot cannot send there).
 - [ ] Unlock limit: if an admin denied Send Messages for @everyone by hand, `/unlock` clears that deny too (it cannot tell it from its own).
 - [ ] `/lock channel:<other>` works on a text or announcement channel; voice, category and thread targets are refused. Each action writes one mod log line and no case.
 

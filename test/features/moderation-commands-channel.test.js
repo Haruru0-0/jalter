@@ -64,18 +64,38 @@ function fake({
   type = TEXT, opts = {}, perms = ['ManageChannels'], roles = [], botPerms = ['ViewChannel', 'SendMessages', 'ManageChannels', 'ManageRoles'],
   userPerms = ['ViewChannel'], rateLimit = 0, everyoneDeny = false, sendThrows = false,
 } = {}) {
-  const calls = { replies: [], rate: [], edits: [], sent: [] };
+  const calls = { replies: [], rate: [], edits: [], sent: [], order: [], noticeDeleted: 0 };
   const everyone = { id: 'g1' };
+  const denyEntry = { deny: { has: (p) => p === 'SendMessages' } };
+  const cache = new Map(everyoneDeny ? [['g1', denyEntry]] : []);
+  const locked = () => Boolean(cache.get('g1')?.deny?.has('SendMessages'));
   const channel = {
     id: 'c1', type, rateLimitPerUser: rateLimit,
     isThread: () => type === PUBLIC_THREAD,
-    permissionsFor: (m) => ({ has: (p) => (m.id === 'bot' ? botPerms : userPerms).includes(p) }),
+    // Like Discord: an @everyone SendMessages deny applies to the bot too (no own allow overwrite).
+    permissionsFor: (m) => ({
+      has: (p) => {
+        if (m.id !== 'bot') return userPerms.includes(p);
+        if (locked() && (p === 'SendMessages' || p === 'SendMessagesInThreads')) return false;
+        return botPerms.includes(p);
+      },
+    }),
     permissionOverwrites: {
-      cache: new Map(everyoneDeny ? [['g1', { deny: { has: (p) => p === 'SendMessages' } }]] : []),
-      edit: async (...a) => { calls.edits.push(a); },
+      cache,
+      edit: async (...a) => {
+        calls.order.push('edit');
+        calls.edits.push(a);
+        if (a[1].SendMessages === false) cache.set('g1', denyEntry);
+        else if (a[1].SendMessages === null) cache.delete('g1');
+      },
     },
     setRateLimitPerUser: async (...a) => { calls.rate.push(a); },
-    send: async (p) => { if (sendThrows) throw new Error('nope'); calls.sent.push(p); return {}; },
+    send: async (p) => {
+      calls.order.push('send');
+      if (sendThrows || locked()) throw new Error('nope');
+      calls.sent.push(p);
+      return { delete: async () => { calls.noticeDeleted += 1; } };
+    },
   };
   const guild = { id: 'g1', roles: { everyone }, members: { me: { id: 'bot' } } };
   const values = { reason: null, channel: null, ...opts };
@@ -166,15 +186,22 @@ test('the feature being off gives the standard off message', async () => {
   assert.deepEqual(f.calls.rate, []);
 });
 
-test('a bot without Manage Channels or Send Messages refuses with no edit call', async () => {
-  const f = fake({ botPerms: ['ViewChannel', 'SendMessages'] });
+test('a bot without Manage Channels or View Channel refuses with no edit call', async () => {
+  const f = fake({ botPerms: ['ViewChannel', 'SendMessages', 'ManageRoles'] });
   await run('lock', f);
   assert.equal(last(f), t('en', 'moderation.tools.err.bot_missing'));
   assert.deepEqual(f.calls.edits, []);
-  const g = fake({ botPerms: ['ViewChannel', 'ManageChannels'] });
+  const g = fake({ botPerms: ['SendMessages', 'ManageChannels', 'ManageRoles'] });
   await run('lock', g);
   assert.equal(last(g), t('en', 'moderation.tools.err.bot_missing'));
   assert.deepEqual(g.calls.edits, []);
+});
+
+test('Send Messages is not required up front; lock works without it (notice note only)', async () => {
+  const f = fake({ botPerms: ['ViewChannel', 'ManageChannels', 'ManageRoles'], sendThrows: true });
+  await run('lock', f);
+  assert.equal(f.calls.edits.length, 1);
+  assert.ok(last(f).includes(t('en', 'moderation.tools.notice_failed')));
 });
 
 test('lock denies only SendMessages for @everyone and posts the notice', async () => {
@@ -240,12 +267,63 @@ test('a failing notice adds the note but the change stands', async () => {
   assert.ok(last(g).includes(t('en', 'moderation.tools.notice_failed')));
 });
 
-test('a Discord failure on the change is reported and nothing is announced', async () => {
+test('a Discord failure on the change is reported and the lock notice is taken back', async () => {
   const f = fake();
+  f.interaction.channel.permissionOverwrites.edit = async () => { f.calls.order.push('edit'); throw new Error('boom'); };
+  await run('lock', f);
+  assert.equal(last(f), t('en', 'moderation.tools.err.failed'));
+  assert.deepEqual(f.calls.order, ['send', 'edit']);
+  assert.equal(f.calls.noticeDeleted, 1);
+  const g = fake({ everyoneDeny: true });
+  g.interaction.channel.permissionOverwrites.edit = async () => { throw new Error('boom'); };
+  await run('unlock', g);
+  assert.equal(last(g), t('en', 'moderation.tools.err.failed'));
+  assert.deepEqual(g.calls.sent, []);
+});
+
+// ---- final review: real lock behaviour (bot loses SendMessages once @everyone is denied) ----
+
+test('lock posts its notice before applying the deny', async () => {
+  const f = fake();
+  await run('lock', f);
+  assert.deepEqual(f.calls.order, ['send', 'edit']);
+  assert.equal(f.calls.sent.length, 1);
+  assert.equal(f.calls.noticeDeleted, 0);
+  assert.ok(!last(f).includes(t('en', 'moderation.tools.notice_failed')));
+});
+
+test('a failing lock-notice delete after a failed edit does not throw', async () => {
+  const f = fake();
+  const send = f.interaction.channel.send;
+  f.interaction.channel.send = async (p) => { await send(p); return { delete: async () => { throw new Error('gone'); } }; };
   f.interaction.channel.permissionOverwrites.edit = async () => { throw new Error('boom'); };
   await run('lock', f);
   assert.equal(last(f), t('en', 'moderation.tools.err.failed'));
-  assert.deepEqual(f.calls.sent, []);
+});
+
+test('unlock succeeds on a channel that /lock locked', async () => {
+  const f = fake();
+  await run('lock', f);
+  assert.equal(f.calls.edits.length, 1);
+  await run('unlock', f);
+  assert.equal(f.calls.edits.length, 2);
+  assert.deepEqual(f.calls.edits[1][1], { SendMessages: null });
+  assert.equal(last(f), t('en', 'moderation.tools.unlock.reply', { channel: '<#c1>' }));
+});
+
+test('lock on a locked channel answers already locked', async () => {
+  const f = fake();
+  await run('lock', f);
+  await run('lock', f);
+  assert.equal(f.calls.edits.length, 1);
+  assert.equal(last(f), t('en', 'moderation.tools.lock.already', { channel: '<#c1>' }));
+});
+
+test('slowmode works on a locked channel; the notice failure is only a note', async () => {
+  const f = fake({ everyoneDeny: true, opts: { seconds: 5 } });
+  await run('slowmode', f);
+  assert.equal(f.calls.rate.length, 1);
+  assert.ok(last(f).includes(t('en', 'moderation.tools.notice_failed')));
 });
 
 test('an explicit channel option is used instead of the current channel', async () => {
@@ -282,11 +360,10 @@ test('slowmode does not need Manage Roles', async () => {
   assert.equal(f.calls.rate.length, 1);
 });
 
-test('a thread notice needs Send Messages in Threads, not Send Messages', async () => {
-  const bad = fake({ type: PUBLIC_THREAD, opts: { seconds: 5 }, botPerms: ['ViewChannel', 'SendMessages', 'ManageChannels', 'ManageThreads'] });
-  await run('slowmode', bad);
-  assert.equal(last(bad), t('en', 'moderation.tools.err.bot_missing'));
-  assert.deepEqual(bad.calls.rate, []);
+test('thread slowmode does not need Send Messages in Threads up front', async () => {
+  const f = fake({ type: PUBLIC_THREAD, opts: { seconds: 5 }, botPerms: ['ViewChannel', 'ManageChannels', 'ManageThreads'] });
+  await run('slowmode', f);
+  assert.equal(f.calls.rate.length, 1);
 });
 
 test('a throwing setRateLimitPerUser gives the failed reply, no notice and no log', async () => {

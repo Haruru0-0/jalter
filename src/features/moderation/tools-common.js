@@ -5,7 +5,8 @@ import { t } from '../../i18n/index.js';
 
 /**
  * Shared checks for the channel tools. `botPermissions` lists what the bot needs in `channel`
- * (always ViewChannel plus the action's own permission).
+ * (always ViewChannel plus the action's own permission). Send Messages is never required: a locked
+ * channel denies it to the bot as well, and public notices are best effort.
  */
 export function checkToolAccess({ interaction, action, config, channel, botPermissions }) {
   if (!canUseAction(interaction.member, action, config)) return { ok: false, reason: 'not_allowed' };

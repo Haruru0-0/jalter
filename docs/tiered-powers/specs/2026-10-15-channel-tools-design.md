@@ -59,7 +59,7 @@ Moderators need quick ways to clean up and calm a channel: delete a batch of mes
 - Unlock sets only SendMessages back to "unset" on @everyone and posts "Channel unlocked". Already unlocked = private reply, no change.
 - Known limits (nothing is stored for locks): if @everyone had an explicit SendMessages *allow* before the lock, unlock returns it to "unset", not to "allow"; and unlock cannot tell its own deny from an admin's deliberate one (for example a read-only channel), so unlocking such a channel makes it writable. The unlock reply just says "unlocked".
 
-**Who may target which channel:** the permitted-role rule still applies, but the moderator must be able to see the target channel (View Channel in it) for `/purge messages`, `/purge channel`, `/slowmode` and `/lock`/`/unlock` with a `channel` option; otherwise the reply says they cannot use it there. The bot must hold View Channel, Send Messages (for the notice) and the action's own permission in the target channel; a missing action permission refuses the command. Order for lock, unlock and slowmode: apply the change first, then post the public notice best effort; a failed notice is reported to the moderator as a short note, not as a failed action.
+**Who may target which channel:** the permitted-role rule still applies, but the moderator must be able to see the target channel (View Channel in it) for `/purge messages`, `/purge channel`, `/slowmode` and `/lock`/`/unlock` with a `channel` option; otherwise the reply says they cannot use it there. The bot must hold View Channel and the action's own permission in the target channel (plus Manage Roles for lock, unlock and purge channel); a missing one refuses the command. Send Messages is not required: an @everyone deny (what lock sets) applies to the bot too, so requiring it would block unlock on every locked channel. Order for unlock and slowmode: apply the change first, then post the public notice best effort. Lock posts its notice first (best effort), then applies the deny, and deletes the notice if the deny fails. A failed notice is reported to the moderator as a short note, not as a failed action.
 
 **Replies and records:** moderator replies are private (ephemeral) except the public notices above. The `mod` log line is an ordinary embed through `sendLog(ctx, guildId, 'modAction', embed)`; no case is created, no case number is used.
 
@@ -81,6 +81,7 @@ Moderators need quick ways to clean up and calm a channel: delete a batch of mes
 - `/purge channel` is refused for a channel that holds media library items; old mod-log post links are not moved.
 - The settings move runs in one transaction.
 - Public notices only for lock, unlock and slowmode; everything else private.
+- Lock posts its notice before applying the deny (after it, the bot usually cannot send there), and removes it if the deny fails. No channel tool requires the bot to hold Send Messages.
 
 ## Left to the builder
 

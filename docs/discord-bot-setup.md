@@ -89,7 +89,7 @@ With `DEV_GUILD_ID` set, slash commands register to that server only and appear 
 | "Missing Access" or "Missing Permissions" in the log | Give the bot the permission from step 4, and check channel-level overrides. |
 | Auto role does nothing | The bot's role is below the role it should give (step 4). |
 | `/logging setup` fails | The bot lacks Manage Channels. |
-| `/purge`, `/slowmode`, `/lock` or `/unlock` says the bot is missing permissions | Give the bot Manage Messages (purge messages) or Manage Channels (the rest), plus Manage Roles for lock, unlock and purge channel, and check the channel overrides (View Channel, Send Messages; Manage Threads for slowmode in a thread). |
+| `/purge`, `/slowmode`, `/lock` or `/unlock` says the bot is missing permissions | Give the bot Manage Messages (purge messages) or Manage Channels (the rest), plus Manage Roles for lock, unlock and purge channel, and check the channel overrides (View Channel; Read Message History for purge messages; Manage Threads for slowmode in a thread). Send Messages is not needed for these commands; if it is missing the public notice is skipped and the reply says so. |
 | Logs have no "By" field | The bot lacks View Audit Log, or the audit entry was over 10 seconds old. |
 | Database connection error | Docker Desktop is not running. Start it, then `docker compose up -d`. |
 | Setup commands say you lack permission | You need Manage Server or the bot manager role (`/panel manager-role`). |

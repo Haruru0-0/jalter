@@ -333,7 +333,7 @@
   "moderation.settings.permitted_removed": "لم تعد {role} رتبة مسموحًا لها.",
   "moderation.tools.err.not_allowed": "تحتاج إلى صلاحية ديسكورد المناسبة أو دور مسموح لفعل ذلك.",
   "moderation.tools.err.no_view": "لا يمكنك استخدام هذا في قناة لا تستطيع رؤيتها.",
-  "moderation.tools.err.bot_missing": "تنقصني صلاحيات في تلك القناة. أحتاج إلى عرض القناة وإرسال الرسائل وصلاحية هذا الإجراء.",
+  "moderation.tools.err.bot_missing": "تنقصني صلاحية أحتاجها في تلك القناة.",
   "moderation.tools.err.bad_channel": "لا يمكن استخدام هذه القناة لهذا الإجراء.",
   "moderation.tools.log.title": "أداة القناة: {tool}",
   "moderation.tools.log.moderator": "المشرف",
