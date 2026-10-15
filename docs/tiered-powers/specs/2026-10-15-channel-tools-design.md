@@ -1,6 +1,6 @@
 # Channel tools (Phase 2, step 3): design
 
-Status: draft for approval (builder check done; its questions are answered in this text). Roadmap: `2026-10-14-feature-roadmap.md`, Phase 2 step 3. Builds on the moderation feature (`2026-10-14-moderation-design.md`).
+Status: built (branch `phase-2`; builder check done, its questions are answered in this text). Roadmap: `2026-10-14-feature-roadmap.md`, Phase 2 step 3. Builds on the moderation feature (`2026-10-14-moderation-design.md`).
 
 ## Intent and why
 

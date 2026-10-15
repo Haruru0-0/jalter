@@ -35,7 +35,8 @@ The other intents Jalter uses (Guilds, Guild Messages, Guild Expressions, Guild 
    - Manage Roles (auto role and the moderation mute role)
    - Kick Members, Ban Members, Moderate Members (moderation: `/kick`, `/ban` and `/unban`, `/timeout` and `/untimeout`)
    - View Audit Log (logging "By" field; optional)
-   - Manage Channels (`/logging setup`, and the log, welcome, goodbye and boost channels the bot creates when none was chosen; optional)
+   - Manage Messages (`/purge messages`)
+   - Manage Channels (`/purge channel`, `/slowmode`, `/lock`, `/unlock`; also `/logging setup` and the log, welcome, goodbye and boost channels the bot creates when none was chosen)
 4. Copy the generated URL, open it, choose your server and click **Authorize**.
 
 The bot appears offline until you start it.
@@ -88,6 +89,7 @@ With `DEV_GUILD_ID` set, slash commands register to that server only and appear 
 | "Missing Access" or "Missing Permissions" in the log | Give the bot the permission from step 4, and check channel-level overrides. |
 | Auto role does nothing | The bot's role is below the role it should give (step 4). |
 | `/logging setup` fails | The bot lacks Manage Channels. |
+| `/purge`, `/slowmode`, `/lock` or `/unlock` says the bot is missing permissions | Give the bot Manage Messages (purge messages) or Manage Channels (the rest), plus Manage Roles for lock, unlock and purge channel, and check the channel overrides (View Channel, Send Messages; Manage Threads for slowmode in a thread). |
 | Logs have no "By" field | The bot lacks View Audit Log, or the audit entry was over 10 seconds old. |
 | Database connection error | Docker Desktop is not running. Start it, then `docker compose up -d`. |
 | Setup commands say you lack permission | You need Manage Server or the bot manager role (`/panel manager-role`). |

@@ -200,6 +200,46 @@ Needs the bot to have Kick Members, Ban Members, Moderate Members and Manage Rol
 - [ ] A moderator can run `/warnings list user:<target>`, `edit id:<n> reason:<text>`, `delete id:<n>`, `clear user:<target>` and `top`. The id is the warning's case number. Deleted and cleared warnings disappear from the list, and edits, deletes and clears post nothing to the mod log.
 - [ ] A long list is cut with a "more" line instead of failing.
 
+### Channel tools: purge messages
+
+Needs the bot to have Manage Messages and Read Message History in the test channel. Post a mix of messages from two accounts and a bot first.
+
+- [ ] `/purge messages count:5` deletes the 5 newest messages (not the command's own reply) and the ephemeral reply says how many.
+- [ ] `user:<member>` deletes only that member's messages; `bots:true` only bot messages. Giving both is refused.
+- [ ] A count larger than the matching messages deletes what exists and says fewer were found.
+- [ ] A pinned message and a message older than 14 days are kept, and the reply says how many were skipped.
+- [ ] Nothing matching replies that nothing was found. The mod log gets one "Channel tool: purge" line (moderator, channel, count, reason); no case number is used.
+- [ ] Run in a voice or category channel, or without View Channel / Manage Messages for the bot: refused with a clear message.
+
+### Channel tools: purge channel
+
+Needs the bot to have Manage Channels, Manage Roles, View Channel and Send Messages. Use a throwaway channel.
+
+- [ ] `/purge channel` shows a warning and Confirm and Cancel buttons only you can see. Cancel replies "Purge cancelled" and nothing changes.
+- [ ] Confirm deletes the channel and makes an empty copy with the same name, topic, permissions and position; a notice is posted in it and one "Channel tool: purge channel" line goes to the mod log.
+- [ ] Wait more than 2 minutes, then Confirm: "expired", nothing happens. Pressing Confirm twice quickly does not purge twice ("in progress" or the old channel is gone).
+- [ ] A different user pressing the buttons gets "only the moderator who ran the command". Nobody but the runner can purge.
+- [ ] Set the greet, leave, boost, media and logging channels to the channel before purging: afterwards the settings point to the new channel (check `/panel overview`, `/logging status`) and events still post.
+- [ ] A channel that holds stored media (`/media add`) is refused until the media is removed. The rules and community updates channels are refused. Voice, category and thread targets are refused.
+- [ ] A reason given on the command appears in the mod log line and the audit log. (It is kept in memory, so it is lost if the bot restarts before Confirm.)
+- [ ] Old mod-log message links to the purged channel's messages stop working; this is expected (they are not moved).
+
+### Channel tools: slowmode, lock, unlock
+
+- [ ] `/slowmode seconds:10` sets 10 s and posts a notice in the channel; running it again says nothing changed; `seconds:0` turns it off. More than 21600 is rejected by Discord. In a thread it needs Manage Threads for the bot.
+- [ ] `reason:<text>` is added to the channel notice and the mod log line.
+- [ ] `/lock` denies Send Messages for @everyone and posts a notice; a member without a bypass cannot type. Roles explicitly allowed to speak still can. `/lock` again says it is already locked.
+- [ ] `/unlock` removes the deny and posts a notice; on an unlocked channel it says it is not locked.
+- [ ] Unlock limit: if an admin denied Send Messages for @everyone by hand, `/unlock` clears that deny too (it cannot tell it from its own).
+- [ ] `/lock channel:<other>` works on a text or announcement channel; voice, category and thread targets are refused. Each action writes one mod log line and no case.
+
+### Channel tools: permissions and refusals
+
+- [ ] With the feature off, all of these reply that moderation is off.
+- [ ] A member with Manage Messages can `/purge messages` but not `/purge channel`, `/slowmode`, `/lock` or `/unlock`; Manage Channels allows those. A permitted role holder may run every one of them, including `/purge channel`.
+- [ ] A member without View Channel on the target channel is refused. If the bot lacks a needed permission in the channel (Manage Roles for lock, unlock and purge channel), the reply says so and nothing changes.
+- [ ] `npm run deploy` was run so the new commands appear.
+
 ## 12. Permissions and robustness
 
 - [ ] Every setup reply is ephemeral (only you see it).

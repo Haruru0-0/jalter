@@ -20,7 +20,7 @@ Several later features need the same groundwork. Building these once avoids doin
 ## Phase 2: Moderation (strict order)
 1. **Mod-case store + moderation commands**: warn, warnings, kick, ban, unban, timeout. Everything else here sits on top of cases. **Status: built** (branch `phase-2`; spec `2026-10-14-moderation-design.md`).
 2. **Timed actions**: temp ban, timed mute. Needs the scheduler. **Status: built** together with step 1 (job types `mod.unban` and `mod.unmute`).
-3. **Channel tools**: purge, slowmode, lock/unlock. Independent of cases; can be built alongside step 2.
+3. **Channel tools**: purge, slowmode, lock/unlock. Independent of cases; can be built alongside step 2. **Status: built** (branch `phase-2`; spec `2026-10-15-channel-tools-design.md`).
 4. **Auto-mod**. Needs step 1 (its actions are delete, warn, timeout) and the message-content intent (already on).
 5. **Verification**. Needs a member role to grant and a restricted state. Must exist before anti-raid, because lockdown "raises verification".
 6. **Anti-raid**. Needs verification (5), mod alerts (logging) and the scheduler.
