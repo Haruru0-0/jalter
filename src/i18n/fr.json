@@ -283,5 +283,10 @@
   "moderation.warning.dm_failed": "Je n'ai pas pu envoyer de message privé à l'utilisateur.",
   "moderation.warning.case_not_saved": "L'action a été effectuée mais le cas n'a pas pu être enregistré.",
   "moderation.warning.log_failed": "L'action a été effectuée mais le journal de modération n'a pas pu être écrit.",
-  "moderation.warning.schedule_failed": "L'action a été effectuée mais sa fin automatique n'a pas pu être programmée."
+  "moderation.warning.schedule_failed": "L'action a été effectuée mais sa fin automatique n'a pas pu être programmée.",
+  "moderation.err.bad_duration": "Je n'ai pas compris cette durée. Utilisez par exemple 30m, 2h ou 7d.",
+  "moderation.done": "Fait : {type}. Cas n°{number}.",
+  "moderation.done.warn": "Avertissement n°{number} enregistré (cas n°{number}).",
+  "moderation.done.duration": "Durée : {duration}",
+  "moderation.done.nocase": "Fait : {type}."
 }

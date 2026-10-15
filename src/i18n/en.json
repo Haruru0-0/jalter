@@ -283,5 +283,10 @@
   "moderation.warning.dm_failed": "I could not DM the user.",
   "moderation.warning.case_not_saved": "The action was done but the case could not be saved.",
   "moderation.warning.log_failed": "The action was done but the mod log could not be written.",
-  "moderation.warning.schedule_failed": "The action was done but its automatic end could not be scheduled."
+  "moderation.warning.schedule_failed": "The action was done but its automatic end could not be scheduled.",
+  "moderation.err.bad_duration": "I could not read that duration. Use something like 30m, 2h or 7d.",
+  "moderation.done": "Done: {type}. Case #{number}.",
+  "moderation.done.warn": "Warning #{number} recorded (case #{number}).",
+  "moderation.done.duration": "Duration: {duration}",
+  "moderation.done.nocase": "Done: {type}."
 }

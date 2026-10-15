@@ -283,5 +283,10 @@
   "moderation.warning.dm_failed": "تعذر إرسال رسالة خاصة للمستخدم.",
   "moderation.warning.case_not_saved": "تم تنفيذ الإجراء لكن تعذر حفظ القضية.",
   "moderation.warning.log_failed": "تم تنفيذ الإجراء لكن تعذر الكتابة في سجل الإشراف.",
-  "moderation.warning.schedule_failed": "تم تنفيذ الإجراء لكن تعذرت جدولة إنهائه تلقائيا."
+  "moderation.warning.schedule_failed": "تم تنفيذ الإجراء لكن تعذرت جدولة إنهائه تلقائيا.",
+  "moderation.err.bad_duration": "تعذرت قراءة هذه المدة. استخدم مثلا 30m أو 2h أو 7d.",
+  "moderation.done": "تم: {type}. القضية رقم {number}.",
+  "moderation.done.warn": "تم تسجيل التحذير رقم {number} (القضية رقم {number}).",
+  "moderation.done.duration": "المدة: {duration}",
+  "moderation.done.nocase": "تم: {type}."
 }
