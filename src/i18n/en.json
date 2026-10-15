@@ -371,5 +371,6 @@
   "moderation.tools.purge.old_delete_failed": "The copy {channel} was created and the settings now point to it, but I could not delete the old channel. Delete it by hand.",
   "moderation.tools.purge.position_failed": "I could not restore its position in the channel list.",
   "moderation.tools.purge.done": "Channel purged. The new channel is {channel}.",
-  "moderation.tools.purge.notice": "This channel was purged by a moderator."
+  "moderation.tools.purge.notice": "This channel was purged by a moderator.",
+  "moderation.tools.purge.in_progress": "A purge of this channel is already in progress."
 }

@@ -482,3 +482,80 @@ test('confirm: a vanished channel is reported', async () => {
   await comps.handle(f.button(okId('mod', 'OLD', Date.now())), f.ctx);
   assert.equal(f.calls.updates.at(-1).content, t('en', 'moderation.tools.purge.gone'));
 });
+
+// ---- purge channel: fix round 1 ----
+
+test('concurrent confirms for the same channel run once; the second gets in-progress; guard releases after success', async () => {
+  await seedIds();
+  const f = chanFake();
+  const id = okId('mod', 'OLD', Date.now());
+  const b1 = f.button(id);
+  const b2 = f.button(id);
+  const second = [];
+  b2.reply = async (p) => { second.push(p); };
+  let release;
+  b1.deferUpdate = () => new Promise((r) => { release = r; });
+  const first = comps.handle(b1, f.ctx);
+  await comps.handle(b2, f.ctx);
+  release();
+  await first;
+  assert.equal(f.calls.cloneReasons.length, 1);
+  assert.deepEqual(f.calls.deleted.map((d) => d[0]), ['OLD']);
+  assert.equal(second[0].content, t('en', 'moderation.tools.purge.in_progress'));
+  // released: a later press runs again (channel reappears)
+  const g = chanFake();
+  await comps.handle(g.button(id), g.ctx);
+  assert.equal(g.calls.cloneReasons.length, 1);
+});
+
+test('the in-flight guard is released after a failure so a retry works', async () => {
+  const f = chanFake({ cloneThrows: true });
+  await comps.handle(f.button(okId('mod', 'OLD', Date.now())), f.ctx);
+  const g = chanFake();
+  await comps.handle(g.button(okId('mod', 'OLD', Date.now())), g.ctx);
+  assert.deepEqual(g.calls.deleted.map((d) => d[0]), ['OLD']);
+});
+
+test('an unexpected throw after deferUpdate still edits the message and clears the buttons', async () => {
+  const f = chanFake();
+  f.ctx.db = { query: async () => { throw new Error('db down'); }, connect: async () => { throw new Error('db down'); } };
+  const b = f.button(okId('mod', 'OLD', Date.now()));
+  // guard uses db for language; keep it working by failing only later queries
+  let n = 0;
+  f.ctx.db.query = async (...a) => { n += 1; if (n > 2) throw new Error('db down'); return db.query(...a); };
+  await comps.handle(b, f.ctx);
+  const last = f.calls.updates.at(-1);
+  assert.equal(last.content, t('en', 'moderation.tools.err.failed'));
+  assert.deepEqual(last.components, []);
+  assert.deepEqual(f.calls.deleted, []);
+});
+
+test('old-channel delete failure still writes a log line for the clone', async () => {
+  await seedIds();
+  const f = chanFake({ deleteThrows: true });
+  await comps.handle(f.button(okId('mod', 'OLD', Date.now())), f.ctx);
+  assert.equal(f.logs.length, 1);
+  assert.ok(JSON.stringify(f.logs[0]).includes('<#NEW>'));
+});
+
+test('move failure plus clone cleanup failure tells the moderator a copy remains', async () => {
+  await seedIds();
+  const f = chanFake();
+  f.ctx.db = { query: (...a) => db.query(...a), connect: async () => { throw new Error('db down'); } };
+  const origClone = f.all.get('OLD').clone;
+  f.all.get('OLD').clone = async (o) => { const c = await origClone(o); c.delete = async () => { throw new Error('nope'); }; return c; };
+  await comps.handle(f.button(okId('mod', 'OLD', Date.now())), f.ctx);
+  assert.equal(f.calls.updates.at(-1).content, t('en', 'moderation.tools.purge.move_failed_clone_left', { channel: '<#NEW>' }));
+  assert.deepEqual(f.calls.deleted, []);
+});
+
+test('the reason reaches the audit reason and the log', async () => {
+  await seedIds();
+  const f = chanFake();
+  await purgeCommand.execute(f.slash, f.ctx);
+  const cid = f.calls.replies[0].components[0].toJSON().components[0].custom_id;
+  await comps.handle(f.button(cid), f.ctx);
+  assert.match(f.calls.cloneReasons[0], /cleanup/);
+  assert.match(f.calls.deleted[0][1], /cleanup/);
+  assert.ok(JSON.stringify(f.logs[0]).includes('cleanup'));
+});

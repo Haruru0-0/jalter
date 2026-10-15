@@ -134,6 +134,10 @@ async function execute(interaction, ctx) {
 
 // Reasons are too long for a custom id; keep them in memory until the confirm expires.
 const pendingReasons = new Map();
+const inFlight = new Set();
+const dropReasons = (userId) => {
+  for (const k of pendingReasons.keys()) if (k.startsWith(userId + ':')) pendingReasons.delete(k);
+};
 const reasonKey = (userId, channelId, createdAt) => `${userId}:${channelId}:${createdAt}`;
 
 /** Shared by the command and the Confirm press. Returns an i18n key under moderation.tools, or null. */
@@ -189,16 +193,38 @@ async function handle(interaction, ctx) {
     return;
   }
   if (action === 'no') {
+    dropReasons(userId);
     await interaction.update({ content: t(lang, 'moderation.tools.purge.cancelled'), components: [] });
     return;
   }
   const createdAt = Number(createdRaw);
   const age = Date.now() - createdAt;
   if (!Number.isFinite(age) || age > CONFIRM_TTL_MS || age < -5000) {
+    dropReasons(userId);
     await interaction.update({ content: t(lang, 'moderation.tools.purge.expired'), components: [] });
     return;
   }
-  await interaction.deferUpdate();
+  if (inFlight.has(channelId)) {
+    await interaction.reply(ephemeral(t(lang, 'moderation.tools.purge.in_progress')));
+    return;
+  }
+  inFlight.add(channelId);
+  try {
+    await interaction.deferUpdate();
+    await runConfirm(interaction, ctx, lang, userId, channelId, createdAt);
+  } catch (err) {
+    console.warn('Purge channel: confirm failed: '+err?.message);
+    try {
+      await interaction.editReply({ content: t(lang, 'moderation.tools.err.failed'), components: [] });
+    } catch (editErr) {
+      console.warn('Purge channel: could not report failure: '+editErr?.message);
+    }
+  } finally {
+    inFlight.delete(channelId);
+  }
+}
+
+async function runConfirm(interaction, ctx, lang, userId, channelId, createdAt) {
   const finish = (content) => interaction.editReply({ content, components: [] });
   const { guild } = interaction;
   const old = guild.channels.cache.get(channelId) ?? await guild.channels.fetch(channelId).catch(() => null);
@@ -252,7 +278,11 @@ async function handle(interaction, ctx) {
     await old.delete(auditReason);
   } catch (err) {
     console.warn(`Purge channel: old channel delete failed: ${err?.code ?? ''} ${err?.message}`);
-    await finish(t(lang, 'moderation.tools.purge.old_delete_failed', { channel: mention }));
+    const partial = t(lang, 'moderation.tools.purge.old_delete_failed', { channel: mention });
+    await logTool(ctx, guild, lang, {
+      tool: 'purge channel', actorId: userId, channelId: clone.id, detail: partial, reason,
+    });
+    await finish(partial);
     return;
   }
   await postNotice(clone, { content: t(lang, 'moderation.tools.purge.notice') });

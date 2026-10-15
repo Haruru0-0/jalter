@@ -371,5 +371,6 @@
   "moderation.tools.purge.old_delete_failed": "تم إنشاء النسخة {channel} وأصبحت الإعدادات تشير إليها، لكن تعذر حذف القناة القديمة. احذفها يدويًا.",
   "moderation.tools.purge.position_failed": "تعذر استعادة موضعها في قائمة القنوات.",
   "moderation.tools.purge.done": "تم تنظيف القناة. القناة الجديدة هي {channel}.",
-  "moderation.tools.purge.notice": "تم تنظيف هذه القناة بواسطة مشرف."
+  "moderation.tools.purge.notice": "تم تنظيف هذه القناة بواسطة مشرف.",
+  "moderation.tools.purge.in_progress": "عملية تنظيف هذه القناة جارية بالفعل."
 }
