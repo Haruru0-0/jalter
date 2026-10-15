@@ -356,5 +356,20 @@
   "moderation.tools.purge.reply": "تم حذف {count} رسالة.",
   "moderation.tools.purge.none": "لم أجد أي رسائل لحذفها.",
   "moderation.tools.purge.note_fewer": "تم العثور على {found} رسالة مطابقة فقط، أقل من {count} التي طلبتها.",
-  "moderation.tools.purge.note_skipped": "تم تجاهل {old} رسالة أقدم من 14 يومًا و{pinned} رسالة مثبتة."
+  "moderation.tools.purge.note_skipped": "تم تجاهل {old} رسالة أقدم من 14 يومًا و{pinned} رسالة مثبتة.",
+  "moderation.tools.purge.protected": "هذه القناة هي قناة قواعد الخادم أو تحديثات المجتمع، لذلك لا يمكن تنظيفها.",
+  "moderation.tools.purge.media_here": "توجد صور محفوظة في هذه القناة. احذفها أولًا ثم حاول مرة أخرى.",
+  "moderation.tools.purge.warning": "سيتم حذف {channel} وإنشاء نسخة فارغة منها بنفس الإعدادات والصلاحيات. ستفقد جميع الرسائل والرسائل المثبتة وخطافات الويب والدعوات والخيوط ومتابعي الإعلانات. لا يمكن التراجع عن ذلك. أكّد خلال دقيقتين.",
+  "moderation.tools.purge.confirm": "تأكيد التنظيف",
+  "moderation.tools.purge.cancel": "إلغاء",
+  "moderation.tools.purge.cancelled": "تم إلغاء التنظيف.",
+  "moderation.tools.purge.expired": "انتهت صلاحية هذا التأكيد. أعد تشغيل الأمر.",
+  "moderation.tools.purge.not_yours": "المشرف الذي شغّل الأمر وحده يستطيع استخدام هذه الأزرار.",
+  "moderation.tools.purge.gone": "هذه القناة لم تعد موجودة.",
+  "moderation.tools.purge.move_failed": "تعذر تحديث الإعدادات المحفوظة، فحذفت النسخة وتركت القناة الأصلية دون تغيير.",
+  "moderation.tools.purge.move_failed_clone_left": "تعذر تحديث الإعدادات المحفوظة وتعذر حذف النسخة {channel}. القناة الأصلية لم تتغير.",
+  "moderation.tools.purge.old_delete_failed": "تم إنشاء النسخة {channel} وأصبحت الإعدادات تشير إليها، لكن تعذر حذف القناة القديمة. احذفها يدويًا.",
+  "moderation.tools.purge.position_failed": "تعذر استعادة موضعها في قائمة القنوات.",
+  "moderation.tools.purge.done": "تم تنظيف القناة. القناة الجديدة هي {channel}.",
+  "moderation.tools.purge.notice": "تم تنظيف هذه القناة بواسطة مشرف."
 }

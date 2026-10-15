@@ -356,5 +356,20 @@
   "moderation.tools.purge.reply": "Deleted {count} messages.",
   "moderation.tools.purge.none": "I found no messages to delete.",
   "moderation.tools.purge.note_fewer": "Only {found} matching messages were found, fewer than the {count} you asked for.",
-  "moderation.tools.purge.note_skipped": "Skipped {old} messages older than 14 days and {pinned} pinned messages."
+  "moderation.tools.purge.note_skipped": "Skipped {old} messages older than 14 days and {pinned} pinned messages.",
+  "moderation.tools.purge.protected": "This channel is the server rules or community updates channel, so it cannot be purged.",
+  "moderation.tools.purge.media_here": "Stored images live in this channel. Remove them first, then try again.",
+  "moderation.tools.purge.warning": "This will delete {channel} and create an empty copy with the same settings and permissions. You will lose all messages, pins, webhooks, invites, threads and announcement followers. This cannot be undone. Confirm within 2 minutes.",
+  "moderation.tools.purge.confirm": "Confirm purge",
+  "moderation.tools.purge.cancel": "Cancel",
+  "moderation.tools.purge.cancelled": "Purge cancelled.",
+  "moderation.tools.purge.expired": "This confirmation expired. Run the command again.",
+  "moderation.tools.purge.not_yours": "Only the moderator who ran the command can use these buttons.",
+  "moderation.tools.purge.gone": "That channel no longer exists.",
+  "moderation.tools.purge.move_failed": "I could not update the saved settings, so I removed the copy and left the original channel untouched.",
+  "moderation.tools.purge.move_failed_clone_left": "I could not update the saved settings and could not remove the copy {channel}. The original channel is untouched.",
+  "moderation.tools.purge.old_delete_failed": "The copy {channel} was created and the settings now point to it, but I could not delete the old channel. Delete it by hand.",
+  "moderation.tools.purge.position_failed": "I could not restore its position in the channel list.",
+  "moderation.tools.purge.done": "Channel purged. The new channel is {channel}.",
+  "moderation.tools.purge.notice": "This channel was purged by a moderator."
 }

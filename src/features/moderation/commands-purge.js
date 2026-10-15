@@ -1,10 +1,15 @@
-import { SlashCommandBuilder, ChannelType, MessageFlags } from 'discord.js';
+import { SlashCommandBuilder, ChannelType, MessageFlags, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { getFeature } from '../../db/settings.js';
 import { guard } from '../../core/guard.js';
 import { ephemeral } from '../../core/replies.js';
 import { t } from '../../i18n/index.js';
 import { readConfig } from './config.js';
-import { checkToolAccess, logTool } from './tools-common.js';
+import { checkToolAccess, logTool, postNotice } from './tools-common.js';
+import { moveChannelId, mediaHoldsChannel } from './channel-move.js';
+
+const CONFIRM_TTL_MS = 120_000;
+const CHANNEL_TYPES = [ChannelType.GuildText, ChannelType.GuildAnnouncement];
+const CHANNEL_BOT_PERMISSIONS = ['ViewChannel', 'ManageChannels', 'SendMessages', 'ManageRoles'];
 
 const REASON_MAX = 400;
 const COUNT_MAX = 100;
@@ -43,6 +48,9 @@ function buildPurge() {
       .addIntegerOption((o) => o.setName('count').setDescription('How many messages to delete').setRequired(true).setMinValue(1).setMaxValue(COUNT_MAX))
       .addUserOption((o) => o.setName('user').setDescription('Only delete messages from this member'))
       .addBooleanOption((o) => o.setName('bots').setDescription('Only delete messages written by bots'))
+      .addStringOption((o) => o.setName('reason').setDescription('Why (kept in the mod log)').setMaxLength(REASON_MAX)))
+    .addSubcommand((s) => s.setName('channel').setDescription('Delete a channel and recreate it empty')
+      .addChannelOption((o) => o.setName('channel').setDescription('Channel to purge (default: this one)').addChannelTypes(...CHANNEL_TYPES))
       .addStringOption((o) => o.setName('reason').setDescription('Why (kept in the mod log)').setMaxLength(REASON_MAX)));
 }
 
@@ -119,8 +127,140 @@ const skipNote = (lang, p) => t(lang, 'moderation.tools.purge.note_skipped', { o
 async function execute(interaction, ctx) {
   switch (interaction.options.getSubcommand()) {
     case 'messages': return executeMessages(interaction, ctx);
+    case 'channel': return executeChannel(interaction, ctx);
     default: return undefined;
   }
 }
 
-export const purgeCommand = { data: buildPurge(), execute };
+// Reasons are too long for a custom id; keep them in memory until the confirm expires.
+const pendingReasons = new Map();
+const reasonKey = (userId, channelId, createdAt) => `${userId}:${channelId}:${createdAt}`;
+
+/** Shared by the command and the Confirm press. Returns an i18n key under moderation.tools, or null. */
+async function channelProblem(interaction, ctx, channel) {
+  const { config: raw } = await getFeature(ctx.db, interaction.guildId, 'moderation');
+  const typeOk = Boolean(channel) && CHANNEL_TYPES.includes(channel.type);
+  const access = checkToolAccess({
+    interaction, action: 'purgeall', config: readConfig(raw), channel: typeOk ? channel : null,
+    botPermissions: CHANNEL_BOT_PERMISSIONS,
+  });
+  if (!access.ok) return `err.${access.reason}`;
+  const { guild } = interaction;
+  if (channel.id === guild.rulesChannelId || channel.id === guild.publicUpdatesChannelId) return 'purge.protected';
+  if (await mediaHoldsChannel(ctx.db, guild.id, channel.id)) return 'purge.media_here';
+  return null;
+}
+
+async function executeChannel(interaction, ctx) {
+  const lang = await guard(interaction, ctx, 'moderation', { requireManager: false });
+  if (!lang) return;
+  const channel = interaction.options.getChannel('channel') ?? interaction.channel;
+  const problem = await channelProblem(interaction, ctx, channel);
+  if (problem) {
+    await interaction.reply(ephemeral(t(lang, `moderation.tools.${problem}`)));
+    return;
+  }
+  const createdAt = Date.now();
+  const reason = interaction.options.getString('reason');
+  if (reason) {
+    const key = reasonKey(interaction.user.id, channel.id, createdAt);
+    pendingReasons.set(key, reason);
+    setTimeout(() => pendingReasons.delete(key), CONFIRM_TTL_MS + 5000).unref?.();
+  }
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`purge:ok:${interaction.user.id}:${channel.id}:${createdAt}`)
+      .setLabel(t(lang, 'moderation.tools.purge.confirm')).setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId(`purge:no:${interaction.user.id}`)
+      .setLabel(t(lang, 'moderation.tools.purge.cancel')).setStyle(ButtonStyle.Secondary),
+  );
+  await interaction.reply(ephemeral({
+    content: t(lang, 'moderation.tools.purge.warning', { channel: `<#${channel.id}>` }),
+    components: [row],
+  }));
+}
+
+async function handle(interaction, ctx) {
+  const [, action, userId, channelId, createdRaw] = interaction.customId.split(':');
+  if (!interaction.isButton?.() || !['ok', 'no'].includes(action)) return;
+  const lang = await guard(interaction, ctx, 'moderation', { requireManager: false });
+  if (!lang) return;
+  if (interaction.user.id !== userId) {
+    await interaction.reply(ephemeral(t(lang, 'moderation.tools.purge.not_yours')));
+    return;
+  }
+  if (action === 'no') {
+    await interaction.update({ content: t(lang, 'moderation.tools.purge.cancelled'), components: [] });
+    return;
+  }
+  const createdAt = Number(createdRaw);
+  const age = Date.now() - createdAt;
+  if (!Number.isFinite(age) || age > CONFIRM_TTL_MS || age < -5000) {
+    await interaction.update({ content: t(lang, 'moderation.tools.purge.expired'), components: [] });
+    return;
+  }
+  await interaction.deferUpdate();
+  const finish = (content) => interaction.editReply({ content, components: [] });
+  const { guild } = interaction;
+  const old = guild.channels.cache.get(channelId) ?? await guild.channels.fetch(channelId).catch(() => null);
+  if (!old) {
+    await finish(t(lang, 'moderation.tools.purge.gone'));
+    return;
+  }
+  const problem = await channelProblem(interaction, ctx, old);
+  if (problem) {
+    await finish(t(lang, `moderation.tools.${problem}`));
+    return;
+  }
+  const key = reasonKey(userId, channelId, createdAt);
+  const reason = pendingReasons.get(key) ?? null;
+  pendingReasons.delete(key);
+  const auditReason = `Purged by ${userId}${reason ? `: ${reason}` : ''}`.slice(0, 512);
+
+  let clone;
+  try {
+    clone = await old.clone({ reason: auditReason });
+  } catch (err) {
+    console.warn(`Purge channel: clone failed: ${err?.code ?? ''} ${err?.message}`);
+    await finish(t(lang, 'moderation.tools.err.failed'));
+    return;
+  }
+  const mention = `<#${clone.id}>`;
+  let positionFailed = false;
+  try {
+    await clone.setPosition(old.position);
+  } catch (err) {
+    console.warn(`Purge channel: position failed: ${err?.message}`);
+    positionFailed = true;
+  }
+  try {
+    await moveChannelId(ctx.db, guild.id, old.id, clone.id);
+  } catch (err) {
+    console.warn(`Purge channel: settings move failed: ${err?.message}`);
+    let removed = true;
+    try {
+      await clone.delete(auditReason);
+    } catch (delErr) {
+      console.warn(`Purge channel: clone cleanup failed: ${delErr?.message}`);
+      removed = false;
+    }
+    await finish(removed
+      ? t(lang, 'moderation.tools.purge.move_failed')
+      : t(lang, 'moderation.tools.purge.move_failed_clone_left', { channel: mention }));
+    return;
+  }
+  try {
+    await old.delete(auditReason);
+  } catch (err) {
+    console.warn(`Purge channel: old channel delete failed: ${err?.code ?? ''} ${err?.message}`);
+    await finish(t(lang, 'moderation.tools.purge.old_delete_failed', { channel: mention }));
+    return;
+  }
+  await postNotice(clone, { content: t(lang, 'moderation.tools.purge.notice') });
+  const done = t(lang, 'moderation.tools.purge.done', { channel: mention });
+  await logTool(ctx, guild, lang, {
+    tool: 'purge channel', actorId: userId, channelId: clone.id, detail: done, reason,
+  });
+  await finish(positionFailed ? `${done}\n${t(lang, 'moderation.tools.purge.position_failed')}` : done);
+}
+
+export const purgeCommand = { data: buildPurge(), execute, components: { prefix: 'purge', handle } };

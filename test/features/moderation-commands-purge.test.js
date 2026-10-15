@@ -70,7 +70,7 @@ const realWarn = console.warn;
 before(async () => { db = await testDb(); });
 beforeEach(async () => {
   console.warn = () => {};
-  await db.query('TRUNCATE guild_settings');
+  await db.query('TRUNCATE guild_settings, media_items');
   await setFeature(db, 'g1', 'moderation', { enabled: true, config: {} });
   await setFeature(db, 'g1', 'logging', { enabled: true, config: { channels: { default: 'LOG' } } });
 });
@@ -237,4 +237,248 @@ test('a Discord error gives the failed reply and no log line', async () => {
   await run(f);
   assert.equal(last(f), t('en', 'moderation.tools.err.failed'));
   assert.deepEqual(f.logs, []);
+});
+
+// ---- purge channel ----
+
+const okId = (u, c, at) => `purge:ok:${u}:${c}:${at}`;
+const addMedia = () => db.query("INSERT INTO media_items (guild_id, name, channel_id, message_id) VALUES ('g1','x','OLD','m')");
+
+function chanFake({
+  type = 0, subChannel = 'OLD', perms = ['ManageChannels'], botPerms = ['ViewChannel', 'ManageChannels', 'SendMessages', 'ManageRoles'],
+  rules = 'RULES', updates = 'UPD', cloneThrows = false, deleteThrows = false, positionThrows = false, currentId = 'HERE',
+} = {}) {
+  const calls = { replies: [], updates: [], cloneReasons: [], positions: [], deleted: [], notices: [], deferred: 0 };
+  const mk = (id, ty = type) => ({
+    id, type: ty, position: 7,
+    permissionsFor: (m) => ({ has: (p) => (m.id === 'bot' ? botPerms : ['ViewChannel']).includes(p) }),
+  });
+  const old = mk('OLD');
+  old.clone = async (o) => {
+    calls.cloneReasons.push(o?.reason);
+    if (cloneThrows) throw new Error('clone nope');
+    const c = mk('NEW');
+    c.setPosition = async (p) => { if (positionThrows) throw new Error('pos'); calls.positions.push(p); };
+    c.delete = async (r) => { calls.deleted.push(['NEW', r]); };
+    c.send = async (p) => { calls.notices.push(p); return {}; };
+    calls.clone = c;
+    return c;
+  };
+  old.delete = async (r) => { if (deleteThrows) throw new Error('del nope'); calls.deleted.push(['OLD', r]); };
+  const here = mk(currentId);
+  const all = new Map([['OLD', old], ['RULES', mk('RULES')], ['UPD', mk('UPD')], ['VOICE', mk('VOICE', 2)], [currentId, here]]);
+  const guild = {
+    id: 'g1', members: { me: { id: 'bot' } }, rulesChannelId: rules, publicUpdatesChannelId: updates,
+    channels: { cache: all, fetch: async (id) => all.get(id) ?? null },
+  };
+  const logs = [];
+  const ctx = {
+    db,
+    client: {
+      user: { id: 'bot' }, guilds: { cache: new Map([['g1', guild]]) },
+      channels: { fetch: async () => ({ id: 'LOG', isTextBased: () => true, send: async (p) => { logs.push(p); return { id: 'm', channelId: 'LOG' }; } }) },
+    },
+  };
+  const member = { id: 'mod', permissions: { has: (p) => perms.includes(p) }, roles: { cache: { has: () => false } } };
+  const base = { guildId: 'g1', guild, member, user: { id: 'mod' }, inGuild: () => true, channel: here };
+  const slash = {
+    ...base, id: 'i1',
+    options: {
+      getSubcommand: () => 'channel',
+      getChannel: () => (subChannel === null ? null : all.get(subChannel)),
+      getString: () => 'cleanup',
+    },
+    reply: async (p) => { calls.replies.push(p); },
+  };
+  const button = (customId, user = 'mod') => ({
+    ...base, user: { id: user }, customId, isButton: () => true,
+    reply: async (p) => { calls.replies.push(p); },
+    update: async (p) => { calls.updates.push(p); },
+    deferUpdate: async () => { calls.deferred += 1; },
+    editReply: async (p) => { calls.updates.push(p); },
+  });
+  return { slash, button, ctx, calls, logs, all };
+}
+const comps = purgeCommand.components;
+const text = (p) => p.content;
+
+test('/purge channel is declared with optional channel and reason; components prefix purge', () => {
+  const j = purgeCommand.data.toJSON();
+  const sub = j.options.find((o) => o.name === 'channel');
+  assert.ok(sub);
+  assert.deepEqual(sub.options.map((o) => [o.name, !!o.required]), [['channel', false], ['reason', false]]);
+  assert.deepEqual(sub.options[0].channel_types, [0, 5]);
+  assert.equal(sub.options[1].max_length, 400);
+  for (const o of [sub, ...sub.options]) assert.ok(o.description.length >= 1 && o.description.length <= 100);
+  assert.equal(comps.prefix, 'purge');
+  assert.equal(typeof comps.handle, 'function');
+});
+
+test('channel: refuses rules and community-updates channels, voice channels and media-held channels (no buttons)', async () => {
+  for (const sc of ['RULES', 'UPD']) {
+    const f = chanFake({ subChannel: sc });
+    await purgeCommand.execute(f.slash, f.ctx);
+    assert.equal(text(f.calls.replies[0]), t('en', 'moderation.tools.purge.protected'));
+    assert.equal(f.calls.replies[0].components, undefined);
+  }
+  const v = chanFake({ subChannel: 'VOICE' });
+  await purgeCommand.execute(v.slash, v.ctx);
+  assert.equal(text(v.calls.replies[0]), t('en', 'moderation.tools.err.bad_channel'));
+  assert.equal(v.calls.replies[0].components, undefined);
+
+  await addMedia();
+  const m = chanFake();
+  await purgeCommand.execute(m.slash, m.ctx);
+  assert.equal(text(m.calls.replies[0]), t('en', 'moderation.tools.purge.media_here'));
+  assert.equal(m.calls.replies[0].components, undefined);
+});
+
+test('channel: permission and bot-permission refusals; SendMessages and ManageRoles are required', async () => {
+  const a = chanFake({ perms: [] });
+  await purgeCommand.execute(a.slash, a.ctx);
+  assert.equal(text(a.calls.replies[0]), t('en', 'moderation.tools.err.not_allowed'));
+  for (const missing of ['ManageChannels', 'SendMessages', 'ManageRoles', 'ViewChannel']) {
+    const f = chanFake({ botPerms: ['ViewChannel', 'ManageChannels', 'SendMessages', 'ManageRoles'].filter((p) => p !== missing) });
+    await purgeCommand.execute(f.slash, f.ctx);
+    assert.equal(text(f.calls.replies[0]), t('en', 'moderation.tools.err.bot_missing'), missing);
+  }
+});
+
+test('channel: shows the warning with the mention and two buttons carrying the ids', async () => {
+  const f = chanFake();
+  const before = Date.now();
+  await purgeCommand.execute(f.slash, f.ctx);
+  const r = f.calls.replies[0];
+  assert.ok(r.flags !== undefined);
+  assert.ok(r.content.includes('<#OLD>'));
+  const buttons = r.components[0].toJSON().components;
+  assert.equal(buttons.length, 2);
+  const m = buttons[0].custom_id.match(/^purge:ok:mod:OLD:(\d+)$/);
+  assert.ok(m);
+  assert.ok(Number(m[1]) >= before && Number(m[1]) <= Date.now());
+  assert.equal(buttons[1].custom_id, 'purge:no:mod');
+});
+
+test('channel: defaults to the current channel', async () => {
+  const f = chanFake({ subChannel: null, currentId: 'OLD' });
+  await purgeCommand.execute(f.slash, f.ctx);
+  assert.ok(f.calls.replies[0].components[0].toJSON().components[0].custom_id.startsWith('purge:ok:mod:OLD:'));
+});
+
+test('button: pressed by someone else is refused and nothing happens', async () => {
+  const f = chanFake();
+  await comps.handle(f.button(okId('mod', 'OLD', Date.now()), 'other'), f.ctx);
+  assert.equal(text(f.calls.replies[0]), t('en', 'moderation.tools.purge.not_yours'));
+  assert.equal(f.calls.clone, undefined);
+  const g = chanFake();
+  await comps.handle(g.button('purge:no:mod', 'other'), g.ctx);
+  assert.equal(text(g.calls.replies[0]), t('en', 'moderation.tools.purge.not_yours'));
+  assert.deepEqual(g.calls.updates, []);
+});
+
+test('button: expired confirm is refused', async () => {
+  const f = chanFake();
+  await comps.handle(f.button(okId('mod', 'OLD', Date.now() - 121_000)), f.ctx);
+  assert.equal(text(f.calls.updates[0] ?? f.calls.replies[0]), t('en', 'moderation.tools.purge.expired'));
+  assert.equal(f.calls.clone, undefined);
+  assert.deepEqual(f.calls.deleted, []);
+});
+
+test('button: cancel clears the buttons', async () => {
+  const f = chanFake();
+  await comps.handle(f.button('purge:no:mod'), f.ctx);
+  assert.equal(text(f.calls.updates[0]), t('en', 'moderation.tools.purge.cancelled'));
+  assert.deepEqual(f.calls.updates[0].components, []);
+});
+
+async function seedIds() {
+  await setFeature(db, 'g1', 'logging', { enabled: true, config: { channels: { default: 'LOG', join: 'OLD' } } });
+  await setFeature(db, 'g1', 'greet', { enabled: true, config: { channelId: 'OLD' } });
+}
+const cfg = async (feature) => (await db.query('SELECT config FROM guild_settings WHERE guild_id=$1 AND feature=$2', ['g1', feature])).rows[0].config;
+
+test('confirm happy path: clone, position, ids moved, old deleted, notice, one log, result with new mention', async () => {
+  await seedIds();
+  const f = chanFake({ currentId: 'ELSEWHERE' });
+  await comps.handle(f.button(okId('mod', 'OLD', Date.now())), f.ctx);
+  assert.equal(f.calls.clone.id, 'NEW');
+  assert.deepEqual(f.calls.positions, [7]);
+  assert.equal((await cfg('greet')).channelId, 'NEW');
+  assert.equal((await cfg('logging')).channels.join, 'NEW');
+  assert.deepEqual(f.calls.deleted.map((d) => d[0]), ['OLD']);
+  assert.equal(f.calls.notices.length, 1);
+  assert.equal(f.logs.length, 1);
+  assert.match(f.logs[0].embeds[0].title, /purge channel/);
+  assert.ok(JSON.stringify(f.logs[0]).includes('<#NEW>'));
+  const last = f.calls.updates.at(-1);
+  assert.ok(last.content.includes('<#NEW>'));
+  assert.deepEqual(last.components, []);
+});
+
+test('confirm wipes the channel from the custom id, not the current channel', async () => {
+  const f = chanFake({ currentId: 'HERE' });
+  await comps.handle(f.button(okId('mod', 'OLD', Date.now())), f.ctx);
+  assert.deepEqual(f.calls.deleted.map((d) => d[0]), ['OLD']);
+});
+
+test('confirm re-checks permissions, protected and media at press time', async () => {
+  const a = chanFake({ perms: [] });
+  await comps.handle(a.button(okId('mod', 'OLD', Date.now())), a.ctx);
+  assert.equal(a.calls.clone, undefined);
+  assert.deepEqual(a.calls.deleted, []);
+  const b = chanFake({ botPerms: ['ViewChannel', 'ManageChannels'] });
+  await comps.handle(b.button(okId('mod', 'OLD', Date.now())), b.ctx);
+  assert.equal(b.calls.clone, undefined);
+  const c = chanFake({ rules: 'OLD' });
+  await comps.handle(c.button(okId('mod', 'OLD', Date.now())), c.ctx);
+  assert.equal(c.calls.clone, undefined);
+  await addMedia();
+  const d = chanFake();
+  await comps.handle(d.button(okId('mod', 'OLD', Date.now())), d.ctx);
+  assert.equal(d.calls.clone, undefined);
+});
+
+test('confirm: clone failure moves and deletes nothing', async () => {
+  await seedIds();
+  const f = chanFake({ cloneThrows: true });
+  await comps.handle(f.button(okId('mod', 'OLD', Date.now())), f.ctx);
+  assert.equal(f.calls.updates.at(-1).content, t('en', 'moderation.tools.err.failed'));
+  assert.equal((await cfg('greet')).channelId, 'OLD');
+  assert.deepEqual(f.calls.deleted, []);
+  assert.deepEqual(f.logs, []);
+});
+
+test('confirm: move failure deletes the clone and keeps the old channel', async () => {
+  await seedIds();
+  const f = chanFake();
+  f.ctx.db = { query: (...a) => db.query(...a), connect: async () => { throw new Error('db down'); } };
+  await comps.handle(f.button(okId('mod', 'OLD', Date.now())), f.ctx);
+  assert.deepEqual(f.calls.deleted.map((d) => d[0]), ['NEW']);
+  assert.equal(f.calls.updates.at(-1).content, t('en', 'moderation.tools.purge.move_failed'));
+  assert.equal((await cfg('greet')).channelId, 'OLD');
+  assert.deepEqual(f.logs, []);
+});
+
+test('confirm: old channel delete failure says settings point at the copy', async () => {
+  await seedIds();
+  const f = chanFake({ deleteThrows: true });
+  await comps.handle(f.button(okId('mod', 'OLD', Date.now())), f.ctx);
+  assert.equal((await cfg('greet')).channelId, 'NEW');
+  assert.equal(f.calls.updates.at(-1).content, t('en', 'moderation.tools.purge.old_delete_failed', { channel: '<#NEW>' }));
+  assert.deepEqual(f.calls.deleted, []);
+});
+
+test('confirm: a position failure does not abort and is mentioned', async () => {
+  await seedIds();
+  const f = chanFake({ positionThrows: true });
+  await comps.handle(f.button(okId('mod', 'OLD', Date.now())), f.ctx);
+  assert.deepEqual(f.calls.deleted.map((d) => d[0]), ['OLD']);
+  assert.ok(f.calls.updates.at(-1).content.includes(t('en', 'moderation.tools.purge.position_failed')));
+});
+
+test('confirm: a vanished channel is reported', async () => {
+  const f = chanFake();
+  f.all.delete('OLD');
+  await comps.handle(f.button(okId('mod', 'OLD', Date.now())), f.ctx);
+  assert.equal(f.calls.updates.at(-1).content, t('en', 'moderation.tools.purge.gone'));
 });

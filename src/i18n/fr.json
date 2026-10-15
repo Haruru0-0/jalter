@@ -356,5 +356,20 @@
   "moderation.tools.purge.reply": "{count} messages supprimés.",
   "moderation.tools.purge.none": "Je n'ai trouvé aucun message à supprimer.",
   "moderation.tools.purge.note_fewer": "Seuls {found} messages correspondants ont été trouvés, moins que les {count} demandés.",
-  "moderation.tools.purge.note_skipped": "{old} messages de plus de 14 jours et {pinned} messages épinglés ont été ignorés."
+  "moderation.tools.purge.note_skipped": "{old} messages de plus de 14 jours et {pinned} messages épinglés ont été ignorés.",
+  "moderation.tools.purge.protected": "Ce salon est le salon du règlement ou des annonces de la communauté, il ne peut donc pas être purgé.",
+  "moderation.tools.purge.media_here": "Des images enregistrées se trouvent dans ce salon. Supprimez-les d'abord, puis réessayez.",
+  "moderation.tools.purge.warning": "Cela supprimera {channel} et créera une copie vide avec les mêmes paramètres et permissions. Vous perdrez tous les messages, épingles, webhooks, invitations, fils et abonnés aux annonces. Cette action est irréversible. Confirmez dans les 2 minutes.",
+  "moderation.tools.purge.confirm": "Confirmer la purge",
+  "moderation.tools.purge.cancel": "Annuler",
+  "moderation.tools.purge.cancelled": "Purge annulée.",
+  "moderation.tools.purge.expired": "Cette confirmation a expiré. Relancez la commande.",
+  "moderation.tools.purge.not_yours": "Seul le modérateur qui a lancé la commande peut utiliser ces boutons.",
+  "moderation.tools.purge.gone": "Ce salon n'existe plus.",
+  "moderation.tools.purge.move_failed": "Je n'ai pas pu mettre à jour les paramètres enregistrés, j'ai donc supprimé la copie et laissé le salon d'origine intact.",
+  "moderation.tools.purge.move_failed_clone_left": "Je n'ai pas pu mettre à jour les paramètres enregistrés ni supprimer la copie {channel}. Le salon d'origine est intact.",
+  "moderation.tools.purge.old_delete_failed": "La copie {channel} a été créée et les paramètres pointent désormais vers elle, mais je n'ai pas pu supprimer l'ancien salon. Supprimez-le à la main.",
+  "moderation.tools.purge.position_failed": "Je n'ai pas pu rétablir sa position dans la liste des salons.",
+  "moderation.tools.purge.done": "Salon purgé. Le nouveau salon est {channel}.",
+  "moderation.tools.purge.notice": "Ce salon a été purgé par un modérateur."
 }
