@@ -26,6 +26,7 @@ REPOS=("${@:-${DEFAULT_REPOS[@]}}")
 DRY_RUN="${DRY_RUN:-0}"
 
 export PATH="$PATH:/c/Program Files/GitHub CLI"
+echo "Checking GitHub login..."
 command -v gh >/dev/null || { echo "gh (GitHub CLI) is not installed or not on PATH"; exit 1; }
 gh auth status >/dev/null 2>&1 || { echo "Run 'gh auth login' first"; exit 1; }
 
@@ -47,18 +48,26 @@ if [ "${1:-}" = "--forget" ]; then
   exit 0
 fi
 
+echo "Mirroring to GitLab user $GITLAB_USER: ${REPOS[*]}"
+
 if [ "$DRY_RUN" = "1" ]; then
   TOKEN="dry-run"
 else
   TOKEN="${GITLAB_TOKEN:-}"
   if [ -z "$TOKEN" ]; then
-    TOKEN="$(vault_get)"
+    echo "Looking for a saved GitLab token (takes a few seconds)..."
+    TOKEN="$(vault_get || true)"
     [ -z "$TOKEN" ] || echo "Using the GitLab token saved in the Windows vault."
   fi
   if [ -z "$TOKEN" ]; then
-    read -rsp "GitLab personal access token (api scope): " TOKEN; echo
+    echo "No saved token. Paste your GitLab token below and press Enter."
+    echo "Nothing appears while you type or paste; that is normal (the input is hidden)."
+    # The prompts are printed with printf: 'read -p' shows nothing in terminals that are not a real TTY.
+    printf 'GitLab personal access token (api scope): ' >&2
+    read -rs TOKEN; echo >&2
     [ -n "$TOKEN" ] || { echo "No token given"; exit 1; }
-    read -rp "Save it in the Windows vault so you are not asked again? [y/N] " save
+    printf 'Save it in the Windows vault so you are not asked again? [y/N] ' >&2
+    read -r save
     if [ "$save" = "y" ] || [ "$save" = "Y" ]; then vault_set "$TOKEN" && echo "Saved."; fi
   fi
 fi
