@@ -61,7 +61,7 @@ const ANNOUNCEMENT = 5;
 const PUBLIC_THREAD = 11;
 
 function fake({
-  type = TEXT, opts = {}, perms = ['ManageChannels'], roles = [], botPerms = ['ViewChannel', 'SendMessages', 'ManageChannels'],
+  type = TEXT, opts = {}, perms = ['ManageChannels'], roles = [], botPerms = ['ViewChannel', 'SendMessages', 'ManageChannels', 'ManageRoles'],
   userPerms = ['ViewChannel'], rateLimit = 0, everyoneDeny = false, sendThrows = false,
 } = {}) {
   const calls = { replies: [], rate: [], edits: [], sent: [] };
@@ -135,7 +135,7 @@ test('slowmode on an announcement channel is refused', async () => {
 });
 
 test('slowmode works in a thread when the bot can manage threads', async () => {
-  const ok = fake({ type: PUBLIC_THREAD, opts: { seconds: 5 }, botPerms: ['ViewChannel', 'SendMessages', 'ManageChannels', 'ManageThreads'] });
+  const ok = fake({ type: PUBLIC_THREAD, opts: { seconds: 5 }, botPerms: ['ViewChannel', 'SendMessagesInThreads', 'ManageChannels', 'ManageThreads'] });
   await run('slowmode', ok);
   assert.equal(ok.calls.rate.length, 1);
   const bad = fake({ type: PUBLIC_THREAD, opts: { seconds: 5 } });
@@ -254,4 +254,92 @@ test('an explicit channel option is used instead of the current channel', async 
   f.interaction.options.getChannel = () => other;
   await run('slowmode', f);
   assert.equal(f.calls.rate[0][0], 'other');
+});
+
+// ---- review fixes ----
+
+function withLogs(f) {
+  const sent = [];
+  f.ctx.client.channels.fetch = async () => ({ id: 'LOG', isTextBased: () => true, send: async (p) => { sent.push(p); return { id: 'm', channelId: 'LOG' }; } });
+  return sent;
+}
+const enableLogging = () => setFeature(db, 'g1', 'logging', { enabled: true, config: { channels: { default: 'LOG' } } });
+
+test('lock and unlock need Manage Roles in the bot; no overwrite edit is made without it', async () => {
+  const botPerms = ['ViewChannel', 'SendMessages', 'ManageChannels'];
+  const f = fake({ botPerms });
+  await run('lock', f);
+  assert.equal(last(f), t('en', 'moderation.tools.err.bot_missing'));
+  const g = fake({ botPerms, everyoneDeny: true });
+  await run('unlock', g);
+  assert.equal(last(g), t('en', 'moderation.tools.err.bot_missing'));
+  assert.deepEqual([...f.calls.edits, ...g.calls.edits], []);
+});
+
+test('slowmode does not need Manage Roles', async () => {
+  const f = fake({ botPerms: ['ViewChannel', 'SendMessages', 'ManageChannels'], opts: { seconds: 5 } });
+  await run('slowmode', f);
+  assert.equal(f.calls.rate.length, 1);
+});
+
+test('a thread notice needs Send Messages in Threads, not Send Messages', async () => {
+  const bad = fake({ type: PUBLIC_THREAD, opts: { seconds: 5 }, botPerms: ['ViewChannel', 'SendMessages', 'ManageChannels', 'ManageThreads'] });
+  await run('slowmode', bad);
+  assert.equal(last(bad), t('en', 'moderation.tools.err.bot_missing'));
+  assert.deepEqual(bad.calls.rate, []);
+});
+
+test('a throwing setRateLimitPerUser gives the failed reply, no notice and no log', async () => {
+  await enableLogging();
+  const f = fake({ opts: { seconds: 5 } });
+  const logs = withLogs(f);
+  f.interaction.channel.setRateLimitPerUser = async () => { throw new Error('boom'); };
+  await run('slowmode', f);
+  assert.equal(last(f), t('en', 'moderation.tools.err.failed'));
+  assert.deepEqual(f.calls.sent, []);
+  assert.deepEqual(logs, []);
+});
+
+test('a moderator who cannot see the channel is refused', async () => {
+  for (const n of ['slowmode', 'lock', 'unlock']) {
+    const f = fake({ userPerms: [], opts: { seconds: 5 }, everyoneDeny: true });
+    await run(n, f);
+    assert.equal(last(f), t('en', 'moderation.tools.err.no_view'), n);
+    assert.deepEqual([f.calls.rate, f.calls.edits, f.calls.sent], [[], [], []], n);
+  }
+});
+
+test('each successful change writes one modAction log line; no-ops and failures write none', async () => {
+  await enableLogging();
+  const cases = [
+    ['slowmode', { opts: { seconds: 5 } }],
+    ['lock', {}],
+    ['unlock', { everyoneDeny: true }],
+  ];
+  for (const [name, o] of cases) {
+    const f = fake(o);
+    const logs = withLogs(f);
+    await run(name, f);
+    assert.equal(logs.length, 1, name);
+    assert.match(logs[0].embeds[0].title, new RegExp(name), name);
+  }
+  const noops = [['slowmode', { opts: { seconds: 5 }, rateLimit: 5 }], ['lock', { everyoneDeny: true }], ['unlock', {}]];
+  for (const [name, o] of noops) {
+    const f = fake(o);
+    const logs = withLogs(f);
+    await run(name, f);
+    assert.deepEqual(logs, [], name);
+  }
+  const f = fake();
+  const logs = withLogs(f);
+  f.interaction.channel.permissionOverwrites.edit = async () => { throw new Error('boom'); };
+  await run('lock', f);
+  assert.deepEqual(logs, []);
+});
+
+test('unlock with a reason passes it to the edit and the notice', async () => {
+  const f = fake({ everyoneDeny: true, opts: { reason: 'all clear' } });
+  await run('unlock', f);
+  assert.equal(f.calls.edits[0][2].reason, 'all clear');
+  assert.match(f.calls.sent[0].content, /all clear/);
 });

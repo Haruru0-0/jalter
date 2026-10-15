@@ -35,14 +35,14 @@ function buildLock(name, description) {
 }
 
 /** Shared front half: guard, config, channel pick, access check. Returns null after replying on refusal. */
-async function open(interaction, ctx, action, { types, extraBotPerms = [] }) {
+async function open(interaction, ctx, action, { types, extraBotPerms = () => [] }) {
   const lang = await guard(interaction, ctx, 'moderation', { requireManager: false });
   if (!lang) return null;
   const { config: raw } = await getFeature(ctx.db, interaction.guildId, 'moderation');
   const config = readConfig(raw);
   const channel = interaction.options.getChannel('channel') ?? interaction.channel;
   const typeOk = Boolean(channel) && types.includes(channel.type);
-  const botPermissions = ['ViewChannel', 'SendMessages', ...extraBotPerms(channel)];
+  const botPermissions = ['ViewChannel', isThread(channel) ? 'SendMessagesInThreads' : 'SendMessages', ...extraBotPerms(channel)];
   const access = checkToolAccess({ interaction, action, config, channel: typeOk ? channel : null, botPermissions });
   if (!access.ok) {
     await interaction.reply(ephemeral(t(lang, `moderation.tools.err.${access.reason}`)));
@@ -96,7 +96,7 @@ async function executeSlowmode(interaction, ctx) {
 
 function makeLockCommand(name, locking) {
   async function execute(interaction, ctx) {
-    const o = await open(interaction, ctx, name, { types: LOCK_TYPES, extraBotPerms: () => [] });
+    const o = await open(interaction, ctx, name, { types: LOCK_TYPES, extraBotPerms: () => ['ManageRoles'] });
     if (!o) return;
     const { lang, channel, reason } = o;
     const mention = `<#${channel.id}>`;
