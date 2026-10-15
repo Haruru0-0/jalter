@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { EVENTS } from '../../src/features/logging/events.js';
+import { EVENTS, HIDDEN_EVENTS, categoryOf } from '../../src/features/logging/events.js';
 import {
-  isEventEnabled, resolveChannelId, isIgnored, encodeSettings, decodeSettings,
+  isEventEnabled, resolveChannelId, isIgnored, encodeSettings, decodeSettings, toggleEvent,
 } from '../../src/features/logging/config.js';
 
 test('the catalog has 24 events', () => {
@@ -52,4 +52,26 @@ test('decodeSettings rejects empty prefixes', () => {
 
 test('isIgnored skips empty-string prefixes', () => {
   assert.equal(isIgnored({ ignore: { prefixes: [''] } }, { content: 'hello' }), false);
+});
+
+test('modAction resolves the mod channel then default and is not listed in EVENTS or disabledEvents validation', () => {
+  assert.equal(HIDDEN_EVENTS.modAction, 'mod');
+  assert.equal(categoryOf('modAction'), 'mod');
+  assert.equal(categoryOf('ban'), 'members');
+  assert.equal(categoryOf('nope'), undefined);
+  assert.equal(resolveChannelId({ channels: { mod: 'x', default: 'd' } }, 'modAction'), 'x');
+  assert.equal(resolveChannelId({ channels: { default: 'd' } }, 'modAction'), 'd');
+  assert.equal(resolveChannelId({}, 'modAction'), null);
+  assert.equal(Object.hasOwn(EVENTS, 'modAction'), false);
+  const enc = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  assert.equal(decodeSettings(enc({ v: 1, disabledEvents: ['modAction'], prefixes: [] })), null);
+  assert.equal(toggleEvent({}, 'all', false).includes('modAction'), false);
+});
+
+test('the catalog still has 24 events and the event option still has 25 choices', async () => {
+  assert.equal(Object.keys(EVENTS).length, 24);
+  const { commands } = await import('../../src/features/logging/commands.js');
+  const json = commands[0].data.toJSON();
+  const event = json.options.find((o) => o.name === 'event').options.find((o) => o.name === 'event');
+  assert.equal(event.choices.length, 25);
 });

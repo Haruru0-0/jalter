@@ -1,4 +1,4 @@
-import { EVENTS } from './events.js';
+import { EVENTS, categoryOf } from './events.js';
 
 export function isEventEnabled(config, event) {
   return !(config.disabledEvents ?? []).includes(event);
@@ -6,7 +6,7 @@ export function isEventEnabled(config, event) {
 
 export function resolveChannelId(config, event) {
   const channels = config.channels ?? {};
-  const category = EVENTS[event];
+  const category = categoryOf(event);
   if (channels[category]) return channels[category];
   if (category === 'join' && channels.members) return channels.members;
   return channels.default ?? null;

@@ -28,3 +28,10 @@ export const EVENTS = {
 };
 
 export const MESSAGE_EVENTS = ['messageDelete', 'messageEdit', 'messagePurge', 'invitePosted'];
+
+// Events that log to a category but are not user-toggleable (not in EVENTS).
+export const HIDDEN_EVENTS = { modAction: 'mod' };
+
+export function categoryOf(event) {
+  return EVENTS[event] ?? HIDDEN_EVENTS[event];
+}
