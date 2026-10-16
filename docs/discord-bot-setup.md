@@ -35,7 +35,8 @@ The other intents Jalter uses (Guilds, Guild Messages, Guild Expressions, Guild 
    - Manage Roles (auto role and the moderation mute role)
    - Kick Members, Ban Members, Moderate Members (moderation: `/kick`, `/ban` and `/unban`, `/timeout` and `/untimeout`)
    - View Audit Log (logging "By" field; optional)
-   - Manage Messages (`/purge messages`)
+   - Manage Messages (`/purge messages`, and auto-mod deleting offending messages)
+   - Manage Nicknames (auto-mod nickname check; optional)
    - Manage Channels (`/purge channel`, `/slowmode`, `/lock`, `/unlock`; also `/logging setup` and the log, welcome, goodbye and boost channels the bot creates when none was chosen)
 4. Copy the generated URL, open it, choose your server and click **Authorize**.
 
@@ -90,6 +91,7 @@ With `DEV_GUILD_ID` set, slash commands register to that server only and appear 
 | Auto role does nothing | The bot's role is below the role it should give (step 4). |
 | `/logging setup` fails | The bot lacks Manage Channels. |
 | `/purge`, `/slowmode`, `/lock` or `/unlock` says the bot is missing permissions | Give the bot Manage Messages (purge messages) or Manage Channels (the rest), plus Manage Roles for lock, unlock and purge channel, and check the channel overrides (View Channel; Read Message History for purge messages; Manage Threads for slowmode in a thread). Send Messages is not needed for these commands; if it is missing the public notice is skipped and the reply says so. |
+| Auto-mod does nothing | Check in order: `/automod status` shows the feature on and the rule on; the member is not exempt (Manage Server, bot manager role, Moderate Members, a moderation permitted role, `/automod exempt` roles and channels, and bots are never checked); the bot has View Channel, Read Message History and Manage Messages in the channel (to delete), Moderate Members (timeout) and Manage Nicknames (rename); the bot's role is above the member's (otherwise the delete works but warn, timeout and rename are refused). The console prints a warning when Discord refuses an action. |
 | Logs have no "By" field | The bot lacks View Audit Log, or the audit entry was over 10 seconds old. |
 | Database connection error | Docker Desktop is not running. Start it, then `docker compose up -d`. |
 | Setup commands say you lack permission | You need Manage Server or the bot manager role (`/panel manager-role`). |

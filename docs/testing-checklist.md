@@ -8,7 +8,7 @@ Automated tests (`npm test`, needs `docker compose up -d`) cover the code. This 
 
 - [ ] `npm run deploy` printed `Registered N commands ...`, `npm start` printed `Logged in as <bot>`.
 - [ ] The bot's role is above every role you will test giving.
-- [ ] The bot has View Audit Log and Manage Channels (for the logging tests), and Kick Members, Ban Members and Moderate Members (for the moderation tests).
+- [ ] The bot has View Audit Log and Manage Channels (for the logging tests), and Kick Members, Ban Members and Moderate Members (for the moderation tests). The auto-mod tests also need Manage Messages, Manage Nicknames and Moderate Members.
 
 ## 1. Panel and permissions
 
@@ -246,7 +246,85 @@ The bot needs View Channel and Manage Channels (plus Manage Roles for lock and u
 - [ ] A member without View Channel on the target channel is refused. If the bot lacks a needed permission in the channel (Manage Roles for lock, unlock and purge channel), the reply says so and nothing changes.
 - [ ] `npm run deploy` was run so the new commands appear.
 
-## 12. Permissions and robustness
+## 12. Auto-mod
+
+Needs the bot to hold View Channel, Read Message History, Manage Messages (delete), Moderate Members (timeout) and Manage Nicknames (rename), with its role above the test member. Test on a normal member with no Manage Server, no Moderate Members, no bot manager role and no moderation permitted role: those members are never checked. Run `npm run deploy` first so `/automod` appears. Rules start off, and strikes are kept in memory (a bot restart clears them).
+
+### Setup
+
+- [ ] `/automod status` as a normal member is refused. As an admin it works even while auto-mod is off and lists the four rules (spam, invites, links, words) as off, each with delete on, a 10 minute window and the step `3 strikes: warn`, plus the nickname check.
+- [ ] `/automod enable` turns it on (`/automod disable` turns it off). Auto-mod is separate from `/moderation enable`, but its warn and timeout steps use moderation's case log, so also run `/moderation enable` and `/logging set category:mod` for the case tests.
+- [ ] With the feature off, or a rule off, nothing is checked. `/automod rule rule:spam state:on` turns a rule on; `/automod delete rule:<rule> state:off` stops deleting for that rule.
+
+### Spam
+
+Turn the rule on and set `/automod steps rule:spam steps:2:warn` so a second strike acts quickly.
+
+- [ ] Burst: send 6 messages within 5 seconds. The 6th is flagged (more than 5 messages in 5 seconds).
+- [ ] Identical: send the same text 4 times within 60 seconds (case and spacing differences count as the same). The 4th is flagged.
+- [ ] Caps: a message of 10 or more characters that is 70% or more capital letters is flagged; a shorter one is not.
+- [ ] Emoji: a message with more than 10 emoji (custom emoji count too) is flagged.
+- [ ] Mentions: a message with more than 5 mentions (users plus roles) is flagged.
+- [ ] Attachments: 5 attachments within 30 seconds (in one or several messages) is flagged.
+- [ ] Link rate: 5 links or invites within 30 seconds is flagged.
+- [ ] `/automod spam-check check:caps state:off` stops caps being flagged; `/automod spam-limit check:emoji value:3` makes 4 emoji trip it. A value outside the check's range is refused and the reply shows the allowed range.
+
+### Invites
+
+- [ ] `/automod rule rule:invites state:on`. An invite to this server is allowed. An invite to another server is deleted (an expired or unknown invite counts as foreign).
+- [ ] `/automod domains type:invites list:allow action:add value:<server id>` lets that server's invites through. `list:block` blocks it even with `/automod mode type:invites state:off`. A value that is not a server id is refused.
+- [ ] `discord.com/invite/<code>` and `discordapp.com/invite/<code>` are caught like `discord.gg/<code>`.
+
+### Links
+
+- [ ] `/automod rule rule:links state:on`. Links are allowed until you block them: `/automod domains type:links list:block action:add value:example.com` deletes `https://example.com/x` and `https://sub.example.com` but not other sites.
+- [ ] `/automod domains type:links list:allow action:add value:good.com` and `/automod mode type:links state:on` block every link except `good.com` and its subdomains. `mode state:off` returns to blocklist only.
+- [ ] A value with a scheme or a path (`https://x.com/a`) is refused: only plain domains are accepted. `action:remove` takes an entry out.
+
+### Bad words
+
+- [ ] `/automod rule rule:words state:on`. A built-in word is deleted, including inside a sentence and with look-alike digits or symbols (`sh1t`).
+- [ ] A stretched spelling like `fuuuuck` is caught, and a harmless word that merely contains a listed word is not.
+- [ ] `/automod words add word:<word>` adds a custom word, `words list` shows custom and removed built-in words and the built-in count, `words remove` takes it out. `words builtin-remove` stops banning a built-in word and `builtin-restore` brings it back. `words builtin state:off` turns the whole built-in list off.
+- [ ] Arabic words in the list match as parts of the text; a banned phrase of several words matches as a phrase.
+
+### Strike escalation
+
+- [ ] `/automod steps rule:spam steps:2:warn,4:timeout:10m`, then trip the rule twice within the window: a warn case is created. Four times: the member is timed out for 10 minutes (case created), and their strikes for that rule reset.
+- [ ] Invalid input such as `0:warn`, `3:ban` or two steps with the same count is refused and nothing changes. `/automod status` shows the steps.
+- [ ] `/automod window rule:spam duration:30s`: violations more than 30 seconds apart do not add up. A duration outside 10 seconds to 1 day is refused.
+- [ ] Strikes are per rule: one spam strike and one links strike do not add together.
+- [ ] A message that trips two rules and reaches a step on both gets one action (a timeout beats a warn, the longer timeout wins), not two.
+
+### Mod log
+
+- [ ] A first offence is deleted, no case is made, and the mod log gets one auto-mod line with the member, channel, rules and actions.
+- [ ] A message that reaches a warn or timeout step gets that case's own mod log line and no extra auto-mod line. Either way each offending message produces one mod log line.
+
+### Exemptions
+
+- [ ] `/automod exempt add-role role:<role>`, then a member with that role breaks a rule: nothing happens. `remove-role` brings checking back. @everyone is refused.
+- [ ] `/automod exempt add-channel channel:<channel>`: the same message in that channel is ignored and still caught elsewhere. A category exempts the channels inside it. `remove-channel` undoes it.
+- [ ] Members with Manage Server, the bot manager role, Moderate Members or a moderation permitted role, and bots, are never checked.
+
+### Edit bypass
+
+- [ ] Post a harmless message, then edit it into a violation (a blocked link or word): it is deleted. An edit that does not change the text adds no strike.
+
+### Nickname check
+
+- [ ] `/automod nickname state:on`. Change a test member's nickname to a banned word: the bot renames them to `Moderated Nickname` plus 4 random digits and a line goes to the mod log. A member who joins with a banned username is renamed too, and a member's first message after the bot starts is checked.
+- [ ] A nickname that is already the placeholder is left alone, and a second change within 10 seconds is not renamed again. `/automod nickname state:off` stops the check.
+- [ ] Without Manage Nicknames, or for a member above the bot's role, nothing changes and the console shows a warning, not a crash.
+
+### History and permissions
+
+- [ ] `/automod history` shows the latest actions (up to 10) with member, rules, actions, case number and time; `user:<member>` filters. With none it says so. Only the newest 200 entries per server are kept.
+- [ ] Without Manage Messages the offending message stays and the console shows a warning. Without Moderate Members a timeout step is refused (console warning) and the message is still deleted and logged.
+- [ ] A 4000-character message, an attachment-only message, a sticker-only message, Arabic text and 200 mentions cause no console error. Bot, webhook and DM messages are ignored.
+- [ ] Not built yet (Phase 2): regex rules, honeypot channel, account-age conditions, timed role and the native Discord AutoMod trigger.
+
+## 13. Permissions and robustness
 
 - [ ] Every setup reply is ephemeral (only you see it).
 - [ ] A normal member cannot run `/logging`, `/autorole`, `/set`, `/media` or `/moderation` setup commands.
