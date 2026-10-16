@@ -102,7 +102,8 @@ test('the create reply is public, explains how to use the embed and still has th
     const payload = await createPayload(ctx(), fake({}), lang, 'rules', {});
     assert.equal(payload.flags, undefined, `${lang} must not be ephemeral`);
     assert.ok(payload.content.includes('{embed:rules}'), `${lang} guide names the tag`);
-    assert.ok(payload.content.includes(t(lang, 'embeds.panelHint', { name: 'rules' })), `${lang} keeps the hint`);
+    const card = payload.embeds.at(-1);
+    assert.ok(card.data.description.includes(t(lang, 'embeds.panelHint', { name: 'rules' })), `${lang} keeps the hint in the card`);
     assert.equal(payload.components.length, 2);
   }
 });
@@ -110,12 +111,14 @@ test('the create reply is public, explains how to use the embed and still has th
 test('the create reply stays under the message length limit with the longest name', async () => {
   const payload = await createPayload(ctx(), fake({}), 'ar', 'a'.repeat(16), { title: 'T' });
   assert.ok(payload.content.length < 2000);
+  assert.ok(payload.embeds.at(-1).data.description.length < 4096);
 });
 
 test('the panel shows the rendered preview and two rows of buttons', async () => {
   const payload = await panelPayload(ctx(), fake({}), 'en', 'rules', { title: 'Hi {user_name}' });
   assert.equal(payload.embeds[0].title, 'Hi Sam');
-  assert.match(payload.content, /rules/);
+  assert.match(payload.embeds.at(-1).data.description, /rules/);
+  assert.equal(payload.content, undefined);
   const ids = payload.components.map((r) => r.toJSON().components.map((c) => c.custom_id));
   assert.deepEqual(ids, [
     ['embeds:b:text:rules', 'embeds:b:look:rules', 'embeds:b:author:rules', 'embeds:b:images:rules', 'embeds:b:field:rules'],
@@ -125,14 +128,15 @@ test('the panel shows the rendered preview and two rows of buttons', async () =>
 
 test('an empty embed shows the empty text instead of a preview', async () => {
   const payload = await panelPayload(ctx(), fake({}), 'en', 'rules', {});
-  assert.deepEqual(payload.embeds, []);
-  assert.ok(payload.content.includes(t('en', 'embeds.panelEmpty')));
+  assert.equal(payload.embeds.length, 1, "only the status card, no preview");
+  assert.ok(payload.embeds.at(-1).data.description.includes(t('en', 'embeds.panelEmpty')));
+  assert.equal(payload.embeds.length, 1);
 });
 
 test('a missing stored image shows the image message instead of a preview', async () => {
   const payload = await panelPayload(ctx(), fake({}), 'en', 'rules', { title: 'T', image: 'nope' });
-  assert.deepEqual(payload.embeds, []);
-  assert.ok(payload.content.includes(t('en', 'embeds.imageMissing')));
+  assert.equal(payload.embeds.length, 1, "only the status card, no preview");
+  assert.ok(payload.embeds.at(-1).data.description.includes(t('en', 'embeds.imageMissing')));
 });
 
 test('a form with an invalid color saves nothing and replies the error', async () => {
@@ -153,8 +157,8 @@ test('blanking the last part saves an empty embed and shows the empty panel', as
   await handlePanel(i, ctx());
   assert.deepEqual(await getEmbed(db, 'g1', 'rules'), {});
   assert.equal(i.calls.update.length, 1);
-  assert.deepEqual(i.calls.update[0].embeds, []);
-  assert.ok(i.calls.update[0].content.includes(t('en', 'embeds.panelEmpty')));
+  assert.equal(i.calls.update[0].embeds.length, 1);
+  assert.ok(i.calls.update[0].embeds.at(-1).data.description.includes(t('en', 'embeds.panelEmpty')));
 });
 
 test('a form not opened from the panel message replies with a new ephemeral panel', async () => {

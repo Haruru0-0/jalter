@@ -163,7 +163,7 @@
   "embeds.none": "لا توجد إيمبدات بعد. أنشئ واحدًا بالأمر /embed create.",
   "embeds.deleted": "تم حذف الإيمبد `{name}`.",
   "embeds.createdGuide": "تم إنشاء الإيمبد `{name}`.\n• استخدمه في نص الرسالة بكتابة `{embed:{name}}` (الترحيب والمغادرة والبوست و`/post text`).\n• مثال: `/set greet message message: أهلاً {user} {embed:{name}}`",
-  "embeds.panelHint": "تعديل `{name}`. استخدم الأزرار لتغيير كل جزء. تظهر المتغيرات هنا بقيمك أنت.",
+  "embeds.panelHint": "**تعديل `{name}`**\nاستخدم الأزرار لتغيير كل جزء. تظهر المتغيرات هنا بقيمك أنت.",
   "embeds.panelEmpty": "هذا الإيمبد فارغ. أضف عنوانًا أو نصًا أو صورة أو حقلًا لرؤية المعاينة.",
   "embeds.partText": "النص",
   "embeds.partLook": "المظهر",

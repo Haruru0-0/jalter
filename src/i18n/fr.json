@@ -163,7 +163,7 @@
   "embeds.none": "Aucun embed pour le moment. Créez-en un avec /embed create.",
   "embeds.deleted": "L'embed `{name}` a été supprimé.",
   "embeds.createdGuide": "Embed `{name}` créé.\n• Utilisez-le dans un texte de message avec `{embed:{name}}` (bienvenue, départ, boost et `/post text`).\n• Exemple : `/set greet message message: bienvenue {user} {embed:{name}}`",
-  "embeds.panelHint": "Modification de `{name}`. Utilisez les boutons pour changer chaque partie. Les variables affichent ici vos propres valeurs.",
+  "embeds.panelHint": "**Modification de `{name}`**\nUtilisez les boutons pour changer chaque partie. Les variables affichent ici vos propres valeurs.",
   "embeds.panelEmpty": "Cet embed est vide. Ajoutez un titre, un texte, une image ou un champ pour voir l'aperçu.",
   "embeds.partText": "Texte",
   "embeds.partLook": "Apparence",

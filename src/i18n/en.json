@@ -163,7 +163,7 @@
   "embeds.none": "No embeds yet. Create one with /embed create.",
   "embeds.deleted": "Deleted the embed `{name}`.",
   "embeds.createdGuide": "Created the embed `{name}`.\n• Use it in message text with `{embed:{name}}` (greet, leave, boost and `/post text`).\n• Example: `/set greet message message: welcome {user} {embed:{name}}`",
-  "embeds.panelHint": "Editing `{name}`. Use the buttons to change each part. Placeholders show your own values here.",
+  "embeds.panelHint": "**Editing `{name}`**\nUse the buttons to change each part. Placeholders show your own values here.",
   "embeds.panelEmpty": "This embed is empty. Add a title, text, image or field to see a preview.",
   "embeds.partText": "Text",
   "embeds.partLook": "Look",

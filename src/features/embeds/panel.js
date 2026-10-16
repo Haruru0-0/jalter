@@ -1,5 +1,5 @@
 import {
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle,
+  ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle,
 } from 'discord.js';
 import { guard } from '../../core/guard.js';
 import { ephemeral } from '../../core/replies.js';
@@ -110,19 +110,21 @@ async function preview(ctx, interaction, lang, spec) {
   }
 }
 
-/** The panel message body: name and hint, the preview (or why there is none) and the buttons. */
+const CARD_COLOR = 0x2b2d31;
+
+/** The panel message body: the preview (when there is one), then a card with the hint and any note, then the buttons. */
 export async function panelPayload(ctx, interaction, lang, name, spec) {
   const { embeds = [], note } = await preview(ctx, interaction, lang, spec);
-  const content = [t(lang, 'embeds.panelHint', { name }), note].filter(Boolean).join('\n\n');
-  return { content, embeds, components: panelRows(lang, name) };
+  const card = new EmbedBuilder()
+    .setColor(CARD_COLOR)
+    .setDescription([t(lang, 'embeds.panelHint', { name }), note].filter(Boolean).join('\n\n'));
+  return { embeds: [...embeds, card], components: panelRows(lang, name) };
 }
 
 /** The public reply to `/embed create`: how to use the new embed, then the same panel. Not ephemeral. */
 export async function createPayload(ctx, interaction, lang, name, spec) {
   const panel = await panelPayload(ctx, interaction, lang, name, spec);
-  return { ...panel, content: `${t(lang, 'embeds.createdGuide', { name })}
-
-${panel.content}` };
+  return { ...panel, content: t(lang, 'embeds.createdGuide', { name }) };
 }
 
 export async function showPanel(interaction, ctx, lang, name, spec) {
