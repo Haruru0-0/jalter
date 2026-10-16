@@ -29,6 +29,20 @@ export function collectModules(modules) {
 }
 
 export async function routeInteraction(interaction, ctx, registry) {
+  if (interaction.isAutocomplete?.()) {
+    // A command may export `autocomplete(interaction, ctx)`; a failure answers with no suggestions.
+    try {
+      await registry.commands.get(interaction.commandName)?.autocomplete?.(interaction, ctx);
+    } catch (err) {
+      console.error('Autocomplete failed:', err);
+      try {
+        await interaction.respond([]);
+      } catch {
+        // the interaction may already be answered or expired
+      }
+    }
+    return;
+  }
   try {
     if (interaction.isChatInputCommand() || interaction.isContextMenuCommand()) {
       await registry.commands.get(interaction.commandName)?.execute(interaction, ctx);

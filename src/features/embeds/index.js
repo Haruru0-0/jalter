@@ -1,5 +1,6 @@
 import { SlashCommandBuilder, ChannelType } from 'discord.js';
 import { guard } from '../../core/guard.js';
+import { canManage } from '../../core/permissions.js';
 import { ephemeral } from '../../core/replies.js';
 import { capList } from '../../core/lists.js';
 import { t } from '../../i18n/index.js';
@@ -16,7 +17,7 @@ const CHANNEL_TYPES = [ChannelType.GuildText, ChannelType.GuildAnnouncement];
 const IMAGE_HELP = 'A link, a stored image name or a placeholder';
 
 const nameOption = (o) =>
-  o.setName('embed').setDescription('The embed name').setMaxLength(16).setRequired(true);
+  o.setName('embed').setDescription('The embed name').setMaxLength(16).setRequired(true).setAutocomplete(true);
 const strOpt = (name, description, max) => (o) => {
   o.setName(name).setDescription(description);
   return max ? o.setMaxLength(max) : o;
@@ -173,5 +174,27 @@ async function execute(interaction, ctx) {
   }
 }
 
-export const commands = [{ data, execute, components: { prefix: 'embeds', handle: handlePanel } }];
+const MAX_SUGGESTIONS = 25;
+
+/** Suggests the saved embed names for the `embed` option, filtered by what was typed. Managers only. */
+export async function autocompleteEmbed(interaction, ctx) {
+  let choices = [];
+  try {
+    const focused = interaction.options.getFocused(true);
+    if (focused.name === 'embed' && interaction.guildId && (await canManage(ctx.db, interaction.member))) {
+      const typed = String(focused.value ?? '').trim().toLowerCase();
+      choices = (await listEmbeds(ctx.db, interaction.guildId))
+        .filter((name) => name.toLowerCase().includes(typed))
+        .slice(0, MAX_SUGGESTIONS)
+        .map((name) => ({ name, value: name }));
+    }
+  } catch (err) {
+    console.warn(`Embed autocomplete failed: ${err.message}`);
+  }
+  await interaction.respond(choices);
+}
+
+export const commands = [{
+  data, execute, autocomplete: autocompleteEmbed, components: { prefix: 'embeds', handle: handlePanel },
+}];
 export const events = [];

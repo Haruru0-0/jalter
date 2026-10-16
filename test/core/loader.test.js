@@ -80,3 +80,26 @@ test('an unknown component id is ignored', async () => {
   const interaction = { isChatInputCommand: () => false, isContextMenuCommand: () => false, customId: 'zzz:1' };
   await routeInteraction(interaction, { db }, registry);
 });
+
+test('routeInteraction sends autocomplete to the command and answers an empty list when it fails', async () => {
+  const seen = [];
+  const registry = collectModules([{ commands: [
+    cmd('ok', { autocomplete: async (i) => { seen.push(i.commandName); } }),
+    cmd('bad', { autocomplete: async () => { throw new Error('boom'); } }),
+    cmd('plain'),
+  ] }]);
+  const make = (commandName) => {
+    const responses = [];
+    return { commandName, responses, isAutocomplete: () => true, isChatInputCommand: () => false,
+      isContextMenuCommand: () => false, respond: async (c) => { responses.push(c); } };
+  };
+  await routeInteraction(make('ok'), { db }, registry);
+  assert.deepEqual(seen, ['ok']);
+  const warn = mock.method(console, 'error', () => {});
+  const bad = make('bad');
+  await routeInteraction(bad, { db }, registry);
+  assert.deepEqual(bad.responses, [[]]);
+  assert.equal(warn.mock.callCount(), 1);
+  warn.mock.restore();
+  await routeInteraction(make('plain'), { db }, registry);   // no handler: nothing happens, nothing throws
+});
