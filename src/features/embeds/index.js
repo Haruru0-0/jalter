@@ -2,13 +2,13 @@ import { SlashCommandBuilder, ChannelType } from 'discord.js';
 import { guard } from '../../core/guard.js';
 import { canManage } from '../../core/permissions.js';
 import { ephemeral } from '../../core/replies.js';
-import { capList } from '../../core/lists.js';
 import { t } from '../../i18n/index.js';
 import { validateEmbed } from './model.js';
 import { sendEmbedSpec } from './render.js';
 import { errorText } from './spec.js';
 import { applyEdit } from './edit.js';
 import { showPanel, createPayload, handlePanel } from './panel.js';
+import { listPayload } from './list.js';
 import {
   normalizeEmbedName, createEmbed, getEmbed, saveEmbed, listEmbeds, deleteEmbed,
 } from './store.js';
@@ -151,10 +151,7 @@ async function execute(interaction, ctx) {
 
   if (sub === 'list') {
     const names = await listEmbeds(ctx.db, guildId);
-    const text = names.length
-      ? capList(names.map((n) => `\`${n}\``), { more: (count) => t(lang, 'common.more', { count }) })
-      : t(lang, 'embeds.none');
-    return interaction.reply(ephemeral(text));
+    return interaction.reply(listPayload(lang, names));
   }
 
   if (sub === 'delete') {

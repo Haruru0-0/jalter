@@ -119,7 +119,7 @@ async function preview(ctx, interaction, lang, spec) {
   }
 }
 
-const CARD_COLOR = 0x2b2d31;
+export const CARD_COLOR = 0x2b2d31;
 
 /** The panel message body: the preview (when there is one), then a card with the hint and any note, then the buttons. */
 export async function panelPayload(ctx, interaction, lang, name, spec) {
