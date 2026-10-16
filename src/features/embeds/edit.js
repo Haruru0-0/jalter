@@ -1,7 +1,7 @@
 import { validateEmbed } from './model.js';
 import { appendField } from './spec.js';
 
-const STRING_PARTS = new Set(['title', 'description', 'footer', 'color', 'thumbnail', 'image']);
+const STRING_PARTS = new Set(['title', 'description', 'color', 'thumbnail', 'image']);
 
 const clean = (value) => (typeof value === 'string' ? value.trim() : '');
 
@@ -20,6 +20,13 @@ export function applyEdit(spec, part, value) {
   let next;
   if (STRING_PARTS.has(part)) {
     next = withPart(spec, part, clean(value));
+  } else if (part === 'footer') {
+    // A plain string is just the text and keeps the icon; { text, icon } sets both, like the author.
+    const isObject = value !== null && typeof value === 'object';
+    const text = clean(isObject ? value.text : value);
+    const icon = isObject ? clean(value.icon) : spec.footerIcon;
+    if (!text && isObject && icon) return { ok: false, errors: ['embeds.err.footerNeedsText'] };
+    next = withPart(withPart(spec, 'footer', text), 'footerIcon', text ? icon : undefined);
   } else if (part === 'timestamp') {
     next = withPart(spec, 'timestamp', value === true ? true : undefined);
   } else if (part === 'author') {

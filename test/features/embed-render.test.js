@@ -33,3 +33,15 @@ test('an empty embed is refused', async () => {
   await assert.rejects(buildEmbedPayload(ctx, 'g1', {}, vars),
     (err) => err.message === 'embed-invalid' && err.errors.includes('embeds.err.empty'));
 });
+
+test('a footer icon renders placeholders and resolves into the footer', async () => {
+  const { embeds } = await buildEmbedPayload(ctx, 'g1', {
+    title: 't', footer: 'we have {server_name}', footerIcon: '{user_avatar}',
+  }, vars);
+  assert.deepEqual(embeds[0].footer, { text: 'we have Home', icon_url: 'https://a.test/a.png' });
+});
+
+test('a footer icon that renders to nothing is dropped', async () => {
+  const { embeds } = await buildEmbedPayload(ctx, 'g1', { title: 't', footer: 'f', footerIcon: '{server_icon}' }, vars);
+  assert.deepEqual(embeds[0].footer, { text: 'f' });
+});

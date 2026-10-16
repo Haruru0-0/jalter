@@ -49,3 +49,18 @@ test('the input spec is not mutated and applyEdits stops at the first error', ()
   assert.equal(r.ok, false);
   assert.deepEqual(applyEdits({}, [['title', 'ok'], ['footer', 'f']]).spec, { title: 'ok', footer: 'f' });
 });
+
+test('the footer takes text with an optional icon, and a plain string keeps the icon', () => {
+  const a = applyEdit({}, 'footer', { text: ' Hi ', icon: ' https://a.test/f.png ' });
+  assert.deepEqual(a, { ok: true, spec: { footer: 'Hi', footerIcon: 'https://a.test/f.png' } });
+  assert.deepEqual(applyEdit(a.spec, 'footer', 'Bye').spec, { footer: 'Bye', footerIcon: 'https://a.test/f.png' });
+  assert.deepEqual(applyEdit(a.spec, 'footer', { text: 'Bye', icon: '' }).spec, { footer: 'Bye' });
+});
+
+test('clearing the footer text also clears its icon, and an icon alone is refused', () => {
+  const spec = { footer: 'Hi', footerIcon: 'https://a.test/f.png' };
+  assert.deepEqual(applyEdit(spec, 'footer', { text: '', icon: '' }), { ok: true, spec: {} });
+  assert.deepEqual(applyEdit(spec, 'footer', ''), { ok: true, spec: {} });
+  assert.deepEqual(applyEdit({}, 'footer', { text: '', icon: 'https://a.test/f.png' }),
+    { ok: false, errors: ['embeds.err.footerNeedsText'] });
+});

@@ -107,3 +107,12 @@ test('renderEmbedSpec renders text and image parts without changing the input', 
   assert.deepEqual(out.fields, [{ name: 'Sam', value: 'D', inline: true }]);
   assert.equal(spec.title, 'Hi {user_name}');
 });
+
+test('a footer icon needs footer text and is placed in the footer', () => {
+  assert.deepEqual(validateEmbed({ title: 't', footerIcon: 'https://a.test/f.png' }),
+    { ok: false, errors: ['embeds.err.footerNeedsText'] });
+  assert.deepEqual(validateEmbed({ title: 't', footer: 'f', footerIcon: 'https://a.test/f.png' }), { ok: true });
+  assert.deepEqual(toDiscordEmbed({ footer: 'f' }, { footerIcon: 'https://a.test/f.png' }).footer,
+    { text: 'f', icon_url: 'https://a.test/f.png' });
+  assert.deepEqual(toDiscordEmbed({ footer: 'f' }, {}).footer, { text: 'f' });
+});

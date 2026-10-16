@@ -25,6 +25,7 @@ export async function buildEmbedPayload(ctx, guildId, spec, vars, { now } = {}) 
     image: await resolve(ctx, guildId, imageSource(rendered.image)),
     thumbnail: await resolve(ctx, guildId, imageSource(rendered.thumbnail)),
     authorIcon: await resolve(ctx, guildId, imageSource(rendered.author?.icon)),
+    footerIcon: await resolve(ctx, guildId, imageSource(rendered.footerIcon)),
   };
   return { embeds: [toDiscordEmbed(rendered, images, { now })] };
 }

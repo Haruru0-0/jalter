@@ -25,39 +25,43 @@ function textInput(id, label, style, value, { required = false, max } = {}) {
 const YES_NO = { en: ['yes', 'no'], fr: ['oui', 'non'], ar: ['نعم', 'لا'] };
 const yesNo = (lang, on) => (YES_NO[lang] ?? YES_NO.en)[on ? 0 : 1];
 
-// Each form: its title key and its inputs as [id, label key, style, prefill(spec), options].
+// Each form: its inputs as [id, label key, style, prefill(spec), options]. Grouped like the embed itself.
 const MODALS = {
-  text: ['embeds.modalText', [
+  basic: [
     ['title', 'embeds.title', Short, (s) => s.title, { max: 256 }],
     ['description', 'embeds.description', Paragraph, (s) => s.description, { max: 4000 }],
-    ['footer', 'embeds.footer', Paragraph, (s) => s.footer, { max: 2048 }],
-  ]],
-  look: ['embeds.modalLook', [
     ['color', 'embeds.color', Short, (s) => s.color, { max: 7 }],
-    ['timestamp', 'embeds.timestampYesNo', Short, (s, lang) => yesNo(lang, s.timestamp), { max: 10 }],
-  ]],
-  author: ['embeds.modalAuthor', [
+  ],
+  author: [
     ['text', 'embeds.authorText', Short, (s) => s.author?.text, { max: 256 }],
     ['icon', 'embeds.authorIcon', Short, (s) => imageSource(s.author?.icon), { max: IMAGE_MAX }],
-  ]],
-  images: ['embeds.modalImages', [
+  ],
+  footer: [
+    ['text', 'embeds.footerText', Paragraph, (s) => s.footer, { max: 2048 }],
+    ['icon', 'embeds.footerIcon', Short, (s) => imageSource(s.footerIcon), { max: IMAGE_MAX }],
+    ['timestamp', 'embeds.timestampYesNo', Short, (s, lang) => yesNo(lang, s.timestamp), { max: 10 }],
+  ],
+  images: [
+    ['image', 'embeds.mainImage', Short, (s) => imageSource(s.image), { max: IMAGE_MAX }],
     ['thumbnail', 'embeds.thumbnail', Short, (s) => imageSource(s.thumbnail), { max: IMAGE_MAX }],
-    ['image', 'embeds.image', Short, (s) => imageSource(s.image), { max: IMAGE_MAX }],
-  ]],
+  ],
   // A new field each time: nothing is prefilled.
-  field: ['embeds.modalField', [
+  field: [
     ['name', 'embeds.fieldName', Short, () => '', { max: 256, required: true }],
     ['value', 'embeds.fieldValue', Paragraph, () => '', { max: 1024, required: true }],
     ['inline', 'embeds.fieldInline', Short, () => '', { max: 10 }],
-  ]],
+  ],
 };
+
+// Buttons on panels posted before the forms were regrouped.
+const LEGACY_PARTS = { text: 'basic', look: 'basic' };
 
 /** The form that edits one part of the embed `name`, prefilled from `spec`. */
 export function panelModal(lang, part, name, spec = {}) {
-  const [titleKey, inputs] = MODALS[part];
+  const inputs = MODALS[part];
   return new ModalBuilder()
     .setCustomId(`embeds:m:${part}:${name}`)
-    .setTitle(t(lang, titleKey))
+    .setTitle(t(lang, 'embeds.modalEditing', { name }))
     .addComponents(...inputs.map(([id, label, style, prefill, opts]) =>
       textInput(id, t(lang, label), style, prefill(spec, lang), opts)));
 }
@@ -65,10 +69,11 @@ export function panelModal(lang, part, name, spec = {}) {
 /** Maps a submitted form to `applyEdits` input. `get(id)` returns the raw input. Null for an unknown form. */
 export function editsFromModal(part, get) {
   switch (part) {
-    case 'text': return [['title', get('title')], ['description', get('description')], ['footer', get('footer')]];
-    case 'look': return [['color', get('color')], ['timestamp', parseInline(get('timestamp'))]];
+    case 'basic': return [['title', get('title')], ['description', get('description')], ['color', get('color')]];
     case 'author': return [['author', { text: get('text'), icon: get('icon') }]];
-    case 'images': return [['thumbnail', get('thumbnail')], ['image', get('image')]];
+    case 'footer':
+      return [['footer', { text: get('text'), icon: get('icon') }], ['timestamp', parseInline(get('timestamp'))]];
+    case 'images': return [['image', get('image')], ['thumbnail', get('thumbnail')]];
     case 'field': return [['field', { name: get('name'), value: get('value'), inline: parseInline(get('inline')) }]];
     default: return null;
   }
@@ -80,9 +85,9 @@ const button = (action, name, label, style = ButtonStyle.Secondary) =>
 function panelRows(lang, name) {
   return [
     new ActionRowBuilder().addComponents(
-      button('text', name, t(lang, 'embeds.partText')),
-      button('look', name, t(lang, 'embeds.partLook')),
+      button('basic', name, t(lang, 'embeds.partBasic')),
       button('author', name, t(lang, 'embeds.partAuthor')),
+      button('footer', name, t(lang, 'embeds.partFooter')),
       button('images', name, t(lang, 'embeds.partImages')),
       button('field', name, t(lang, 'embeds.addField')),
     ),
@@ -137,7 +142,8 @@ const PART_BUTTONS = new Set(Object.keys(MODALS));
 export async function handlePanel(interaction, ctx) {
   const lang = await guard(interaction, ctx, 'embeds', { requireEnabled: false });
   if (!lang) return;
-  const [, kind, action, rawName] = interaction.customId.split(':');
+  const [, kind, rawAction, rawName] = interaction.customId.split(':');
+  const action = LEGACY_PARTS[rawAction] ?? rawAction;
   const isButton = kind === 'b' && interaction.isButton();
   const isModal = kind === 'm' && interaction.isModalSubmit();
   if (!isButton && !isModal) return;

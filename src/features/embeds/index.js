@@ -44,7 +44,9 @@ const data = new SlashCommandBuilder()
     editSub(g, 'thumbnail', 'Set or remove the thumbnail', (s) => s.addStringOption(strOpt('image', IMAGE_HELP)));
     editSub(g, 'image', 'Set or remove the large image', (s) => s.addStringOption(strOpt('image', IMAGE_HELP)));
     editSub(g, 'color', 'Set or remove the color', (s) => s.addStringOption(strOpt('color', 'Color like #5865F2', 7)));
-    editSub(g, 'footer', 'Set or remove the footer', (s) => s.addStringOption(strOpt('text', 'Footer text (leave empty to remove)', 2048)));
+    editSub(g, 'footer', 'Set or remove the footer', (s) => s
+      .addStringOption(strOpt('text', 'Footer text (leave empty to remove)', 2048))
+      .addStringOption(strOpt('icon', `Footer icon: ${IMAGE_HELP}`)));
     editSub(g, 'timestamp', 'Show or hide the time the embed was posted', (s) =>
       s.addBooleanOption((o) => o.setName('timestamp').setDescription('Show the time').setRequired(true)));
     g.addSubcommand((s) =>
@@ -100,7 +102,7 @@ function readEdit(interaction, sub) {
     case 'thumbnail':
     case 'image': return o.getString('image');
     case 'color': return o.getString('color');
-    case 'footer': return o.getString('text');
+    case 'footer': return { text: o.getString('text'), icon: o.getString('icon') };
     case 'timestamp': return o.getBoolean('timestamp', true);
     case 'field':
       return { name: o.getString('name', true), value: o.getString('value', true), inline: o.getBoolean('inline') ?? false };
@@ -113,7 +115,7 @@ async function editPart(interaction, ctx, lang, sub) {
   if (!loaded) return;
   const value = readEdit(interaction, sub);
   let image = null;
-  if (sub === 'author') image = value.icon;
+  if (sub === 'author' || sub === 'footer') image = value.icon;
   else if (sub === 'thumbnail' || sub === 'image') image = value;
   if (image && !(await imageUsable(interaction, ctx, lang, image))) return;
   const result = applyEdit(loaded.spec, sub, value);

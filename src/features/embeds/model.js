@@ -26,6 +26,7 @@ export function validateEmbed(spec, { allowEmpty = false } = {}) {
   if (len(spec.footer) > 2048) errors.push('embeds.err.footerTooLong');
   if (len(authorText) > 256) errors.push('embeds.err.authorTooLong');
   if (spec.author?.icon && !authorText) errors.push('embeds.err.authorNeedsText');
+  if (spec.footerIcon && !spec.footer) errors.push('embeds.err.footerNeedsText');
   if (fields.length > 25) errors.push('embeds.err.tooManyFields');
   if (fields.some((f) => len(f.name) > 256 || len(f.value) > 1024)) {
     errors.push('embeds.err.fieldTooLong');
@@ -48,7 +49,10 @@ export function toDiscordEmbed(spec, images = {}, { now } = {}) {
     embed.author = { name: spec.author.text };
     if (images.authorIcon) embed.author.icon_url = images.authorIcon;
   }
-  if (spec.footer) embed.footer = { text: spec.footer };
+  if (spec.footer) {
+    embed.footer = { text: spec.footer };
+    if (images.footerIcon) embed.footer.icon_url = images.footerIcon;
+  }
   if (images.image) embed.image = { url: images.image };
   if (images.thumbnail) embed.thumbnail = { url: images.thumbnail };
   if (spec.timestamp) embed.timestamp = new Date(now ?? Date.now()).toISOString();
@@ -64,7 +68,7 @@ export function renderEmbedSpec(spec, vars) {
   for (const key of ['title', 'description', 'footer']) {
     if (out[key]) out[key] = render(out[key]);
   }
-  for (const key of ['image', 'thumbnail']) {
+  for (const key of ['image', 'thumbnail', 'footerIcon']) {
     if (spec[key] === undefined) continue;
     const rendered = render(imageSource(spec[key]));
     if (rendered) out[key] = rendered;

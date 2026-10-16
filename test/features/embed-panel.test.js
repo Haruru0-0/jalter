@@ -5,7 +5,7 @@ import { createEmbed, getEmbed, saveEmbed, deleteEmbed } from '../../src/feature
 import { LANGS, t } from '../../src/i18n/index.js';
 import { testDb } from '../helpers/db.js';
 
-const PARTS = ['text', 'look', 'author', 'images', 'field'];
+const PARTS = ['basic', 'author', 'footer', 'images', 'field'];
 
 test('every modal is valid in every language and uses the documented custom id', () => {
   for (const lang of LANGS) {
@@ -28,34 +28,37 @@ test('every modal title and label is at most 45 characters in every language', (
 });
 
 test('modals are prefilled from the saved embed', () => {
-  const spec = { title: 'T', description: 'D', footer: 'F', color: '#000000', timestamp: true,
-    author: { text: 'A', icon: '{user_avatar}' }, thumbnail: '{server_icon}', image: { type: 'stored', name: 'logo' } };
-  const values = (part) => panelModal('en', part, 'x', spec).toJSON().components.map((r) => r.components[0].value);
-  assert.deepEqual(values('text'), ['T', 'D', 'F']);
-  assert.deepEqual(values('look'), ['#000000', 'yes']);
+  const spec = { title: 'T', description: 'D', footer: 'F', footerIcon: 'https://a.test/f.png', color: '#000000',
+    timestamp: true, author: { text: 'A', icon: '{user_avatar}' }, thumbnail: '{server_icon}',
+    image: { type: 'stored', name: 'logo' } };
+  const values = (part, lang = 'en') => panelModal(lang, part, 'x', spec).toJSON().components
+    .map((r) => r.components[0].value);
+  assert.deepEqual(values('basic'), ['T', 'D', '#000000']);
   assert.deepEqual(values('author'), ['A', '{user_avatar}']);
-  assert.deepEqual(values('images'), ['{server_icon}', 'logo']);
-  const look = (lang, s) => panelModal(lang, 'look', 'x', s).toJSON().components[1].components[0].value;
-  assert.equal(look('fr', { timestamp: true }), 'oui');
-  assert.equal(look('en', {}), 'no');
+  assert.deepEqual(values('footer'), ['F', 'https://a.test/f.png', 'yes']);
+  assert.deepEqual(values('images'), ['logo', '{server_icon}']);
+  const stamp = (lang, s2) => panelModal(lang, 'footer', 'x', s2).toJSON().components[2].components[0].value;
+  assert.equal(stamp('fr', { timestamp: true }), 'oui');
+  assert.equal(stamp('en', {}), 'no');
 });
 
 test('only the field name and value are required', () => {
   const required = (part) => panelModal('en', part, 'x', {}).toJSON().components
     .filter((r) => r.components[0].required).map((r) => r.components[0].custom_id);
   assert.deepEqual(required('field'), ['name', 'value']);
-  for (const part of ['text', 'look', 'author', 'images']) assert.deepEqual(required(part), []);
+  for (const part of ['basic', 'author', 'footer', 'images']) assert.deepEqual(required(part), []);
 });
 
 test('editsFromModal maps each form to edits', () => {
   const get = (map) => (id) => map[id];
-  assert.deepEqual(editsFromModal('text', get({ title: 'T', description: '', footer: 'F' })),
-    [['title', 'T'], ['description', ''], ['footer', 'F']]);
-  assert.deepEqual(editsFromModal('look', get({ color: '#fff000', timestamp: 'Oui' })),
-    [['color', '#fff000'], ['timestamp', true]]);
-  assert.deepEqual(editsFromModal('look', get({ color: '', timestamp: '' })), [['color', ''], ['timestamp', false]]);
+  assert.deepEqual(editsFromModal('basic', get({ title: 'T', description: '', color: '#fff000' })),
+    [['title', 'T'], ['description', ''], ['color', '#fff000']]);
   assert.deepEqual(editsFromModal('author', get({ text: 'A', icon: '' })), [['author', { text: 'A', icon: '' }]]);
-  assert.deepEqual(editsFromModal('images', get({ thumbnail: 't', image: 'i' })), [['thumbnail', 't'], ['image', 'i']]);
+  assert.deepEqual(editsFromModal('footer', get({ text: 'F', icon: 'i', timestamp: 'Oui' })),
+    [['footer', { text: 'F', icon: 'i' }], ['timestamp', true]]);
+  assert.deepEqual(editsFromModal('footer', get({ text: '', icon: '', timestamp: '' })),
+    [['footer', { text: '', icon: '' }], ['timestamp', false]]);
+  assert.deepEqual(editsFromModal('images', get({ thumbnail: 't', image: 'i' })), [['image', 'i'], ['thumbnail', 't']]);
   assert.deepEqual(editsFromModal('field', get({ name: 'n', value: 'v', inline: 'yes' })),
     [['field', { name: 'n', value: 'v', inline: true }]]);
 });
@@ -121,7 +124,7 @@ test('the panel shows the rendered preview and two rows of buttons', async () =>
   assert.equal(payload.content, undefined);
   const ids = payload.components.map((r) => r.toJSON().components.map((c) => c.custom_id));
   assert.deepEqual(ids, [
-    ['embeds:b:text:rules', 'embeds:b:look:rules', 'embeds:b:author:rules', 'embeds:b:images:rules', 'embeds:b:field:rules'],
+    ['embeds:b:basic:rules', 'embeds:b:author:rules', 'embeds:b:footer:rules', 'embeds:b:images:rules', 'embeds:b:field:rules'],
     ['embeds:b:clear:rules', 'embeds:b:show:rules'],
   ]);
 });
@@ -142,7 +145,7 @@ test('a missing stored image shows the image message instead of a preview', asyn
 test('a form with an invalid color saves nothing and replies the error', async () => {
   await createEmbed(db, 'g1', 'rules');
   await saveEmbed(db, 'g1', 'rules', { title: 'T' });
-  const i = fake({ customId: 'embeds:m:look:rules', kind: 'modal', fields: { color: 'red', timestamp: 'yes' } });
+  const i = fake({ customId: 'embeds:m:basic:rules', kind: 'modal', fields: { title: '', description: '', color: 'red' } });
   await handlePanel(i, ctx());
   assert.equal(i.calls.reply[0].content, `• ${t('en', 'embeds.err.badColor')}`);
   assert.ok(i.calls.reply[0].flags);
@@ -153,7 +156,7 @@ test('a form with an invalid color saves nothing and replies the error', async (
 test('blanking the last part saves an empty embed and shows the empty panel', async () => {
   await createEmbed(db, 'g1', 'rules');
   await saveEmbed(db, 'g1', 'rules', { title: 'T' });
-  const i = fake({ customId: 'embeds:m:text:RULES', kind: 'modal', fields: { title: ' ', description: '', footer: '' } });
+  const i = fake({ customId: 'embeds:m:basic:RULES', kind: 'modal', fields: { title: ' ', description: '', color: '' } });
   await handlePanel(i, ctx());
   assert.deepEqual(await getEmbed(db, 'g1', 'rules'), {});
   assert.equal(i.calls.update.length, 1);
@@ -175,10 +178,10 @@ test('a form not opened from the panel message replies with a new ephemeral pane
 test('a part button opens its form prefilled', async () => {
   await createEmbed(db, 'g1', 'rules');
   await saveEmbed(db, 'g1', 'rules', { title: 'T' });
-  const i = fake({ customId: 'embeds:b:text:rules' });
+  const i = fake({ customId: 'embeds:b:basic:rules' });
   await handlePanel(i, ctx());
   const json = i.calls.showModal[0].toJSON();
-  assert.equal(json.custom_id, 'embeds:m:text:rules');
+  assert.equal(json.custom_id, 'embeds:m:basic:rules');
   assert.equal(json.components[0].components[0].value, 'T');
 });
 
@@ -202,8 +205,8 @@ test('an embed deleted since the panel opened replies not found', async () => {
   await createEmbed(db, 'g1', 'rules');
   await deleteEmbed(db, 'g1', 'rules');
   for (const i of [
-    fake({ customId: 'embeds:b:look:rules' }),
-    fake({ customId: 'embeds:m:text:rules', kind: 'modal', fields: { title: 'T' } }),
+    fake({ customId: 'embeds:b:footer:rules' }),
+    fake({ customId: 'embeds:m:basic:rules', kind: 'modal', fields: { title: 'T' } }),
   ]) {
     await handlePanel(i, ctx());
     assert.equal(i.calls.reply[0].content, t('en', 'embeds.notFound', { name: 'rules' }));
@@ -214,9 +217,37 @@ test('an embed deleted since the panel opened replies not found', async () => {
 
 test('a member who cannot manage the bot is refused before anything happens', async () => {
   await createEmbed(db, 'g1', 'rules');
-  const i = fake({ customId: 'embeds:b:text:rules' });
+  const i = fake({ customId: 'embeds:b:basic:rules' });
   i.member.permissions.has = () => false;
   await handlePanel(i, ctx());
   assert.equal(i.calls.reply[0].content, t('en', 'common.notAllowed'));
   assert.equal(i.calls.showModal.length, 0);
+});
+
+test('the footer form saves text, icon and timestamp together', async () => {
+  await createEmbed(db, 'g1', 'rules');
+  const i = fake({ customId: 'embeds:m:footer:rules', kind: 'modal',
+    fields: { text: 'hello', icon: 'https://a.test/f.png', timestamp: 'yes' } });
+  await handlePanel(i, ctx());
+  assert.deepEqual(await getEmbed(db, 'g1', 'rules'),
+    { footer: 'hello', footerIcon: 'https://a.test/f.png', timestamp: true });
+  assert.equal(i.calls.update.length, 1);
+});
+
+test('the footer form refuses an icon without text', async () => {
+  await createEmbed(db, 'g1', 'rules');
+  const i = fake({ customId: 'embeds:m:footer:rules', kind: 'modal',
+    fields: { text: '', icon: 'https://a.test/f.png', timestamp: '' } });
+  await handlePanel(i, ctx());
+  assert.equal(i.calls.reply[0].content, `• ${t('en', 'embeds.err.footerNeedsText')}`);
+  assert.deepEqual(await getEmbed(db, 'g1', 'rules'), {});
+});
+
+test('buttons on panels posted before the regroup still open the basic form', async () => {
+  await createEmbed(db, 'g1', 'rules');
+  for (const old of ['text', 'look']) {
+    const i = fake({ customId: `embeds:b:${old}:rules` });
+    await handlePanel(i, ctx());
+    assert.equal(i.calls.showModal[0].toJSON().custom_id, 'embeds:m:basic:rules');
+  }
 });
