@@ -252,7 +252,7 @@ Needs the bot to hold View Channel, Read Message History, Manage Messages (delet
 
 ### Setup
 
-- [ ] `/automod status` as a normal member is refused. As an admin it works even while auto-mod is off and lists the four rules (spam, invites, links, words) as off, each with delete on, a 10 minute window and the step `3 strikes: warn`, plus the nickname check.
+- [ ] `/automod status` as a normal member is refused. As an admin it works even while auto-mod is off and lists the four rules (spam, invites, links, words) as off, each with delete on and a 10 minute window, plus the nickname check. The steps are `3 strikes: warn` for invites, links and words, and `3 strikes: warn, 5 strikes: timeout 10m` for spam. It also shows the exempt roles and channels (none), each spam check with its limit, and for invites and links the mode (invites block everything except the allowed list, links only the blocked list) with allowed and blocked entries.
 - [ ] `/automod enable` turns it on (`/automod disable` turns it off). Auto-mod is separate from `/moderation enable`, but its warn and timeout steps use moderation's case log, so also run `/moderation enable` and `/logging set category:mod` for the case tests.
 - [ ] With the feature off, or a rule off, nothing is checked. `/automod rule rule:spam state:on` turns a rule on; `/automod delete rule:<rule> state:off` stops deleting for that rule.
 
@@ -262,18 +262,20 @@ Turn the rule on and set `/automod steps rule:spam steps:2:warn` so a second str
 
 - [ ] Burst: send 6 messages within 5 seconds. The 6th is flagged (more than 5 messages in 5 seconds).
 - [ ] Identical: send the same text 4 times within 60 seconds (case and spacing differences count as the same). The 4th is flagged.
-- [ ] Caps: a message of 10 or more characters that is 70% or more capital letters is flagged; a shorter one is not.
+- [ ] Caps: a message of 20 or more characters that is 70% or more capital letters is flagged; a shorter one is not.
 - [ ] Emoji: a message with more than 10 emoji (custom emoji count too) is flagged.
 - [ ] Mentions: a message with more than 5 mentions (users plus roles) is flagged.
 - [ ] Attachments: 5 attachments within 30 seconds (in one or several messages) is flagged.
 - [ ] Link rate: 5 links or invites within 30 seconds is flagged.
+- [ ] Attachments and link rate only flag a message that itself adds an attachment or link: after 5 attachments, a plain text message in the next 30 seconds is not flagged.
+- [ ] Editing a message re-checks caps, emoji and mentions (an edit to 6 mentions is flagged) but an edit never counts toward burst, identical, attachments or link rate.
 - [ ] `/automod spam-check check:caps state:off` stops caps being flagged; `/automod spam-limit check:emoji value:3` makes 4 emoji trip it. A value outside the check's range is refused and the reply shows the allowed range.
 
 ### Invites
 
 - [ ] `/automod rule rule:invites state:on`. An invite to this server is allowed. An invite to another server is deleted (an expired or unknown invite counts as foreign).
 - [ ] `/automod domains type:invites list:allow action:add value:<server id>` lets that server's invites through. `list:block` blocks it even with `/automod mode type:invites state:off`. A value that is not a server id is refused.
-- [ ] `discord.com/invite/<code>` and `discordapp.com/invite/<code>` are caught like `discord.gg/<code>`.
+- [ ] `discord.com/invite/<code>`, `discordapp.com/invite/<code>`, `ptb.discord.com/invite/<code>` and `canary.discord.com/invite/<code>` are caught like `discord.gg/<code>`.
 
 ### Links
 
@@ -284,13 +286,14 @@ Turn the rule on and set `/automod steps rule:spam steps:2:warn` so a second str
 ### Bad words
 
 - [ ] `/automod rule rule:words state:on`. A built-in word is deleted, including inside a sentence and with look-alike digits or symbols (`sh1t`).
-- [ ] A stretched spelling like `fuuuuck` is caught, and a harmless word that merely contains a listed word is not.
+- [ ] A stretched spelling like `shiiiit` is caught, and so is a listed word with a zero-width character inside, and a harmless word that merely contains a listed word is not.
 - [ ] `/automod words add word:<word>` adds a custom word, `words list` shows custom and removed built-in words and the built-in count, `words remove` takes it out. `words builtin-remove` stops banning a built-in word and `builtin-restore` brings it back. `words builtin state:off` turns the whole built-in list off.
 - [ ] Arabic words in the list match as parts of the text; a banned phrase of several words matches as a phrase.
 
 ### Strike escalation
 
 - [ ] `/automod steps rule:spam steps:2:warn,4:timeout:10m`, then trip the rule twice within the window: a warn case is created. Four times: the member is timed out for 10 minutes (case created), and their strikes for that rule reset.
+- [ ] With the default spam steps and no changes, the 3rd spam strike in 10 minutes warns and the 5th times the member out for 10 minutes (case created) and resets their spam strikes.
 - [ ] Invalid input such as `0:warn`, `3:ban` or two steps with the same count is refused and nothing changes. `/automod status` shows the steps.
 - [ ] `/automod window rule:spam duration:30s`: violations more than 30 seconds apart do not add up. A duration outside 10 seconds to 1 day is refused.
 - [ ] Strikes are per rule: one spam strike and one links strike do not add together.
