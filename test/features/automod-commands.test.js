@@ -1,7 +1,7 @@
 import { test, before, beforeEach, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { commands } from '../../src/features/automod/index.js';
-import { parseSteps, createAutomodCommand } from '../../src/features/automod/commands.js';
+import { parseSteps, createAutomodCommand, statusText } from '../../src/features/automod/commands.js';
 import { readConfig, RULES } from '../../src/features/automod/config.js';
 import { getFeature } from '../../src/db/settings.js';
 import { collectModules } from '../../src/core/loader.js';
@@ -192,5 +192,45 @@ test('extend, handlers and groupHandlers dispatch, and a missing handler gets a 
     const i = await call(sub, group);
     assert.equal(text(i), t('en', 'automod.error.generic'));
     assert.equal(i.calls.reply[0].allowedMentions.parse.length, 0);
+  }
+});
+
+test('status shows exempt lists, list modes, entries and every spam check limit', () => {
+  const config = readConfig({
+    exemptRoles: ['111', '222'],
+    exemptChannels: ['333'],
+    rules: {
+      links: { blockAllExceptAllowed: true, allow: ['ok.com', 'good.org'], block: ['evil.com'] },
+      invites: { blockAllExceptAllowed: false, allow: ['123456789012345678'], block: [] },
+      spam: { burst: { messages: 7, seconds: 9 }, caps: { enabled: false, minLength: 25, percent: 80 } },
+    },
+  });
+  const out = statusText('en', true, config);
+  assert.ok(out.includes('<@&111>, <@&222>'));
+  assert.ok(out.includes('<#333>'));
+  assert.ok(out.includes(t('en', 'automod.settings.mode_allowlist')));
+  assert.ok(out.includes(t('en', 'automod.settings.mode_blocklist')));
+  assert.ok(out.includes('Allowed (2): ok.com, good.org'));
+  assert.ok(out.includes('Blocked (1): evil.com'));
+  assert.ok(out.includes('Allowed (1): 123456789012345678'));
+  assert.ok(out.includes('Blocked (0): none'));
+  assert.ok(out.includes('burst: On (over 7 messages in 9 s)'));
+  assert.ok(out.includes('caps: Off (80% capitals from 25 characters)'));
+  for (const name of ['identical', 'emoji', 'mentions', 'attachments', 'linkRate']) assert.ok(out.includes(`${name}: On`), name);
+});
+
+test('status stays well under the message limit with full lists in every language', () => {
+  const many = (n, f) => Array.from({ length: n }, (_, i) => f(i));
+  const config = readConfig({
+    exemptRoles: many(10, (i) => `12345678901234567${i}`),
+    exemptChannels: many(20, (i) => `9876543210987654${String(i).padStart(2, '0')}`),
+    rules: {
+      links: { allow: many(100, (i) => `allowed-domain-${i}.example.com`), block: many(100, (i) => `blocked-domain-${i}.example.com`) },
+      invites: { allow: many(100, (i) => `12345678901234567${i}`), block: many(100, (i) => `98765432109876543${i}`) },
+    },
+  });
+  for (const lang of ['en', 'fr', 'ar']) {
+    const out = statusText(lang, true, config);
+    assert.ok(out.length < 1900, `${lang} ${out.length}`);
   }
 });

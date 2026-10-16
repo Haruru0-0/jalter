@@ -4,6 +4,7 @@ import { guard } from '../../core/guard.js';
 import { handleToggle, toggleSubcommands } from '../../core/toggle.js';
 import { ephemeral } from '../../core/replies.js';
 import { parseDuration, formatDuration } from '../../core/duration.js';
+import { capList } from '../../core/lists.js';
 import { t } from '../../i18n/index.js';
 import {
   readConfig, setSteps, RULES, SPAM_CHECKS, MAX_STEPS,
@@ -105,12 +106,22 @@ const stepText = (lang, s) => (s.action === 'warn'
   ? t(lang, 'automod.settings.step_warn', { strikes: s.strikes })
   : t(lang, 'automod.settings.step_timeout', { strikes: s.strikes, duration: formatDuration(s.timeoutSeconds) }));
 
+const STATUS_MAX = 1900;
+const EXEMPT_CAP = 120;
+const ENTRY_CAP = 80;
+
 export function statusText(lang, enabled, config) {
   const onOff = (v) => t(lang, v ? 'common.on' : 'common.off');
   const lines = [
     `**${t(lang, 'automod.settings.status_title')}**`,
     t(lang, enabled ? 'automod.settings.status_on' : 'automod.settings.status_off'),
   ];
+  const none = t(lang, 'automod.settings.none');
+  const listOf = (items, max) => (items.length
+    ? capList(items, { max, more: (count) => t(lang, 'common.more', { count }) })
+    : none);
+  lines.push(t(lang, 'automod.settings.exempt_roles', { list: listOf(config.exemptRoles.map((id) => `<@&${id}>`), EXEMPT_CAP) }));
+  lines.push(t(lang, 'automod.settings.exempt_channels', { list: listOf(config.exemptChannels.map((id) => `<#${id}>`), EXEMPT_CAP) }));
   for (const rule of RULES) {
     const r = config.rules[rule];
     lines.push(`**${t(lang, `automod.rule.${rule}`)}**: ${onOff(r.enabled)}`);
@@ -119,9 +130,21 @@ export function statusText(lang, enabled, config) {
       window: formatDuration(r.windowSeconds),
       steps: r.steps.map((s) => stepText(lang, s)).join(', '),
     }));
+    if (rule === 'spam') {
+      for (const name of SPAM_NAMES) {
+        const c = r[name];
+        lines.push(`${name}: ${onOff(c.enabled)} (${t(lang, `automod.settings.limit_${name}`, c)})`);
+      }
+    }
+    if (rule === 'links' || rule === 'invites') {
+      lines.push(t(lang, r.blockAllExceptAllowed ? 'automod.settings.mode_allowlist' : 'automod.settings.mode_blocklist'));
+      lines.push(t(lang, 'automod.settings.allow_line', { count: r.allow.length, list: listOf(r.allow, ENTRY_CAP) }));
+      lines.push(t(lang, 'automod.settings.block_line', { count: r.block.length, list: listOf(r.block, ENTRY_CAP) }));
+    }
   }
   lines.push(`**${t(lang, 'automod.settings.nickname')}**: ${onOff(config.nickname.enabled)}`);
-  return lines.join('\n');
+  const out = lines.join('\n');
+  return out.length > STATUS_MAX ? `${out.slice(0, STATUS_MAX - 1)}…` : out;
 }
 
 /** Each handler gets (interaction, { ctx, lang, enabled, config, save }) and replies. */
