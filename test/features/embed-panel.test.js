@@ -1,6 +1,6 @@
 import { test, before, beforeEach, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { panelModal, editsFromModal, panelPayload, handlePanel } from '../../src/features/embeds/panel.js';
+import { panelModal, editsFromModal, panelPayload, createPayload, handlePanel } from '../../src/features/embeds/panel.js';
 import { createEmbed, getEmbed, saveEmbed, deleteEmbed } from '../../src/features/embeds/store.js';
 import { LANGS, t } from '../../src/i18n/index.js';
 import { testDb } from '../helpers/db.js';
@@ -96,6 +96,21 @@ function fake({ customId, kind = 'button', fields = {}, fromMessage = true }) {
     editReply: async (p) => { calls.editReply.push(p); },
   };
 }
+
+test('the create reply is public, explains how to use the embed and still has the panel', async () => {
+  for (const lang of LANGS) {
+    const payload = await createPayload(ctx(), fake({}), lang, 'rules', {});
+    assert.equal(payload.flags, undefined, `${lang} must not be ephemeral`);
+    assert.ok(payload.content.includes('{embed:rules}'), `${lang} guide names the tag`);
+    assert.ok(payload.content.includes(t(lang, 'embeds.panelHint', { name: 'rules' })), `${lang} keeps the hint`);
+    assert.equal(payload.components.length, 2);
+  }
+});
+
+test('the create reply stays under the message length limit with the longest name', async () => {
+  const payload = await createPayload(ctx(), fake({}), 'ar', 'a'.repeat(16), { title: 'T' });
+  assert.ok(payload.content.length < 2000);
+});
 
 test('the panel shows the rendered preview and two rows of buttons', async () => {
   const payload = await panelPayload(ctx(), fake({}), 'en', 'rules', { title: 'Hi {user_name}' });

@@ -7,7 +7,7 @@ import { validateEmbed } from './model.js';
 import { sendEmbedSpec } from './render.js';
 import { errorText } from './spec.js';
 import { applyEdit } from './edit.js';
-import { showPanel, handlePanel } from './panel.js';
+import { showPanel, createPayload, handlePanel } from './panel.js';
 import {
   normalizeEmbedName, createEmbed, getEmbed, saveEmbed, listEmbeds, deleteEmbed,
 } from './store.js';
@@ -143,7 +143,7 @@ async function execute(interaction, ctx) {
     if (!(await createEmbed(ctx.db, guildId, name))) {
       return interaction.reply(ephemeral(t(lang, 'embeds.exists', { name })));
     }
-    return showPanel(interaction, ctx, lang, name, {});
+    return interaction.reply(await createPayload(ctx, interaction, lang, name, {}));
   }
 
   if (sub === 'list') {

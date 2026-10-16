@@ -117,6 +117,14 @@ export async function panelPayload(ctx, interaction, lang, name, spec) {
   return { content, embeds, components: panelRows(lang, name) };
 }
 
+/** The public reply to `/embed create`: how to use the new embed, then the same panel. Not ephemeral. */
+export async function createPayload(ctx, interaction, lang, name, spec) {
+  const panel = await panelPayload(ctx, interaction, lang, name, spec);
+  return { ...panel, content: `${t(lang, 'embeds.createdGuide', { name })}
+
+${panel.content}` };
+}
+
 export async function showPanel(interaction, ctx, lang, name, spec) {
   return interaction.reply(ephemeral(await panelPayload(ctx, interaction, lang, name, spec)));
 }

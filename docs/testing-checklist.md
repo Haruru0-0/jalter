@@ -39,7 +39,7 @@ Automated tests (`npm test`, needs `docker compose up -d`) cover the code. This 
 
 ## 5. Embeds
 
-- [ ] `/embed create name:rules` works without enabling anything and opens the editor.
+- [ ] `/embed create name:rules` works without enabling anything and opens the editor as a public message that explains how to use `{embed:rules}`; only managers can press its buttons.
 - [ ] The buttons set title, description and fields; `/embed edit title ...` changes the title.
 - [ ] `/embed show name:rules` posts it in the current channel and in a channel you pick.
 - [ ] An embed with `logo` as its image shows the image.
