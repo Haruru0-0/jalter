@@ -376,5 +376,7 @@
   "automod.reason": "Auto-mod: {rules}",
   "automod.log.title": "Auto-mod action",
   "automod.log.rules": "Rules",
-  "automod.log.actions": "Actions"
+  "automod.log.actions": "Actions",
+  "automod.nickname.reason": "Auto-mod: inappropriate nickname",
+  "automod.nickname.log": "{user} was renamed to {name}"
 }

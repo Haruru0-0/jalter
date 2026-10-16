@@ -376,5 +376,7 @@
   "automod.reason": "الإشراف التلقائي: {rules}",
   "automod.log.title": "إجراء الإشراف التلقائي",
   "automod.log.rules": "القواعد",
-  "automod.log.actions": "الإجراءات"
+  "automod.log.actions": "الإجراءات",
+  "automod.nickname.reason": "الإشراف التلقائي: لقب غير لائق",
+  "automod.nickname.log": "تمت إعادة تسمية {user} إلى {name}"
 }

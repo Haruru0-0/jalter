@@ -376,5 +376,7 @@
   "automod.reason": "Auto-modération : {rules}",
   "automod.log.title": "Action de l'auto-modération",
   "automod.log.rules": "Règles",
-  "automod.log.actions": "Actions"
+  "automod.log.actions": "Actions",
+  "automod.nickname.reason": "Auto-mod : pseudo inapproprié",
+  "automod.nickname.log": "{user} a été renommé en {name}"
 }

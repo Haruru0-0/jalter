@@ -11,6 +11,7 @@ import { createSpamTracker } from './detect-spam.js';
 import { extractLinks, extractInviteCodes, evaluateLinks, evaluateInvites } from './detect-links.js';
 import { effectiveWords, findBadWord } from './detect-words.js';
 import { isExempt } from './exempt.js';
+import { checkMember as realCheckMember } from './nickname.js';
 
 const UNKNOWN_MESSAGE = 10008;
 const MAX_WINDOW_MS = 86_400_000;
@@ -18,6 +19,7 @@ const DEFAULT_TIMEOUT_SECONDS = 600;
 const INVITE_TIMEOUT_MS = 3000;
 const INVITE_TTL_MS = 10 * 60 * 1000;
 const INVITE_CACHE_MAX = 500;
+const MEMBER_SET_MAX = 5000;
 
 const UNKNOWN_INVITE = 10006;
 
@@ -65,6 +67,8 @@ async function attempt(what, fn) {
   }
 }
 
+const userIdOf = (message) => message.author.id;
+
 function ignorable(message, ctx) {
   if (!message || typeof message !== 'object') return true;
   if (message.author?.bot || message.webhookId || message.system) return true;
@@ -81,6 +85,10 @@ export function createEngine(deps = {}) {
   const clock = deps.now ?? Date.now;
   const strikes = createStrikeStore();
   const spam = createSpamTracker();
+  const checkMemberImpl = deps.checkMember ?? realCheckMember;
+  const checkedMembers = new Set();
+  const lastRenamed = new Map();
+  const checkMember = (ctx, member) => checkMemberImpl(ctx, member, { lastRenamed, sendLog, now: clock });
 
   /** Returns the names of rules the message trips, cheap rules first, invites last. */
   async function evaluate(ctx, message, content, rules, now, edited) {
@@ -124,6 +132,13 @@ export function createEngine(deps = {}) {
     const { config: panel } = await getFeature(ctx.db, guildId, 'panel');
     const managerRoleId = panel?.managerRoleId && panel.managerRoleId !== guildId ? panel.managerRoleId : null;
     if (isExempt(member, message.channel, auto, mod, managerRoleId)) return;
+
+    // First message of a member since start: check their nickname once. Never blocks scanning.
+    if (!checkedMembers.has(userIdOf(message))) {
+      if (checkedMembers.size >= MEMBER_SET_MAX) checkedMembers.delete(checkedMembers.values().next().value);
+      checkedMembers.add(userIdOf(message));
+      await attempt('nickname check', () => checkMember(ctx, member));
+    }
 
     const content = typeof message.content === 'string' ? message.content : '';
     if (opts?.edited && opts.oldContent !== undefined && opts.oldContent === content) return;
@@ -208,6 +223,7 @@ export function createEngine(deps = {}) {
   return {
     strikes,
     spam,
+    checkMember,
     /** Task 9 calls this on a timer: drops expired strikes (max window 24h) and spam events. */
     prune(now = clock()) {
       strikes.prune(now, MAX_WINDOW_MS);

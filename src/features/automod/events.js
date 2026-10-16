@@ -48,9 +48,21 @@ export function createEvents(engine) {
     await engine.handleMessage(ctx, message, { edited: true, oldContent: oldMessage?.content ?? undefined });
   });
 
+  const onMemberAdd = safe('automodMemberAdd', async (ctx, member) => {
+    await engine.checkMember(ctx, member);
+  });
+
+  const onMemberUpdate = safe('automodMemberUpdate', async (ctx, oldMember, newMember) => {
+    // A partial old member has no known nickname: check anyway.
+    if (!oldMember?.partial && oldMember?.nickname === newMember?.nickname) return;
+    await engine.checkMember(ctx, newMember);
+  });
+
   return [
     { name: Events.MessageCreate, execute: onCreate },
     { name: Events.MessageUpdate, execute: onUpdate },
+    { name: Events.GuildMemberAdd, execute: onMemberAdd },
+    { name: Events.GuildMemberUpdate, execute: onMemberUpdate },
   ];
 }
 
