@@ -12,7 +12,7 @@ test('overview lists features with status and commands, and the later ones as co
   assert.match(description, /\*\*Embeds\*\* \(Core\): .*\/embed create/);
   assert.match(description, /\*\*Greet messages\*\* \(Off\): \/set greet, \/test greet/);
   assert.match(description, /\*\*Info commands\*\* \(Off\): .*\/userinfo.*\/serverinfo/);
-  assert.match(description, /Coming soon: .*Auto-mod/);
+  assert.match(description, /Coming soon: .*Anti-raid/);
 });
 
 test('an enabled feature says On', () => {
@@ -30,7 +30,7 @@ test('one feature shows every path with its description, found by key or name', 
 
 test('an unknown or coming-soon feature returns null', () => {
   assert.equal(buildHelp('en', new Map(), commands, 'nonsense'), null);
-  assert.equal(buildHelp('en', new Map(), commands, 'automod'), null);
+  assert.equal(buildHelp('en', new Map(), commands, 'antiraid'), null);
 });
 
 test('the text follows the language', () => {

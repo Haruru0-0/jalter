@@ -25,7 +25,7 @@ test('each feature line shows the command that sets it up', () => {
 
 test('later-phase features say Coming soon without a command', () => {
   const { description } = buildPanelEmbed(new Map(), 'en');
-  assert.match(description, /Auto-mod\*\*: Coming soon$/m);
+  assert.match(description, /Anti-raid\*\*: Coming soon$/m);
 });
 
 test('the text follows the language', () => {
