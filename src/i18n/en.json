@@ -372,5 +372,9 @@
   "moderation.tools.purge.position_failed": "I could not restore its position in the channel list.",
   "moderation.tools.purge.done": "Channel purged. The new channel is {channel}.",
   "moderation.tools.purge.notice": "This channel was purged by a moderator.",
-  "moderation.tools.purge.in_progress": "A purge of this channel is already in progress."
+  "moderation.tools.purge.in_progress": "A purge of this channel is already in progress.",
+  "automod.reason": "Auto-mod: {rules}",
+  "automod.log.title": "Auto-mod action",
+  "automod.log.rules": "Rules",
+  "automod.log.actions": "Actions"
 }

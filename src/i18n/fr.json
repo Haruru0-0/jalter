@@ -372,5 +372,9 @@
   "moderation.tools.purge.position_failed": "Je n'ai pas pu rétablir sa position dans la liste des salons.",
   "moderation.tools.purge.done": "Salon purgé. Le nouveau salon est {channel}.",
   "moderation.tools.purge.notice": "Ce salon a été purgé par un modérateur.",
-  "moderation.tools.purge.in_progress": "Une purge de ce salon est déjà en cours."
+  "moderation.tools.purge.in_progress": "Une purge de ce salon est déjà en cours.",
+  "automod.reason": "Auto-modération : {rules}",
+  "automod.log.title": "Action de l'auto-modération",
+  "automod.log.rules": "Règles",
+  "automod.log.actions": "Actions"
 }
