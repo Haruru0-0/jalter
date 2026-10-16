@@ -19,9 +19,16 @@ const INVITE_TIMEOUT_MS = 3000;
 const INVITE_TTL_MS = 10 * 60 * 1000;
 const INVITE_CACHE_MAX = 500;
 
-/** Resolves an invite code to a guild id (null = unknown, foreign or timed out). Cached 10 minutes. */
-export function createInviteResolver() {
+const UNKNOWN_INVITE = 10006;
+
+/** Resolves an invite code. Returns a guild id, null (unknown or foreign invite, cached 10 min as a
+ *  negative result for Unknown Invite 10006) or undefined (lookup failed or timed out: not cached, fail open). */
+export function createInviteResolver({ timeoutMs = INVITE_TIMEOUT_MS, ttlMs = INVITE_TTL_MS } = {}) {
   const cache = new Map();
+  const remember = (code, guildId) => {
+    if (cache.size >= INVITE_CACHE_MAX) cache.delete(cache.keys().next().value);
+    cache.set(code, { guildId, until: Date.now() + ttlMs });
+  };
   return async function resolveInvite(code, ctx) {
     const hit = cache.get(code);
     if (hit && hit.until > Date.now()) return hit.guildId;
@@ -29,14 +36,17 @@ export function createInviteResolver() {
     try {
       const invite = await Promise.race([
         ctx.client.fetchInvite(code),
-        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('invite timeout')), INVITE_TIMEOUT_MS); }),
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('invite timeout')), timeoutMs); }),
       ]);
       const guildId = invite?.guild?.id ?? null;
-      if (cache.size >= INVITE_CACHE_MAX) cache.delete(cache.keys().next().value);
-      cache.set(code, { guildId, until: Date.now() + INVITE_TTL_MS });
+      remember(code, guildId);
       return guildId;
-    } catch {
-      return null;
+    } catch (err) {
+      if (err?.code === UNKNOWN_INVITE) {
+        remember(code, null);
+        return null;
+      }
+      return undefined;
     } finally {
       clearTimeout(timer);
     }
@@ -73,9 +83,10 @@ export function createEngine(deps = {}) {
   const spam = createSpamTracker();
 
   /** Returns the names of rules the message trips, cheap rules first, invites last. */
-  async function evaluate(ctx, message, content, rules, now) {
+  async function evaluate(ctx, message, content, rules, now, edited) {
     const tripped = [];
-    if (rules.spam.enabled) {
+    // An edit is not a new burst, attachment or link-rate event.
+    if (rules.spam.enabled && !edited) {
       const mentions = (message.mentions?.users?.size ?? 0) + (message.mentions?.roles?.size ?? 0);
       const found = spam.check({
         guildId: message.guildId,
@@ -118,7 +129,7 @@ export function createEngine(deps = {}) {
     if (opts?.edited && opts.oldContent !== undefined && opts.oldContent === content) return;
 
     const now = clock();
-    const tripped = await evaluate(ctx, message, content, auto.rules, now);
+    const tripped = await evaluate(ctx, message, content, auto.rules, now, Boolean(opts?.edited));
     if (!tripped.length) return;
 
     const lang = await getLang(ctx.db, guildId);
@@ -145,29 +156,37 @@ export function createEngine(deps = {}) {
       if (deleted) actions.push('delete');
     }
 
-    const reason = t(lang, 'automod.reason', { rules: tripped.join(', ') });
-    for (const c of counts) {
-      const steps = auto.rules[c.rule].steps;
-      const step = stepReached(steps, c.previous, c.count);
-      if (!step) continue;
+    // One enforcement per message: the most severe step among the rules that crossed one.
+    const crossed = counts
+      .map((c) => ({ rule: c.rule, step: stepReached(auto.rules[c.rule].steps, c.previous, c.count) }))
+      .filter((c) => c.step);
+    if (crossed.length) {
+      const secondsOf = (step) => (step.action === 'timeout' ? (step.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS) : 0);
+      const severity = (step) => (step.action === 'timeout' ? 1 : 0);
+      const best = crossed.map((c) => c.step).reduce((a, b) => (
+        severity(b) > severity(a) || (severity(b) === severity(a) && secondsOf(b) > secondsOf(a)) ? b : a
+      ));
+      // Reset before awaiting so strikes added during the await are not wiped.
+      for (const c of crossed) {
+        if (isTopStep(auto.rules[c.rule].steps, c.step)) strikes.reset(guildId, userId, c.rule);
+      }
       const result = await attempt('action', () => runAction(ctx, {
         guild: message.guild,
         actor: message.guild.members.me,
-        type: step.action,
+        type: best.action,
         targetId: userId,
         target: member,
         config: mod,
         lang,
-        reason,
-        durationSeconds: step.action === 'timeout' ? (step.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS) : undefined,
+        reason: t(lang, 'automod.reason', { rules: crossed.map((c) => c.rule).join(', ') }),
+        durationSeconds: best.action === 'timeout' ? secondsOf(best) : undefined,
       }));
       if (result?.ok) {
-        actions.push(step.action);
-        if (result.modCase && caseNumber === null) caseNumber = result.modCase.number ?? null;
+        actions.push(best.action);
+        if (result.modCase) caseNumber = result.modCase.number ?? null;
       } else if (result) {
-        console.warn(`Auto-mod ${step.action} refused in ${guildId}: ${result.reason}`);
+        console.warn(`Auto-mod ${best.action} refused in ${guildId}: ${result.reason}`);
       }
-      if (isTopStep(steps, step)) strikes.reset(guildId, userId, c.rule);
     }
 
     if (caseNumber === null) {

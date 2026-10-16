@@ -79,20 +79,28 @@ export function evaluateLinks(text, cfg) {
   return { violated: matches.length > 0, matches };
 }
 
-/** cfg is config.rules.invites. allow/block hold guild ids (or invite codes). resolve(code) -> guild id | null. */
+/** cfg is config.rules.invites. allow/block hold guild ids (or invite codes).
+ *  resolve(code) -> guild id string | null (known foreign/unknown invite) | undefined (lookup failed: skip the code).
+ *  A throwing resolve counts as undefined. Distinct codes resolve concurrently. */
 export async function evaluateInvites(text, cfg, { ownGuildId, resolve }) {
+  const codes = extractInviteCodes(text);
+  const resolved = await Promise.all(
+    codes.map(async (code) => {
+      try {
+        return await resolve(code);
+      } catch {
+        return undefined;
+      }
+    }),
+  );
   const matches = [];
-  for (const code of extractInviteCodes(text)) {
-    let gid = null;
-    try {
-      gid = (await resolve(code)) ?? null;
-    } catch {
-      gid = null;
-    }
-    if (gid !== null && gid === ownGuildId) continue;
+  codes.forEach((code, i) => {
+    const gid = resolved[i];
+    if (gid === undefined) return;
+    if (gid !== null && gid === ownGuildId) return;
     const ids = gid === null ? [code] : [gid, code];
-    if (ids.some((id) => cfg.allow.includes(id))) continue;
+    if (ids.some((id) => cfg.allow.includes(id))) return;
     if (ids.some((id) => cfg.block.includes(id)) || cfg.blockAllExceptAllowed) matches.push(code);
-  }
+  });
   return { violated: matches.length > 0, matches };
 }

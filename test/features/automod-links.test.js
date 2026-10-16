@@ -72,16 +72,21 @@ test('allowed server id passes', async () => {
   assert.equal(r.violated, false);
 });
 
-test('resolve failure is treated as foreign', async () => {
-  const a = await evaluateInvites('discord.gg/abc', invCfg(), { ownGuildId: 'G1', resolve: async () => null });
-  assert.equal(a.violated, true);
-  const b = await evaluateInvites('discord.gg/abc', invCfg(), {
+test('null is foreign; undefined or a throw skips the code', async () => {
+  const run = (resolve) => evaluateInvites('discord.gg/abc', invCfg(), { ownGuildId: 'G1', resolve });
+  assert.equal((await run(async () => null)).violated, true);
+  assert.equal((await run(async () => undefined)).violated, false);
+  assert.equal((await run(async () => { throw new Error('x'); })).violated, false);
+});
+
+test('distinct codes resolve concurrently', async () => {
+  const start = Date.now();
+  const r = await evaluateInvites('discord.gg/aa discord.gg/bb discord.gg/cc', invCfg(), {
     ownGuildId: 'G1',
-    resolve: async () => {
-      throw new Error('unknown invite');
-    },
+    resolve: async () => { await new Promise((ok) => setTimeout(ok, 100)); return 'G2'; },
   });
-  assert.equal(b.violated, true);
+  assert.deepEqual(r.matches, ['aa', 'bb', 'cc']);
+  assert.ok(Date.now() - start < 250);
 });
 
 test('resolve is called once per distinct code', async () => {
