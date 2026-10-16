@@ -72,7 +72,7 @@ after(async () => { await db.end(); });
 
 const ctx = () => ({ db, client: {} });
 
-function fake({ customId, kind = 'button', fields = {}, fromMessage = true }) {
+function fake({ customId, kind = 'button', fields = {}, fromMessage = true, values = [] }) {
   const calls = { reply: [], update: [], showModal: [], deferReply: [], editReply: [] };
   return {
     calls,
@@ -81,6 +81,8 @@ function fake({ customId, kind = 'button', fields = {}, fromMessage = true }) {
     channelId: 'c1',
     inGuild: () => true,
     isButton: () => kind === 'button',
+    isStringSelectMenu: () => kind === 'select',
+    values,
     isModalSubmit: () => kind === 'modal',
     isFromMessage: () => fromMessage,
     fields: { getTextInputValue: (id) => fields[id] ?? '' },
@@ -117,16 +119,56 @@ test('the create reply stays under the message length limit with the longest nam
   assert.ok(payload.embeds.at(-1).data.description.length < 4096);
 });
 
-test('the panel shows the rendered preview and two rows of buttons', async () => {
+test('the panel shows the preview, a part menu and a plain clear button', async () => {
   const payload = await panelPayload(ctx(), fake({}), 'en', 'rules', { title: 'Hi {user_name}' });
   assert.equal(payload.embeds[0].title, 'Hi Sam');
   assert.match(payload.embeds.at(-1).data.description, /rules/);
   assert.equal(payload.content, undefined);
-  const ids = payload.components.map((r) => r.toJSON().components.map((c) => c.custom_id));
-  assert.deepEqual(ids, [
-    ['embeds:b:basic:rules', 'embeds:b:author:rules', 'embeds:b:footer:rules', 'embeds:b:images:rules', 'embeds:b:field:rules'],
-    ['embeds:b:clear:rules', 'embeds:b:show:rules'],
-  ]);
+  const rows = payload.components.map((r) => r.toJSON().components);
+  assert.equal(rows.length, 2);
+  const [menu] = rows[0];
+  assert.equal(menu.custom_id, 'embeds:s:menu:rules');
+  assert.deepEqual(menu.options.map((o) => o.value), ['basic', 'author', 'footer', 'images', 'field']);
+  assert.ok(menu.options.every((o) => o.label.length <= 100 && o.description.length <= 100));
+  assert.deepEqual(rows[1].map((c) => c.custom_id), ['embeds:b:clear:rules']);
+  assert.notEqual(rows[1][0].style, 4, 'clear fields is not the red danger style');
+});
+
+test('the menu texts fit Discord limits in every language', async () => {
+  for (const lang of LANGS) {
+    const payload = await panelPayload(ctx(), fake({}), lang, 'rules', {});
+    const menu = payload.components[0].toJSON().components[0];
+    assert.ok(menu.placeholder.length <= 150, `${lang} placeholder`);
+    for (const o of menu.options) {
+      assert.ok(o.label.length <= 100 && o.description.length <= 100, `${lang} ${o.value}`);
+    }
+  }
+});
+
+test('choosing a part in the menu opens its form prefilled', async () => {
+  await createEmbed(db, 'g1', 'rules');
+  await saveEmbed(db, 'g1', 'rules', { title: 'T', footer: 'F', footerIcon: 'https://a.test/f.png' });
+  for (const part of ['basic', 'author', 'footer', 'images', 'field']) {
+    const i = fake({ customId: 'embeds:s:menu:rules', kind: 'select', values: [part] });
+    await handlePanel(i, ctx());
+    assert.equal(i.calls.showModal.length, 1, part);
+    assert.equal(i.calls.showModal[0].toJSON().custom_id, `embeds:m:${part}:rules`);
+  }
+  const i = fake({ customId: 'embeds:s:menu:rules', kind: 'select', values: ['footer'] });
+  await handlePanel(i, ctx());
+  const values = i.calls.showModal[0].toJSON().components.map((r) => r.components[0].value);
+  assert.deepEqual(values.slice(0, 2), ['F', 'https://a.test/f.png']);
+});
+
+test('a menu choice that is not a form does nothing, and a deleted embed replies not found', async () => {
+  await createEmbed(db, 'g1', 'rules');
+  const junk = fake({ customId: 'embeds:s:menu:rules', kind: 'select', values: ['nope'] });
+  await handlePanel(junk, ctx());
+  assert.equal(junk.calls.showModal.length + junk.calls.reply.length + junk.calls.update.length, 0);
+  await deleteEmbed(db, 'g1', 'rules');
+  const gone = fake({ customId: 'embeds:s:menu:rules', kind: 'select', values: ['basic'] });
+  await handlePanel(gone, ctx());
+  assert.equal(gone.calls.reply[0].content, t('en', 'embeds.notFound', { name: 'rules' }));
 });
 
 test('an empty embed shows the empty text instead of a preview', async () => {

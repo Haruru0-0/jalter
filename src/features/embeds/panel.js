@@ -1,5 +1,6 @@
 import {
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle,
+  ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, StringSelectMenuBuilder,
+  TextInputBuilder, TextInputStyle,
 } from 'discord.js';
 import { guard } from '../../core/guard.js';
 import { ephemeral } from '../../core/replies.js';
@@ -82,19 +83,22 @@ export function editsFromModal(part, get) {
 const button = (action, name, label, style = ButtonStyle.Secondary) =>
   new ButtonBuilder().setCustomId(`embeds:b:${action}:${name}`).setLabel(label).setStyle(style);
 
+// The part picker: choosing one opens its form. `field` is "add a field".
+const MENU_LABELS = {
+  basic: 'embeds.partBasic', author: 'embeds.partAuthor', footer: 'embeds.partFooter',
+  images: 'embeds.partImages', field: 'embeds.addField',
+};
+
 function panelRows(lang, name) {
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId(`embeds:s:menu:${name}`)
+    .setPlaceholder(t(lang, 'embeds.selectPlaceholder'))
+    .addOptions(Object.keys(MODALS).map((part) => ({
+      label: t(lang, MENU_LABELS[part]), description: t(lang, `embeds.menuDesc.${part}`), value: part,
+    })));
   return [
-    new ActionRowBuilder().addComponents(
-      button('basic', name, t(lang, 'embeds.partBasic')),
-      button('author', name, t(lang, 'embeds.partAuthor')),
-      button('footer', name, t(lang, 'embeds.partFooter')),
-      button('images', name, t(lang, 'embeds.partImages')),
-      button('field', name, t(lang, 'embeds.addField')),
-    ),
-    new ActionRowBuilder().addComponents(
-      button('clear', name, t(lang, 'embeds.clearFields'), ButtonStyle.Danger),
-      button('show', name, t(lang, 'embeds.showHere'), ButtonStyle.Success),
-    ),
+    new ActionRowBuilder().addComponents(menu),
+    new ActionRowBuilder().addComponents(button('clear', name, t(lang, 'embeds.clearFields'))),
   ];
 }
 
@@ -138,15 +142,17 @@ export async function showPanel(interaction, ctx, lang, name, spec) {
 
 const PART_BUTTONS = new Set(Object.keys(MODALS));
 
-/** Component handler for the `embeds` prefix: `embeds:b:<action>:<name>` and `embeds:m:<part>:<name>`. */
+/** Component handler for the `embeds` prefix: `embeds:s:menu:<name>`, `embeds:b:<action>:<name>` and `embeds:m:<part>:<name>`. */
 export async function handlePanel(interaction, ctx) {
   const lang = await guard(interaction, ctx, 'embeds', { requireEnabled: false });
   if (!lang) return;
   const [, kind, rawAction, rawName] = interaction.customId.split(':');
-  const action = LEGACY_PARTS[rawAction] ?? rawAction;
+  const isSelect = kind === 's' && interaction.isStringSelectMenu();
+  const picked = isSelect ? interaction.values?.[0] : rawAction;
+  const action = LEGACY_PARTS[picked] ?? picked;
   const isButton = kind === 'b' && interaction.isButton();
   const isModal = kind === 'm' && interaction.isModalSubmit();
-  if (!isButton && !isModal) return;
+  if (!isSelect && !isButton && !isModal) return;
 
   const name = normalizeEmbedName(rawName);
   if (!name) return interaction.reply(ephemeral(t(lang, 'embeds.badName')));
@@ -155,7 +161,10 @@ export async function handlePanel(interaction, ctx) {
   const spec = await getEmbed(ctx.db, guildId, name);
   if (!spec) return notFound();
 
+  if (isSelect) return PART_BUTTONS.has(action) ? interaction.showModal(panelModal(lang, action, name, spec)) : undefined;
+
   if (isButton) {
+    // Part and show buttons only exist on panels posted before the select menu; they keep working.
     if (PART_BUTTONS.has(action)) return interaction.showModal(panelModal(lang, action, name, spec));
     if (action === 'show') return sendEmbedSpec(interaction, ctx, lang, spec, interaction.channelId);
     if (action === 'clear') {

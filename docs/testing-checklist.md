@@ -40,8 +40,8 @@ Automated tests (`npm test`, needs `docker compose up -d`) cover the code. This 
 ## 5. Embeds
 
 - [ ] In `/embed delete`, `/embed show` and every `/embed edit ...`, the `embed` option suggests your saved embeds as you type (managers only; run `npm run deploy` first).
-- [ ] `/embed create name:rules` works without enabling anything and opens the editor as a public message that explains how to use `{embed:rules}`; only managers can press its buttons. The buttons (Basic info, Author, Footer, Images, Add field) each open a form: Basic info is title, description and color; Author and Footer are text with an optional icon (Footer also has the timestamp yes/no); Images is the main image and the thumbnail.
-- [ ] The buttons set title, description and fields; `/embed edit title ...` changes the title.
+- [ ] `/embed create name:rules` works without enabling anything and opens the editor as a public message that explains how to use `{embed:rules}`; only managers can use its menu and button. The menu options (Basic info, Author, Footer, Images, Add field) each open a form: Basic info is title, description and color; Author and Footer are text with an optional icon (Footer also has the timestamp yes/no); Images is the main image and the thumbnail.
+- [ ] The "Choose what to edit" menu opens a form for each part (Basic info, Author, Footer, Images, Add field) and the Clear fields button (grey, not red) empties the fields; there is no Show here button (use `/embed show`); `/embed edit title ...` changes the title.
 - [ ] `/embed show name:rules` posts it in the current channel and in a channel you pick.
 - [ ] An embed with `logo` as its image shows the image.
 - [ ] A 300-character title shows an error and saves nothing.
