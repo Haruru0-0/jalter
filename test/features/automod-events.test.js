@@ -1,4 +1,4 @@
-import { test, afterEach } from 'node:test';
+import { test, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { Events } from 'discord.js';
 import { createEvents, startAutomodSweep, stopAutomodSweep } from '../../src/features/automod/events.js';
@@ -58,8 +58,12 @@ test('an engine error is swallowed', async () => {
   const engine = { handleMessage: async () => { throw new Error('boom'); } };
   const events = createEvents(engine);
   const message = { guildId: 'g', author: { bot: false } };
+  const warn = mock.method(console, 'warn', () => {});
   await find(events, Events.MessageCreate).execute({}, message);
   await find(events, Events.MessageUpdate).execute({}, {}, message);
+  assert.equal(warn.mock.callCount(), 2);
+  assert.ok(warn.mock.calls.every((c) => String(c.arguments[0]).includes('boom')));
+  warn.mock.restore();
 });
 
 test('the sweep prunes every 60 seconds, is unref ed and is created once', (t) => {

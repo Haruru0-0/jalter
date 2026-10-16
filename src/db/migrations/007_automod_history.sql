@@ -9,4 +9,4 @@ CREATE TABLE automod_history (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX automod_history_guild_idx ON automod_history (guild_id, created_at DESC);
+CREATE INDEX automod_history_guild_idx ON automod_history (guild_id, id DESC);

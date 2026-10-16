@@ -1,6 +1,7 @@
-import { test, before, after } from 'node:test';
+import { test, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { testDb } from '../helpers/db.js';
+import { resetDb } from '../../src/db/index.js';
 import { addHistory, listHistory } from '../../src/features/automod/history.js';
 
 let db;
@@ -9,6 +10,9 @@ before(async () => {
 });
 after(async () => {
   await db.end();
+});
+beforeEach(async () => {
+  await resetDb(db);
 });
 
 const entry = (over = {}) => ({
@@ -22,7 +26,6 @@ const entry = (over = {}) => ({
 });
 
 test('adds and lists newest first', async () => {
-  await testDb();
   await addHistory(db, entry({ messageId: 'a' }));
   await addHistory(db, entry({ messageId: 'b', rules: ['links', 'caps'], caseNumber: 4 }));
   const rows = await listHistory(db, 'g1', {});
@@ -38,7 +41,6 @@ test('adds and lists newest first', async () => {
 });
 
 test('filters by user', async () => {
-  await testDb();
   await addHistory(db, entry({ userId: 'u1' }));
   await addHistory(db, entry({ userId: 'u2', messageId: null }));
   const rows = await listHistory(db, 'g1', { userId: 'u2' });
@@ -48,7 +50,6 @@ test('filters by user', async () => {
 });
 
 test('keeps only the newest 200 rows per guild', async () => {
-  await testDb();
   for (let i = 0; i < 205; i++) await addHistory(db, entry({ messageId: `m${i}` }));
   const rows = await listHistory(db, 'g1', { limit: 500 });
   assert.equal(rows.length, 200);
@@ -59,7 +60,6 @@ test('keeps only the newest 200 rows per guild', async () => {
 });
 
 test('guilds are separate', async () => {
-  await testDb();
   await addHistory(db, entry({ guildId: 'g1' }));
   await addHistory(db, entry({ guildId: 'g2' }));
   assert.equal((await listHistory(db, 'g1', {})).length, 1);

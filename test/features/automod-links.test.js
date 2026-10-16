@@ -88,13 +88,20 @@ test('null is foreign; undefined or a throw skips the code', async () => {
 });
 
 test('distinct codes resolve concurrently', async () => {
-  const start = Date.now();
+  let started = 0;
+  let startedBeforeFirstFinished = 0;
+  let finished = 0;
   const r = await evaluateInvites('discord.gg/aa discord.gg/bb discord.gg/cc', invCfg(), {
     ownGuildId: 'G1',
-    resolve: async () => { await new Promise((ok) => setTimeout(ok, 100)); return 'G2'; },
+    resolve: async () => {
+      started++;
+      await new Promise((ok) => setTimeout(ok, 50));
+      if (finished++ === 0) startedBeforeFirstFinished = started;
+      return 'G2';
+    },
   });
   assert.deepEqual(r.matches, ['aa', 'bb', 'cc']);
-  assert.ok(Date.now() - start < 250);
+  assert.equal(startedBeforeFirstFinished, 3);
 });
 
 test('resolve is called once per distinct code', async () => {

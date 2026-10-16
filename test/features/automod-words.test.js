@@ -76,3 +76,7 @@ test('zero-width, soft hyphen and tatweel do not evade the filter', () => {
   assert.equal(findBadWord('you s­hit', ['shit']), 'shit');
   assert.equal(findBadWord('ـحـقـير', ['حقير']), 'حقير');
 });
+
+test('the built-in Arabic list does not flag the innocent word لعينيك', () => {
+  assert.equal(findBadWord('ما أجمل الدنيا لعينيك', BUILTIN_WORDS.ar), null);
+});
