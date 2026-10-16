@@ -104,6 +104,18 @@ test('linkRate total over time', () => {
   assert.deepEqual(t.check(msg({ linkCount: 1 }), c, 90_000), []);
 });
 
+test('attachments and linkRate only trip when the current message contributes', () => {
+  const c = cfg({ attachments: on({ count: 5, seconds: 30 }), linkRate: on({ count: 3, seconds: 30 }) });
+  const t = createSpamTracker();
+  assert.deepEqual(t.check(msg({ attachmentCount: 5 }), c, 0), ['attachments']);
+  assert.deepEqual(t.check(msg({ content: 'just text' }), c, 1000), []);
+  assert.deepEqual(t.check(msg({ attachmentCount: 1 }), c, 2000), ['attachments']);
+  const u = createSpamTracker();
+  assert.deepEqual(u.check(msg({ linkCount: 3 }), c, 0), ['linkRate']);
+  assert.deepEqual(u.check(msg({ content: 'plain' }), c, 1000), []);
+  assert.deepEqual(u.check(msg({ linkCount: 1 }), c, 2000), ['linkRate']);
+});
+
 test('disabled checks never trip', () => {
   const t = createSpamTracker();
   const c = allOff();

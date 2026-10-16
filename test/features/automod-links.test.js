@@ -28,6 +28,14 @@ test('ignores invite links in extractLinks', () => {
   assert.deepEqual(extractLinks('https://discord.com/channels/1/2'), ['discord.com']);
 });
 
+test('ptb, canary and www discord hosts are invites, not links', () => {
+  const t = 'ptb.discord.com/invite/aaa canary.discord.com/invite/bbb https://www.discord.com/invite/ccc ptb.discordapp.com/invite/ddd';
+  assert.deepEqual(extractInviteCodes(t), ['aaa', 'bbb', 'ccc', 'ddd']);
+  assert.deepEqual(extractLinks(t), []);
+  assert.deepEqual(extractLinks('https://ptb.discord.com/channels/1/2'), ['ptb.discord.com']);
+  assert.deepEqual(extractInviteCodes('evilptb.discord.com/invite/zzz'), []);
+});
+
 test('extracts invite codes from all three forms', () => {
   const t = 'discord.gg/abc123 https://discord.com/invite/Xyz-9 http://discordapp.com/invite/q1w2 discord.gg/abc123';
   assert.deepEqual(extractInviteCodes(t), ['abc123', 'Xyz-9', 'q1w2']);

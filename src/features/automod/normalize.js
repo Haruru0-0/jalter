@@ -5,6 +5,7 @@ export function normalizeText(text) {
   if (typeof text !== 'string' || !text) return '';
   return text
     .normalize('NFKD')
+    .replace(/[\p{Cf}ـ]/gu, '') // zero-width, soft hyphen, bidi marks, Arabic tatweel
     .replace(/\p{M}/gu, '') // accents and Arabic diacritics
     .toLowerCase()
     .replace(/[013457@$]/g, (c) => SWAPS[c] ?? c)

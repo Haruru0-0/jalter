@@ -77,8 +77,8 @@ export function createSpamTracker() {
       } else if (name === 'caps') hit = content.length >= c.minLength && capsRatio(content) >= c.percent;
       else if (name === 'emoji') hit = countEmoji(content) > c.max;
       else if (name === 'mentions') hit = (Number(msg.mentionCount) || 0) > c.max;
-      else if (name === 'attachments') hit = within(win(c)).reduce((n, e) => n + e.att, 0) >= c.count;
-      else if (name === 'linkRate') hit = within(win(c)).reduce((n, e) => n + e.links, 0) >= c.count;
+      else if (name === 'attachments') hit = (Number(msg.attachmentCount) || 0) > 0 && within(win(c)).reduce((n, e) => n + e.att, 0) >= c.count;
+      else if (name === 'linkRate') hit = (Number(msg.linkCount) || 0) > 0 && within(win(c)).reduce((n, e) => n + e.links, 0) >= c.count;
       if (hit) tripped.push(name);
     }
     return tripped;

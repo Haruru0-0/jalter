@@ -10,15 +10,16 @@ const LINK_RE =
   /https?:\/\/[^\s<>()[\]]{1,2048}|(?<![\w@./-])(?:[a-z0-9-]{1,63}\.){1,10}[a-z]{2,24}(?![\w@-])(?:\/[^\s<>()[\]]{0,2048})?/gi;
 
 const INVITE_RE =
-  /(?<![\w.@-])(?:https?:\/\/)?(?:www\.)?(?:discord\.gg|discord(?:app)?\.com\/invite)\/([a-z0-9-]{2,32})(?![\w-])/gi;
+  /(?<![\w.@-])(?:https?:\/\/)?(?:(?:www|ptb|canary)\.)?(?:discord\.gg|discord(?:app)?\.com\/invite)\/([a-z0-9-]{2,32})(?![\w-])/gi;
 
 const TRAILING = /[.,!?;:'"*_~`|]+$/;
+
+const INVITE_WEB_HOST = /^(?:(?:www|ptb|canary)\.)?discord(?:app)?\.com$/;
 
 const isInviteHost = (host, pathname) =>
   host === 'discord.gg' ||
   host === 'www.discord.gg' ||
-  ((host === 'discord.com' || host === 'discordapp.com' || host === 'www.discord.com' || host === 'www.discordapp.com') &&
-    /^\/invite(\/|$)/i.test(pathname));
+  (INVITE_WEB_HOST.test(host) && /^\/invite(\/|$)/i.test(pathname));
 
 function hostOf(candidate) {
   let s = candidate.replace(TRAILING, '');

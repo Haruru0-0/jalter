@@ -70,3 +70,9 @@ test('4000-char input with a 300-word list is fast', () => {
   assert.equal(findBadWord(text, words), null);
   assert.ok(Number(process.hrtime.bigint() - t) / 1e6 < 50);
 });
+
+test('zero-width, soft hyphen and tatweel do not evade the filter', () => {
+  assert.equal(findBadWord('you sh​it', ['shit']), 'shit');
+  assert.equal(findBadWord('you s­hit', ['shit']), 'shit');
+  assert.equal(findBadWord('ـحـقـير', ['حقير']), 'حقير');
+});

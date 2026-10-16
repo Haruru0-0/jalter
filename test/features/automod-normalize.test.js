@@ -35,3 +35,16 @@ test('tokens splits on punctuation', () => {
   assert.deepEqual(tokens('...'), []);
   assert.deepEqual(tokens(null), []);
 });
+
+test('strips zero-width characters, soft hyphen and tatweel', () => {
+  assert.equal(normalizeText('fu​ck'), 'fuck');
+  assert.equal(normalizeText('f­uck'), 'fuck');
+  assert.equal(normalizeText('fu‍⁠﻿ck'), 'fuck');
+  assert.equal(normalizeText('ـلعـين'), 'لعين');
+  assert.deepEqual(tokens('sh​it now'), ['shit', 'now']);
+});
+
+test('real Arabic text and long input still normalise', () => {
+  assert.equal(normalizeText('مرحبا بكم'), 'مرحبا بكم');
+  assert.equal(normalizeText('a'.repeat(4000)), 'aa');
+});
