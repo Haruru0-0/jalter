@@ -213,8 +213,8 @@ export function createAutomodCommand({ extend = (b) => b, handlers = {}, groupHa
     const { enabled, config: raw } = await getFeature(ctx.db, guildId, 'automod');
     const config = readConfig(raw);
     const save = (next) => setFeature(ctx.db, guildId, 'automod', { config: readConfig(next) });
-    const handler = group ? groupHandlers[group]?.[sub] : Object.hasOwn(table, sub) ? table[sub] : undefined;
-    if (!handler) return;
+    const handler = group ? (Object.hasOwn(groupHandlers, group) && Object.hasOwn(groupHandlers[group], sub) ? groupHandlers[group][sub] : undefined) : Object.hasOwn(table, sub) ? table[sub] : undefined;
+    if (!handler) return reply(interaction, t(lang, 'automod.error.generic'));
     return handler(interaction, { ctx, lang, enabled, config, save });
   }
 
