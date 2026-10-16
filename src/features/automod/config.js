@@ -5,12 +5,12 @@ export const MAX_EXEMPT_CHANNELS = 20;
 export const MAX_LIST = 100;
 export const MAX_STEPS = 8;
 
-const STRIKES_MIN = 1;
-const STRIKES_MAX = 50;
-const WINDOW_MIN = 10;
-const WINDOW_MAX = 86_400;
-const TIMEOUT_MIN = 60;
-const TIMEOUT_MAX = 2_419_200;
+export const STRIKES_MIN = 1;
+export const STRIKES_MAX = 50;
+export const WINDOW_MIN = 10;
+export const WINDOW_MAX = 86_400;
+export const TIMEOUT_MIN = 60;
+export const TIMEOUT_MAX = 2_419_200;
 const TIMEOUT_DEFAULT = 600;
 
 const bool = (v, d) => (typeof v === 'boolean' ? v : d);
@@ -20,7 +20,7 @@ const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
 const DEFAULT_STEPS = [{ strikes: 3, action: 'warn', timeoutSeconds: null }];
 
 /** Spam sub-checks: [key, [[field, min, max, default], ...]]. Each also has `enabled` (default true). */
-const SPAM_CHECKS = {
+export const SPAM_CHECKS = {
   burst: { messages: [2, 50, 5], seconds: [1, 3600, 5] },
   identical: { count: [2, 50, 4], seconds: [1, 3600, 60] },
   caps: { minLength: [1, 2000, 10], percent: [10, 100, 70] },
