@@ -13,11 +13,16 @@ test('defaults for empty and garbage input', () => {
     assert.equal(base.rules[r].enabled, false);
     assert.equal(base.rules[r].delete, true);
     assert.equal(base.rules[r].windowSeconds, 600);
-    assert.deepEqual(base.rules[r].steps, [{ strikes: 3, action: 'warn', timeoutSeconds: null }]);
+    assert.deepEqual(
+      base.rules[r].steps,
+      r === 'spam'
+        ? [{ strikes: 3, action: 'warn', timeoutSeconds: null }, { strikes: 5, action: 'timeout', timeoutSeconds: 600 }]
+        : [{ strikes: 3, action: 'warn', timeoutSeconds: null }],
+    );
   }
   assert.deepEqual(base.rules.spam.burst, { enabled: true, messages: 5, seconds: 5 });
   assert.deepEqual(base.rules.spam.identical, { enabled: true, count: 4, seconds: 60 });
-  assert.deepEqual(base.rules.spam.caps, { enabled: true, minLength: 10, percent: 70 });
+  assert.deepEqual(base.rules.spam.caps, { enabled: true, minLength: 20, percent: 70 });
   assert.deepEqual(base.rules.spam.emoji, { enabled: true, max: 10 });
   assert.deepEqual(base.rules.spam.mentions, { enabled: true, max: 5 });
   assert.deepEqual(base.rules.spam.attachments, { enabled: true, count: 5, seconds: 30 });

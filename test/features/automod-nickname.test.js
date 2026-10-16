@@ -112,6 +112,22 @@ test('does not rename twice within 10 seconds', async () => {
   assert.equal(sets.length, 2);
 });
 
+test('the rename cooldown is per guild', async () => {
+  await setFeature(db, 'g2', 'automod', {
+    enabled: true,
+    config: { rules: { words: { enabled: true, custom: ['badword'], useBuiltin: false } }, nickname: { enabled: true } },
+  });
+  await enable();
+  const a = mk({ member: { nickname: 'badword' } });
+  const b = mk({ member: { nickname: 'badword', guild: { id: 'g2' } } });
+  const lastRenamed = new Map();
+  const now = () => 1_000_000;
+  await run(a.member, { lastRenamed, now });
+  await run(b.member, { lastRenamed, now });
+  assert.equal(a.sets.length, 1);
+  assert.equal(b.sets.length, 1);
+});
+
 test('a failing setNickname does not throw', async () => {
   await enable();
   const warn = mock.method(console, 'warn', () => {});

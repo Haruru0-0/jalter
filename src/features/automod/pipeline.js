@@ -93,8 +93,7 @@ export function createEngine(deps = {}) {
   /** Returns the names of rules the message trips, cheap rules first, invites last. */
   async function evaluate(ctx, message, content, rules, now, edited) {
     const tripped = [];
-    // An edit is not a new burst, attachment or link-rate event.
-    if (rules.spam.enabled && !edited) {
+    if (rules.spam.enabled) {
       const mentions = (message.mentions?.users?.size ?? 0) + (message.mentions?.roles?.size ?? 0);
       const found = spam.check({
         guildId: message.guildId,
@@ -104,7 +103,7 @@ export function createEngine(deps = {}) {
         mentionCount: mentions,
         attachmentCount: message.attachments?.size ?? 0,
         linkCount: extractLinks(content).length + extractInviteCodes(content).length,
-      }, rules.spam, now);
+      }, rules.spam, now, { edited });
       if (found.length) tripped.push('spam');
     }
     if (rules.words.enabled && findBadWord(content, effectiveWords(rules.words))) tripped.push('words');
@@ -134,9 +133,10 @@ export function createEngine(deps = {}) {
     if (isExempt(member, message.channel, auto, mod, managerRoleId)) return;
 
     // First message of a member since start: check their nickname once. Never blocks scanning.
-    if (!checkedMembers.has(userIdOf(message))) {
+    const memberKey = `${guildId}:${userIdOf(message)}`;
+    if (!checkedMembers.has(memberKey)) {
       if (checkedMembers.size >= MEMBER_SET_MAX) checkedMembers.delete(checkedMembers.values().next().value);
-      checkedMembers.add(userIdOf(message));
+      checkedMembers.add(memberKey);
       await attempt('nickname check', () => checkMember(ctx, member));
     }
 
@@ -158,6 +158,15 @@ export function createEngine(deps = {}) {
       ...strikes.add(guildId, userId, rule, now, auto.rules[rule].windowSeconds * 1000),
     }));
 
+    // One enforcement per message: the most severe step among the rules that crossed one.
+    const crossed = counts
+      .map((c) => ({ rule: c.rule, step: stepReached(auto.rules[c.rule].steps, c.previous, c.count) }))
+      .filter((c) => c.step);
+    // Reset before any await so strikes added meanwhile (during the delete or the action) are not wiped.
+    for (const c of crossed) {
+      if (isTopStep(auto.rules[c.rule].steps, c.step)) strikes.reset(guildId, userId, c.rule);
+    }
+
     if (tripped.some((rule) => auto.rules[rule].delete)) {
       const deleted = await attempt('delete', async () => {
         try {
@@ -171,20 +180,12 @@ export function createEngine(deps = {}) {
       if (deleted) actions.push('delete');
     }
 
-    // One enforcement per message: the most severe step among the rules that crossed one.
-    const crossed = counts
-      .map((c) => ({ rule: c.rule, step: stepReached(auto.rules[c.rule].steps, c.previous, c.count) }))
-      .filter((c) => c.step);
     if (crossed.length) {
       const secondsOf = (step) => (step.action === 'timeout' ? (step.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS) : 0);
       const severity = (step) => (step.action === 'timeout' ? 1 : 0);
       const best = crossed.map((c) => c.step).reduce((a, b) => (
         severity(b) > severity(a) || (severity(b) === severity(a) && secondsOf(b) > secondsOf(a)) ? b : a
       ));
-      // Reset before awaiting so strikes added during the await are not wiped.
-      for (const c of crossed) {
-        if (isTopStep(auto.rules[c.rule].steps, c.step)) strikes.reset(guildId, userId, c.rule);
-      }
       const result = await attempt('action', () => runAction(ctx, {
         guild: message.guild,
         actor: message.guild.members.me,

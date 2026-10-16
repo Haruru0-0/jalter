@@ -340,15 +340,68 @@ test('strikes are reset before runAction is awaited', async () => {
   assert.equal(sizeDuring, 0);
 });
 
-test('an edit does not count toward spam', async () => {
+test('an edit is re-checked for mentions but does not count toward stateful spam checks', async () => {
   const s = setup();
   await enable({ spam: { enabled: true, mentions: { max: 5 }, steps: [{ strikes: 9, action: 'warn' }] } });
   const m = { content: 'hi', mentions: { users: { size: 50 }, roles: { size: 0 } } };
   await s.engine.handleMessage(s.ctx, s.msg(m), { edited: true, oldContent: 'x' });
-  assert.equal(s.calls.deleted, 0);
+  assert.equal(s.calls.deleted, 1);
+  assert.equal(s.engine.spam.size(), 0);
+  const quiet = { content: 'hi', attachments: { size: 9 } };
+  await s.engine.handleMessage(s.ctx, s.msg(quiet), { edited: true, oldContent: 'x' });
+  assert.equal(s.calls.deleted, 1);
   assert.equal(s.engine.spam.size(), 0);
   await s.engine.handleMessage(s.ctx, s.msg(m), {});
-  assert.equal(s.calls.deleted, 1);
+  assert.equal(s.calls.deleted, 2);
+});
+
+test('default spam steps warn at 3 strikes and time out for 10 minutes at 5, then reset', async () => {
+  const s = setup();
+  await enable({ spam: { enabled: true, delete: false, mentions: { max: 5 } } });
+  const m = { content: 'hi', mentions: { users: { size: 50 }, roles: { size: 0 } } };
+  for (let i = 0; i < 5; i++) await s.engine.handleMessage(s.ctx, s.msg({ ...m, id: `m${i}` }), {});
+  assert.deepEqual(s.calls.runAction.map((p) => p.type), ['warn', 'timeout']);
+  assert.equal(s.calls.runAction[1].durationSeconds, 600);
+  assert.equal(s.engine.strikes.size(), 0);
+});
+
+test('the first-message nickname check runs once per guild, not once per user id', async () => {
+  const seen = [];
+  const engine = createEngine({
+    checkMember: async (c, m) => { seen.push(m.guild?.id ?? m.gid); },
+    sendLog: async () => null,
+    runAction: async () => ({ ok: true, warnings: [] }),
+    now: () => 1_000_000,
+  });
+  const ctx = { db, client: { user: { id: 'bot' } } };
+  const mk = (gid) => {
+    const guild = { id: gid, members: { me: botMember } };
+    return {
+      id: 'm', content: 'hello', author: { id: 'u1', bot: false }, webhookId: null, system: false, guild, guildId: gid,
+      channelId: 'c', channel: { id: 'c' }, member: { ...member('u1'), gid },
+      mentions: { users: { size: 0 }, roles: { size: 0 } }, attachments: { size: 0 }, delete: async () => {},
+    };
+  };
+  for (const gid of ['gA', 'gB']) {
+    await setFeature(db, gid, 'automod', { enabled: true, config: { rules: { words: words() } } });
+  }
+  for (const gid of ['gA', 'gB', 'gA', 'gB']) await engine.handleMessage(ctx, mk(gid), {});
+  assert.deepEqual(seen, ['gA', 'gB']);
+});
+
+test('strikes are reset before the message delete is awaited', async () => {
+  const s = setup();
+  const engine = createEngine({
+    runAction: async () => ({ ok: true, modCase: { number: 1 }, warnings: [] }),
+    sendLog: async () => null,
+    now: () => 1_000_000,
+  });
+  await enable({ words: words({ steps: [{ strikes: 1, action: 'warn' }] }) });
+  let sizeDuring = null;
+  const slow = s.msg({ content: 'badword' });
+  slow.delete = async () => { sizeDuring = engine.strikes.size(); };
+  await engine.handleMessage(s.ctx, slow, {});
+  assert.equal(sizeDuring, 0);
 });
 
 test('default invite resolver: 10006 cached as foreign, timeout not cached and fails open', async () => {

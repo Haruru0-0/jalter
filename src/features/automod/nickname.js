@@ -17,7 +17,7 @@ export function placeholderName() {
 }
 
 /** Checks one member's nickname and username; never throws.
- *  opts: lastRenamed (Map id -> ms), sendLog and now (tests). */
+ *  opts: lastRenamed (Map guildId:userId -> ms), sendLog and now (tests). */
 export async function checkMember(ctx, member, { lastRenamed = new Map(), sendLog = realSendLog, now = Date.now } = {}) {
   try {
     const guildId = member?.guild?.id;
@@ -40,10 +40,11 @@ export async function checkMember(ctx, member, { lastRenamed = new Map(), sendLo
     if (!texts.some((text) => typeof text === 'string' && findBadWord(text, words))) return;
 
     const at = now();
-    const last = lastRenamed.get(member.id);
+    const key = `${guildId}:${member.id}`;
+    const last = lastRenamed.get(key);
     if (last !== undefined && at - last < RENAME_COOLDOWN_MS) return;
     if (lastRenamed.size >= MAP_MAX) lastRenamed.delete(lastRenamed.keys().next().value);
-    lastRenamed.set(member.id, at);
+    lastRenamed.set(key, at);
 
     const lang = await getLang(ctx.db, guildId);
     const name = placeholderName();

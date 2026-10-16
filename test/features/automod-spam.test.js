@@ -116,6 +116,25 @@ test('attachments and linkRate only trip when the current message contributes', 
   assert.deepEqual(u.check(msg({ linkCount: 1 }), c, 2000), ['linkRate']);
 });
 
+test('an edit skips the stateful checks and records nothing, but caps, emoji and mentions still trip', () => {
+  const c = cfg({
+    burst: on({ messages: 2, seconds: 5 }),
+    caps: on({ minLength: 5, percent: 70 }),
+    emoji: on({ max: 1 }),
+    mentions: on({ max: 2 }),
+    attachments: on({ count: 2, seconds: 30 }),
+    linkRate: on({ count: 2, seconds: 30 }),
+  });
+  const t = createSpamTracker();
+  const edit = (o) => t.check(msg(o), c, 0, { edited: true });
+  for (let i = 0; i < 5; i++) assert.deepEqual(edit({ content: 'quiet', attachmentCount: 5, linkCount: 5 }), []);
+  assert.equal(t.size(), 0);
+  assert.deepEqual(edit({ content: 'SHOUTING LOUDLY' }), ['caps']);
+  assert.deepEqual(edit({ content: '😀😀😀' }), ['emoji']);
+  assert.deepEqual(edit({ content: 'hey', mentionCount: 9 }), ['mentions']);
+  assert.equal(t.size(), 0);
+});
+
 test('disabled checks never trip', () => {
   const t = createSpamTracker();
   const c = allOff();

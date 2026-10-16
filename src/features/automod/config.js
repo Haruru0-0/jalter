@@ -17,13 +17,16 @@ const bool = (v, d) => (typeof v === 'boolean' ? v : d);
 const intIn = (v, min, max, d) => (Number.isInteger(v) && v >= min && v <= max ? v : d);
 const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
 
-const DEFAULT_STEPS = [{ strikes: 3, action: 'warn', timeoutSeconds: null }];
+const WARN_STEPS = [{ strikes: 3, action: 'warn', timeoutSeconds: null }];
+// Spam escalates by default: a warning at 3 strikes, a 10 minute timeout at 5.
+const SPAM_STEPS = [...WARN_STEPS, { strikes: 5, action: 'timeout', timeoutSeconds: 600 }];
+const defaultSteps = (rule) => (rule === 'spam' ? SPAM_STEPS : WARN_STEPS).map((s) => ({ ...s }));
 
 /** Spam sub-checks: [key, [[field, min, max, default], ...]]. Each also has `enabled` (default true). */
 export const SPAM_CHECKS = {
   burst: { messages: [2, 50, 5], seconds: [1, 3600, 5] },
   identical: { count: [2, 50, 4], seconds: [1, 3600, 60] },
-  caps: { minLength: [1, 2000, 10], percent: [10, 100, 70] },
+  caps: { minLength: [1, 2000, 20], percent: [10, 100, 70] },
   emoji: { max: [1, 100, 10] },
   mentions: { max: [1, 100, 5] },
   attachments: { count: [2, 50, 5], seconds: [1, 3600, 30] },
@@ -47,8 +50,8 @@ function cleanStep(s) {
 }
 
 /** Lenient: drops invalid and duplicate steps, sorts ascending, falls back to the default. */
-function readSteps(v) {
-  if (!Array.isArray(v)) return DEFAULT_STEPS.map((s) => ({ ...s }));
+function readSteps(v, rule) {
+  if (!Array.isArray(v)) return defaultSteps(rule);
   const seen = new Set();
   const steps = [];
   for (const raw of v) {
@@ -59,7 +62,7 @@ function readSteps(v) {
   }
   steps.sort((a, b) => a.strikes - b.strikes);
   const capped = steps.slice(0, MAX_STEPS);
-  return capped.length ? capped : DEFAULT_STEPS.map((s) => ({ ...s }));
+  return capped.length ? capped : defaultSteps(rule);
 }
 
 function readRule(raw, rule) {
@@ -68,7 +71,7 @@ function readRule(raw, rule) {
     enabled: bool(r.enabled, false),
     delete: bool(r.delete, true),
     windowSeconds: intIn(r.windowSeconds, WINDOW_MIN, WINDOW_MAX, 600),
-    steps: readSteps(r.steps),
+    steps: readSteps(r.steps, rule),
   };
   if (rule === 'spam') {
     for (const [name, fields] of Object.entries(SPAM_CHECKS)) {

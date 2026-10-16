@@ -3,6 +3,7 @@ import { normalizeText } from './normalize.js';
 
 const CHECKS = ['burst', 'identical', 'caps', 'emoji', 'mentions', 'attachments', 'linkRate'];
 const MAX_EVENTS = 500;
+const STATEFUL = new Set(['burst', 'identical', 'attachments', 'linkRate']);
 
 const CUSTOM_EMOJI = /<a?:\w+:\d+>/g;
 const PICTO = String.raw`\p{Extended_Pictographic}(?:️|\p{Emoji_Modifier})?[\u{E0020}-\u{E007F}]*`;
@@ -36,33 +37,38 @@ export function createSpamTracker() {
   /** key `guild:user` -> { events: [{ t, norm, att, links }], keep: ms } */
   const state = new Map();
 
-  function check(msg, cfg, now) {
+  /** opts.edited: an edit re-runs only the stateless checks (caps, emoji, mentions) and records no event. */
+  function check(msg, cfg, now, { edited = false } = {}) {
     const content = typeof msg.content === 'string' ? msg.content : '';
     const norm = normalizeText(content);
     const key = `${msg.guildId}:${msg.userId}`;
     const win = (c) => (Number.isFinite(c?.seconds) ? c.seconds * 1000 : 0);
     const keep = Math.max(win(cfg?.burst), win(cfg?.identical), win(cfg?.attachments), win(cfg?.linkRate));
 
-    let entry = state.get(key);
-    if (!entry) {
-      entry = { events: [], keep };
-      state.set(key, entry);
+    let events = [];
+    if (!edited) {
+      let entry = state.get(key);
+      if (!entry) {
+        entry = { events: [], keep };
+        state.set(key, entry);
+      }
+      entry.keep = Math.max(entry.keep, keep);
+      entry.events.push({
+        t: now,
+        norm,
+        att: Number(msg.attachmentCount) || 0,
+        links: Number(msg.linkCount) || 0,
+      });
+      entry.events = entry.events.filter((e) => e.t > now - entry.keep).slice(-MAX_EVENTS);
+      events = entry.events;
     }
-    entry.keep = Math.max(entry.keep, keep);
-    entry.events.push({
-      t: now,
-      norm,
-      att: Number(msg.attachmentCount) || 0,
-      links: Number(msg.linkCount) || 0,
-    });
-    entry.events = entry.events.filter((e) => e.t > now - entry.keep).slice(-MAX_EVENTS);
-    const events = entry.events;
     const within = (ms) => events.filter((e) => e.t > now - ms);
 
     const tripped = [];
     for (const name of CHECKS) {
       const c = cfg?.[name];
       if (!on(c)) continue;
+      if (edited && STATEFUL.has(name)) continue;
       let hit = false;
       if (name === 'burst') hit = within(win(c)).length > c.messages;
       else if (name === 'identical') {
