@@ -13,7 +13,7 @@ test('matches whole words only', () => {
 test('ignores case, accents and letter swaps', () => {
   assert.equal(findBadWord('YOU ARE A B4STARD', ['bastard']), 'bastard');
   assert.equal(findBadWord('quel enculé', ['encule']), 'encule');
-  assert.equal(findBadWord('shiiiit', ['shiit']), 'shiit');
+  assert.equal(findBadWord('shiiiit', ['shit']), 'shit');
   assert.equal(findBadWord('quel CONNARD', ['Connàrd']), 'Connàrd');
 });
 
@@ -47,4 +47,26 @@ test('empty text and empty list return null', () => {
   assert.equal(findBadWord('hello', []), null);
   assert.equal(findBadWord(undefined, undefined), null);
   assert.equal(findBadWord('x'.repeat(4000), effectiveWords(cfg())), null);
+});
+
+test('detects stretched spellings', () => {
+  assert.equal(findBadWord('shiiiit', ['shit']), 'shit');
+  assert.equal(findBadWord('baaastard', ['bastard']), 'bastard');
+  assert.equal(findBadWord('fuuuuck', ['fuck']), 'fuck');
+  assert.equal(findBadWord('أنت حمااااار', ['حمار']), 'حمار');
+  assert.equal(findBadWord('go awaaaay', ['go away']), 'go away');
+});
+
+test('squeeze does not cause false positives', () => {
+  assert.equal(findBadWord('as', ['ass']), null);
+  assert.equal(findBadWord('class', ['ass']), null);
+  assert.equal(findBadWord('you asshole', ['asshole']), 'asshole');
+});
+
+test('4000-char input with a 300-word list is fast', () => {
+  const words = Array.from({ length: 300 }, (_, i) => 'word' + String.fromCharCode(97 + (i % 26)) + i + 'x');
+  const text = 'hello aaaa world '.repeat(235);
+  const t = process.hrtime.bigint();
+  assert.equal(findBadWord(text, words), null);
+  assert.ok(Number(process.hrtime.bigint() - t) / 1e6 < 50);
 });
