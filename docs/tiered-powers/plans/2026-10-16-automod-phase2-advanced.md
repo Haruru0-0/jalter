@@ -12,13 +12,13 @@
 
 ## Global Constraints
 - Same constraints as Phase 1 (own `automod` feature, Manage Server to configure, ephemeral replies, i18n in en/fr/ar, one enforcement per rule per message, one log line per message).
-- Regex: patterns validated when saved; max 100 characters per pattern, max 10 patterns per server; flags fixed to `iu`; reject backreferences, lookarounds and nested quantifiers; matching runs on at most the first 1000 characters of normalised-for-regex input. No new npm dependency (my call; if the user prefers a safe-regex engine such as `re2`, swap `regex-safe.js` only).
+- Regex: use the `re2` npm package (Google RE2, linear-time matching, so no catastrophic backtracking; the user asked for a good regex dependency). Patterns are validated by compiling `new RE2(source, 'iu')` when saved; max 100 characters per pattern, max 10 patterns per server; RE2 rejects backreferences and lookarounds itself (they throw on compile). Matching runs on at most the first 1000 characters. `re2` 1.27.0 needs Node ^22.22.2 or >=24.15 (it ships prebuilt binaries): raise `engines.node` in `package.json` to `>=22.22.2` and check the host/Docker Node version before deploying.
 - Native AutoMod needs the `AutoModerationExecution` gateway intent and the bot's Manage Server permission. The bot never creates or edits native rules.
 - Native de-duplication: in memory for 5 seconds on `ruleId:userId:messageId`.
 - Tests: `node --test --test-concurrency=1 test/features/<file>`; full run `npm test`.
 
 ## Review Focus
-- A catastrophic pattern such as `(a+)+$` is rejected on save and a stored bad pattern cannot freeze the bot (invalid stored patterns are skipped with a warning).
+- A pattern such as `(a+)+$` cannot freeze the bot (RE2 matches in linear time; test with a long input and assert it returns quickly), a backreference or lookaround is rejected on save, and an invalid stored pattern is skipped with a warning.
 - Honeypot post by an exempt member (staff testing it) is not punished; the honeypot channel being deleted leaves the setting stale without errors.
 - Native event for a message Discord already blocked (no message to fetch) still records a strike and logs once; the same execution delivered twice counts once.
 - Timed role: the role is deleted, or the member left, before the removal job runs: the job finishes quietly; a role above the bot's top role is refused at setup.
@@ -60,19 +60,19 @@ All under `src/features/automod/` unless noted.
 
 **Files:**
 - Create: `src/features/automod/regex-safe.js`
-- Modify: `src/features/automod/config.js` (`rules.words.patterns: string[]`, path `words.patterns` in `addToList`/`removeFromList`, limit 10), `src/features/automod/detect-words.js`
+- Modify: `package.json` and `package-lock.json` (`npm install re2`, `engines.node` to `>=22.22.2`), `src/features/automod/config.js` (`rules.words.patterns: string[]`, path `words.patterns` in `addToList`/`removeFromList`, limit 10), `src/features/automod/detect-words.js`
 - Test: `test/features/automod-regex.test.js`
 
-**Tier:** sonnet - security-sensitive input handling; its review is opus.
+**Tier:** sonnet - new dependency and untrusted-pattern handling; its review is opus.
 
 **Interfaces:**
-- Produces: `validatePattern(source: string): { ok: true } | { ok: false, reason: 'too_long'|'unsafe'|'invalid' }`; `compilePatterns(sources: string[]): RegExp[]` (flags `iu`, skips invalid ones with a console warning); `matchPatterns(text: string, regexes: RegExp[]): string | null` returns the source of the first match, testing at most the first 1000 characters. `findBadWord` is unchanged; add `findPattern(text, cfg /* rules.words */): string | null` in `detect-words.js` that uses the above.
+- Produces: `validatePattern(source: string): { ok: true } | { ok: false, reason: 'too_long'|'invalid' }` (`invalid` covers syntax errors and anything RE2 does not support, such as backreferences and lookarounds); `compilePatterns(sources: string[]): RE2[]` (`new RE2(source, 'iu')`, skips invalid ones with a console warning); `matchPatterns(text: string, regexes: RE2[]): string | null` returns the source of the first match, testing at most the first 1000 characters. `findBadWord` is unchanged; add `findPattern(text, cfg /* rules.words */): string | null` in `detect-words.js` that uses the above.
 
-- [ ] **Step 1: Write the failing tests:** `accepts a plain pattern`, `rejects over 100 characters`, `rejects (a+)+$ and (a*)*`, `rejects backreferences and lookarounds`, `rejects an invalid expression`, `matching is case-insensitive`, `only the first 1000 characters are tested`, `compilePatterns skips a stored invalid pattern`, `addToList words.patterns refuses an unsafe pattern and the 11th pattern`.
+- [ ] **Step 1: Write the failing tests:** `accepts a plain pattern`, `rejects over 100 characters`, `(a+)+$ against 50000 a characters plus ! returns in under 100 ms`, `rejects backreferences and lookarounds as invalid`, `rejects a syntax error`, `matching is case-insensitive`, `only the first 1000 characters are tested`, `compilePatterns skips a stored invalid pattern`, `addToList words.patterns refuses an invalid pattern and the 11th pattern`.
 - [ ] **Step 2: Run the file.** Expected: FAIL.
-- [ ] **Step 3: Implement** the three functions: unsafe detection by scanning the source for `\1`-style backreferences, `(?=`, `(?!`, `(?<=`, `(?<!`, and a group followed by `+`, `*` or `{n,}` that itself contains a `+`, `*` or `{n,}`.
+- [ ] **Step 3: Run `npm install re2`**, raise `engines.node`, then implement the three functions with `import RE2 from 're2'`. Confirm the install works on this machine (prebuilt binary) before continuing.
 - [ ] **Step 4: Run the file.** Expected: PASS.
-- [ ] **Step 5: Commit** `feat(automod): safe regex patterns for the word rule`.
+- [ ] **Step 5: Commit** `feat(automod): regex patterns for the word rule (re2)`.
 
 ### Task 3: Regex in the pipeline, nickname check and commands
 
@@ -86,7 +86,7 @@ All under `src/features/automod/` unless noted.
 - Consumes: `findPattern`, `validatePattern`, `addToList` with path `words.patterns`.
 - Produces: the words rule also trips on a pattern match (reason `pattern`); the nickname/username check also matches patterns; `/automod patterns add|remove|list` (validation error replies per reason).
 
-- [ ] **Step 1: Write the failing tests:** `a pattern match trips the words rule`, `a pattern match renames a nickname`, `patterns add rejects an unsafe pattern with the unsafe message`, `patterns list shows the patterns`, `patterns remove deletes one`.
+- [ ] **Step 1: Write the failing tests:** `a pattern match trips the words rule`, `a pattern match renames a nickname`, `patterns add rejects an invalid pattern with the invalid message`, `patterns list shows the patterns`, `patterns remove deletes one`.
 - [ ] **Step 2: Run the three files.** Expected: FAIL.
 - [ ] **Step 3: Implement** the pipeline and nickname hooks and the command group; add i18n in all three languages.
 - [ ] **Step 4: Run** the three files and `test/i18n.test.js`. Expected: PASS.

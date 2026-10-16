@@ -18,6 +18,8 @@ Full detail: `docs/tiered-powers/specs/2026-10-14-feature-roadmap.md`. Original 
 ## In progress
 - **Moderation (Phase 2 steps 1 and 2)**: All 10 plan tasks are built, reviewed and merged into `autorole-upgrade` (pushed to origin). Spec `docs/tiered-powers/specs/2026-10-14-moderation-design.md`, plan `docs/tiered-powers/plans/2026-10-14-moderation.md`. What exists: `/warn`, `/timeout`, `/untimeout`, `/mute`, `/unmute`, `/kick`, `/ban`, `/unban`, `/warnings`, `/reason` and `/moderation` settings, numbered cases, mod log through the hidden `modAction` event, timed bans and mutes on the scheduler, mute role restored on rejoin. See [[features-built]], [[architecture]], [[decisions]], [[gotchas]]. Deployed to the dev guild on 2026-10-15 (26 commands registered, migration 006 ran on bot start); manual testing on a real server is still pending (see `docs/testing-checklist.md`).
 
+- **Auto-mod (Phase 2 step 4)**: spec `docs/tiered-powers/specs/2026-10-16-automod-design.md` approved (68afe00). Two plans committed (024c036): Phase 1 core engine `docs/tiered-powers/plans/2026-10-16-automod-phase1-core.md` (13 tasks: detectors, strikes with tiered escalation, pipeline, nickname check, `/automod` commands) and Phase 2 advanced `...-automod-phase2-advanced.md` (8 tasks: regex, honeypot, account-age, timed role, native AutoMod trigger). No code yet; execution method not chosen.
+
 ## Planned, not built
 - Everything in the build order above except logging, the scheduler and moderation (cases and timed actions).
 
