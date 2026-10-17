@@ -193,6 +193,33 @@ function enforceWith(w, giveRole, { addThrows = false } = {}) {
   });
 }
 
+test('two rules crossing a step with the same role grant it once, for the longest time', async () => {
+  const added = [];
+  // Like Discord.js: roles.add does not update the member's role cache.
+  const w = world({ add: async (id) => { added.push(id); } });
+  const autoConfig = readConfig({ rules: {
+    words: { enabled: true, giveRole: { roleId: 'r1', seconds: 600 }, steps: [{ strikes: 1, action: 'warn' }] },
+    links: { enabled: true, giveRole: { roleId: 'r1', seconds: 3600 }, steps: [{ strikes: 1, action: 'warn' }] },
+  } });
+  const history = [];
+  const deps = {
+    runAction: async () => ({ ok: true, modCase: { number: 1 }, warnings: [] }),
+    sendLog: async () => null,
+    addHistory: async (d, row) => { history.push(row); },
+    now: () => NOW,
+  };
+  await enforce(w.ctx, {
+    guild: w.guild, member: w.member, message: null,
+    findings: [{ rule: 'words', reason: 'x' }, { rule: 'links', reason: 'y' }],
+    autoConfig, modConfig: {}, lang: 'en', deps, strikes: createStrikeStore(),
+  });
+  assert.deepEqual(added, ['r1']);
+  const scheduled = await rows();
+  assert.equal(scheduled.length, 1);
+  assert.equal(Number(scheduled[0].due), NOW + 3600 * 1000);
+  assert.equal(history[0].actions.filter((a) => a === 'role').length, 1);
+});
+
 test('enforce gives the role only when a step fires', async () => {
   const w = world();
   const go = enforceWith(w, { roleId: 'r1', seconds: 600 });

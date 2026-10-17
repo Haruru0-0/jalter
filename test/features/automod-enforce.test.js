@@ -46,6 +46,23 @@ test('enforce with a null message does not try to delete', async () => {
   assert.deepEqual(rows[0].actions, []);
 });
 
+test('enforce uses channelId and messageId for the log and history when there is no message', async () => {
+  const s = setup();
+  const autoConfig = readConfig({ rules: { words: { enabled: true, steps: [{ strikes: 2, action: 'warn' }] } } });
+  const deps = {
+    runAction: async () => ({ ok: true, modCase: { number: 7 }, warnings: [] }),
+    sendLog: async (ctx, gid, event, embed) => { s.calls.sendLog.push({ gid, event, embed }); return null; },
+    now: () => 1_000_000,
+  };
+  await enforce({ db }, {
+    guild, member, message: null, channelId: 'c5', messageId: 'm5', findings: [{ rule: 'words', reason: 'x' }],
+    autoConfig, modConfig: {}, lang: 'en', deps, strikes: s.strikes,
+  });
+  assert.ok(s.calls.sendLog[0].embed.description.includes('<#c5>'));
+  const rows = await listHistory(db, G);
+  assert.equal(rows[0].messageId, 'm5');
+});
+
 test('enforce warns at the threshold using the findings\' rules', async () => {
   const s = setup();
   await s.run(null);

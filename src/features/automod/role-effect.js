@@ -19,7 +19,14 @@ const DANGEROUS_PERMISSIONS = [
 
 /** True when the role's own permissions include any staff power. */
 export function isDangerousRole(role) {
-  return DANGEROUS_PERMISSIONS.some((p) => role?.permissions?.has(p) === true);
+  try {
+    const perms = role?.permissions;
+    // A raw API role carries a string here, which has no usable has(): not judged dangerous.
+    if (typeof perms?.has !== 'function') return false;
+    return DANGEROUS_PERMISSIONS.some((p) => perms.has(p) === true);
+  } catch {
+    return false;
+  }
 }
 
 /** True when the member may hand out the role: the server owner, or their top role is strictly above it. */

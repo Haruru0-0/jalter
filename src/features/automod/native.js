@@ -13,6 +13,7 @@ import { isExempt } from './exempt.js';
 
 const DEDUPE_MS = 5000;
 const UNKNOWN_MESSAGE = 10008;
+const MISSING_ACCESS = 50001;
 const MISSING_PERMISSIONS = 50013;
 
 /** Every native rule of the guild as [{ id, name, enabled }]. Empty when the bot cannot read them (it needs Manage Server). */
@@ -52,7 +53,7 @@ export function createNativeHandler(deps = {}) {
       const channel = guild.channels.cache.get(channelId) ?? await guild.channels.fetch(channelId);
       return (await channel?.messages?.fetch(messageId)) ?? null;
     } catch (err) {
-      if (err?.code !== UNKNOWN_MESSAGE && err?.code !== MISSING_PERMISSIONS) warn('native message fetch', err);
+      if (err?.code !== UNKNOWN_MESSAGE && err?.code !== MISSING_PERMISSIONS && err?.code !== MISSING_ACCESS) warn('native message fetch', err);
       return null;
     }
   }
@@ -88,6 +89,8 @@ export function createNativeHandler(deps = {}) {
       guild,
       member,
       message,
+      channelId: execution.channelId,
+      messageId: execution.messageId,
       findings: [{ rule: 'native', reason: execution.autoModerationRule?.name ?? execution.ruleId }],
       autoConfig: auto,
       modConfig: mod,

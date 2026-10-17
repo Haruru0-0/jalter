@@ -1,4 +1,4 @@
-import { test, before, after, beforeEach } from 'node:test';
+import { test, before, after, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { Events } from 'discord.js';
@@ -186,6 +186,27 @@ test('delete on removes the message; delete off leaves it', async () => {
   await off.handler.handle(off.ctx, off.exec());
   assert.equal(off.calls.deleted, 0);
   assert.equal(off.calls.history.length, 1);
+});
+
+test('delete off still logs the channel and keeps the message id in history', async () => {
+  const s = setup();
+  await enable({ delete: false });
+  await s.handler.handle(s.ctx, s.exec());
+  assert.equal(s.calls.history[0].messageId, 'm1');
+  assert.ok(s.calls.sendLog[0].description.includes('<#c1>'));
+});
+
+test('a channel the bot cannot see (Missing Access) is ignored without a warning', async () => {
+  await enable({ delete: true });
+  const warn = mock.method(console, 'warn', () => {});
+  try {
+    const s = setup({ fetchMessage: async () => { throw Object.assign(new Error('Missing Access'), { code: 50001 }); } });
+    await s.handler.handle(s.ctx, s.exec());
+    assert.equal(s.calls.history.length, 1);
+    assert.equal(warn.mock.callCount(), 0);
+  } finally {
+    warn.mock.restore();
+  }
 });
 
 test('a permission error while fetching or deleting is ignored', async () => {

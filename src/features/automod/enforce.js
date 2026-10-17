@@ -21,9 +21,10 @@ export async function attempt(what, fn) {
   }
 }
 
-/** Enforces findings [{ rule, reason }] against a member. message may be null (nothing to delete).
+/** Enforces findings [{ rule, reason }] against a member. message may be null (nothing to delete);
+ *  channelId/messageId fill in the log and history when there is no message object.
  *  deps overrides (tests): runAction, sendLog, addHistory, now(). */
-export async function enforce(ctx, { guild, member, message, findings, autoConfig, modConfig, lang, deps = {}, strikes }) {
+export async function enforce(ctx, { guild, member, message, channelId, messageId, findings, autoConfig, modConfig, lang, deps = {}, strikes }) {
   try {
     const runAction = deps.runAction ?? realRunAction;
     const sendLog = deps.sendLog ?? realSendLog;
@@ -35,6 +36,7 @@ export async function enforce(ctx, { guild, member, message, findings, autoConfi
     // A finding for a rule missing from the config is skipped, not fatal.
     const tripped = findings.map((f) => f.rule).filter((rule) => rules[rule]);
     if (!tripped.length) return;
+    const logChannelId = message?.channelId ?? channelId ?? null;
     const actions = [];
     let caseNumber = null;
 
@@ -92,16 +94,25 @@ export async function enforce(ctx, { guild, member, message, findings, autoConfi
     }
 
     // Any step firing hands out the rule's timed role (e.g. a muted role), whatever the step's action.
+    // Rules that give the same role are merged (longest time wins): a second grant would not see the
+    // first in the role cache, and a failed second add would cancel the removal the first depends on.
+    const grants = new Map();
     for (const c of crossed) {
-      if (!rules[c.rule].giveRole?.roleId || !member) continue;
-      const given = await attempt('role', () => grantTimedRole(ctx, member, rules[c.rule], now));
+      const give = rules[c.rule].giveRole;
+      if (!give?.roleId || !member) continue;
+      if (!grants.has(give.roleId) || give.seconds > grants.get(give.roleId).giveRole.seconds) {
+        grants.set(give.roleId, rules[c.rule]);
+      }
+    }
+    for (const ruleCfg of grants.values()) {
+      const given = await attempt('role', () => grantTimedRole(ctx, member, ruleCfg, now));
       if (given) actions.push('role');
     }
 
     if (caseNumber === null) {
       await attempt('log', () => sendLog(ctx, guildId, 'modAction', {
         title: t(lang, 'automod.log.title'),
-        description: message ? `<@${userId}> <#${message.channelId}>` : `<@${userId}>`,
+        description: logChannelId ? `<@${userId}> <#${logChannelId}>` : `<@${userId}>`,
         fields: [
           { name: t(lang, 'automod.log.rules'), value: tripped.join(', ') },
           { name: t(lang, 'automod.log.actions'), value: actions.length ? actions.join(', ') : '—' },
@@ -110,7 +121,7 @@ export async function enforce(ctx, { guild, member, message, findings, autoConfi
     }
 
     await attempt('history', () => addHistory(ctx.db, {
-      guildId, userId, rules: tripped, messageId: message?.id ?? null, actions, caseNumber,
+      guildId, userId, rules: tripped, messageId: message?.id ?? messageId ?? null, actions, caseNumber,
     }));
   } catch (err) {
     warn('enforce', err);
