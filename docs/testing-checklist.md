@@ -254,7 +254,7 @@ Needs the bot to hold View Channel, Read Message History, Manage Messages (delet
 
 ### Setup
 
-- [ ] `/automod status` as a normal member is refused. As an admin it works even while auto-mod is off and lists the four rules (spam, invites, links, words) as off, each with delete on and a 10 minute window, plus the nickname check. The steps are `3 strikes: warn` for invites, links and words, and `3 strikes: warn, 5 strikes: timeout 10m` for spam. It also shows the exempt roles and channels (none), each spam check with its limit, and for invites and links the mode (invites block everything except the allowed list, links only the blocked list) with allowed and blocked entries.
+- [ ] `/automod status` as a normal member is refused. As an admin it works even while auto-mod is off and lists the rules (spam, invites, links, words, honeypot, native) as off, each with a 10 minute window and delete on (delete is off for native), plus the nickname check. The steps are `3 strikes: warn` for invites, links, words and native, `1 strike: timeout 10m` for honeypot, and `3 strikes: warn, 5 strikes: timeout 10m` for spam. It also shows the exempt roles and channels (none), each spam check with its limit, and for invites and links the mode (invites block everything except the allowed list, links only the blocked list) with allowed and blocked entries.
 - [ ] `/automod enable` turns it on (`/automod disable` turns it off). Auto-mod is separate from `/moderation enable`, but its warn and timeout steps use moderation's case log, so also run `/moderation enable` and `/logging set category:mod` for the case tests.
 - [ ] With the feature off, or a rule off, nothing is checked. `/automod rule rule:spam state:on` turns a rule on; `/automod delete rule:<rule> state:off` stops deleting for that rule.
 
@@ -322,12 +322,54 @@ Turn the rule on and set `/automod steps rule:spam steps:2:warn` so a second str
 - [ ] A nickname that is already the placeholder is left alone, and a second change within 10 seconds is not renamed again. `/automod nickname state:off` stops the check.
 - [ ] Without Manage Nicknames, or for a member above the bot's role, nothing changes and the console shows a warning, not a crash.
 
+### Honeypot (Phase 2)
+
+Needs the bot to see the trap channel and hold Manage Messages in it. Use a hidden test channel and a normal test member.
+
+- [ ] `/automod honeypot channel:#trap` replies that it is set and reminds you to turn the rule on; `/automod status` shows the honeypot channel. Setting the channel does not enable the rule: a post there changes nothing until `/automod rule rule:honeypot state:on`.
+- [ ] If the bot cannot see the channel or lacks Manage Messages in it, the command is refused. Only text and announcement channels can be picked. `/automod honeypot off:true` clears it.
+- [ ] With the rule on, any post in the trap channel (even an empty-looking or harmless one) is deleted and the default step (`1 strike: timeout 10m`) times the member out (case created, mod log line). Posts elsewhere are not affected.
+- [ ] Exempt members (Manage Server, bot manager role, Moderate Members, permitted role, `/automod exempt` roles) and bots are untouched. An `/automod age` limit on the honeypot rule makes it catch only matching members.
+- [ ] Deleting the trap channel causes no console error; nothing matches afterwards.
+
+### Regex patterns (Phase 2)
+
+- [ ] `/automod patterns add pattern:...` adds a pattern to the words rule (rule `words` must be on). `patterns list` shows them, `patterns remove` takes one out. A pattern is checked against messages and against nicknames and usernames (the nickname check, `/automod nickname state:on`).
+- [ ] Matching is case-insensitive and runs on the raw text (not normalised: no look-alike or stretched-letter folding) and only on the first 1000 characters of a message.
+- [ ] A pattern longer than 250 characters, an invalid one, or one with a backreference or lookaround is refused with a clear reply. A duplicate and an 11th pattern are refused (max 10).
+- [ ] A hostile pattern such as `(a+)+$` against a long run of `a` followed by `!` does not freeze the bot.
+
+### Account age and join age limits (Phase 2)
+
+- [ ] `/automod age rule:links kind:account duration:7d`: links are only enforced against accounts younger than 7 days. An older account posting a blocked link is not flagged. `kind:joined` limits to members who joined within the duration. `duration:off` clears that limit. Durations outside 1 minute to 10 years are refused.
+- [ ] `/automod status` shows an age line for a rule that has a limit. With both limits set, both must hold for the rule to apply.
+
+### Timed role (Phase 2)
+
+Needs Manage Roles, and the chosen role must be below the bot's top role.
+
+- [ ] `/automod role rule:spam role:@Muted-ish duration:10m` is accepted. @everyone, a managed (bot or integration) role, or a role at or above the bot's top role is refused; a duration outside 1 minute to 7 days is refused. `off:true` stops giving a role; omitting `duration` keeps the current length (default 10 minutes).
+- [ ] When the rule reaches a step (the strike count that triggers warn or timeout), the member also gets the role and the history row lists `role` among the actions. The role is removed after the duration (scheduler job `automod.removeRole`, checked every 30 s). A strike below the first step gives no role.
+- [ ] Triggering again while the role is still pending moves the removal time. A member who already has the role from elsewhere (no pending removal) is left alone and keeps it.
+- [ ] Restart the bot during the timer: the role is still removed afterwards. If the member left or the role was deleted, nothing errors.
+
+### Native Discord AutoMod (Phase 2)
+
+Needs the Manage Server permission for the bot (the AutoMod execution events and the rule list) and the AutoModerationExecution intent (set in code). Create a Discord AutoMod rule first (Server Settings > Safety Setup > AutoMod) with a block-message keyword.
+
+- [ ] `/automod native list` shows the server's AutoMod rules (id, name, on or off). Without Manage Server, or with no rules, it says it found none.
+- [ ] `/automod rule rule:native state:on`. A member triggering the Discord rule gets a strike on the `native` rule (default step `3 strikes: warn`); a mod log line or history row appears. Native delete is off by default, and a message Discord already blocked has nothing left to delete.
+- [ ] `/automod native add-rule id:<rule id>` makes the bot follow only that rule (a non-numeric id is refused, a duplicate says it exists, the list holds up to 25). `remove-rule` undoes it; with an empty list every Discord AutoMod rule counts.
+- [ ] Exempt members and bots are skipped, and an age limit on the native rule applies.
+- [ ] Known limit: two different messages blocked by the same rule from the same member within 5 seconds count as one strike (blocked messages have no message id, so they are de-duplicated on rule and member only).
+
 ### History and permissions
 
 - [ ] `/automod history` shows the latest actions (up to 10) with member, rules, actions, case number and time; `user:<member>` filters. With none it says so. Only the newest 200 entries per server are kept.
 - [ ] Without Manage Messages the offending message stays and the console shows a warning. Without Moderate Members a timeout step is refused (console warning) and the message is still deleted and logged.
 - [ ] A 4000-character message, an attachment-only message, a sticker-only message, Arabic text and 200 mentions cause no console error. Bot, webhook and DM messages are ignored.
-- [ ] Not built yet (Phase 2): regex rules, honeypot channel, account-age conditions, timed role and the native Discord AutoMod trigger.
+- [ ] Strikes are kept in memory: restart the bot and every member's strikes are zero again (history is kept).
+- [ ] After deploying Phase 2 run `npm run deploy` so `/automod patterns`, `age`, `role`, `honeypot` and `native` appear.
 
 ## 13. Permissions and robustness
 

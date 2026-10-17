@@ -24,7 +24,7 @@ Still on the **Bot** tab, under **Privileged Gateway Intents**, switch on:
 
 Save the changes. Without these two the bot refuses to log in, or logs show "content not available".
 
-The other intents Jalter uses (Guilds, Guild Messages, Guild Expressions, Guild Moderation, Guild Voice States) are not privileged and need no switch.
+The other intents Jalter uses (Guilds, Auto Moderation Execution, Guild Messages, Guild Expressions, Guild Moderation, Guild Voice States) are not privileged and need no switch.
 
 ## 4. Invite the bot to your server
 
@@ -32,11 +32,12 @@ The other intents Jalter uses (Guilds, Guild Messages, Guild Expressions, Guild 
 2. Under **Scopes** tick `bot` and `applications.commands`.
 3. Under **Bot Permissions** tick:
    - View Channels, Send Messages, Read Message History, Embed Links, Attach Files (core)
-   - Manage Roles (auto role and the moderation mute role)
+   - Manage Roles (auto role, the moderation mute role and the auto-mod timed role)
    - Kick Members, Ban Members, Moderate Members (moderation: `/kick`, `/ban` and `/unban`, `/timeout` and `/untimeout`)
    - View Audit Log (logging "By" field; optional)
    - Manage Messages (`/purge messages`, and auto-mod deleting offending messages)
    - Manage Nicknames (auto-mod nickname check; optional)
+   - Manage Server (auto-mod reading Discord AutoMod rules and receiving their events; optional, only for the `native` rule)
    - Manage Channels (`/purge channel`, `/slowmode`, `/lock`, `/unlock`; also `/logging setup` and the log, welcome, goodbye and boost channels the bot creates when none was chosen)
 4. Copy the generated URL, open it, choose your server and click **Authorize**.
 
