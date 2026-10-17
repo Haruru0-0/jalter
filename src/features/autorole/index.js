@@ -5,6 +5,7 @@ import { handleToggle } from '../../core/toggle.js';
 import { ephemeral } from '../../core/replies.js';
 import { capList } from '../../core/lists.js';
 import { t } from '../../i18n/index.js';
+import { botCanGive, isDangerousRole, callerCanGive } from '../../core/role-safety.js';
 import {
   readConfig, addRole, removeRole, addTimed, removeTimed, addBlacklist, removeBlacklist,
   setReassign, isValidRoleId, pruneRoles, LIMITS, MAX_TIMED,
@@ -74,10 +75,14 @@ function roleLine(guild, botTop, lang, id) {
     : mention(id);
 }
 
-const tooHighWarning = (interaction, lang, role) => {
-  const botTop = interaction.guild.members.me?.roles.highest.position;
-  return botTop !== undefined && role.position >= botTop ? `\n${t(lang, 'autorole.tooHigh')}` : '';
-};
+// Setup only: roles already configured keep working, and nothing is rechecked when a member joins.
+// @everyone and managed roles are refused earlier, by isValidRoleId (autorole.badRole).
+function unsafeRoleKey(interaction, role) {
+  if (!botCanGive(interaction.guild, role)) return 'autorole.roleTooHigh';
+  if (isDangerousRole(role)) return 'autorole.roleDangerous';
+  if (!callerCanGive(interaction.guild, interaction.member, role)) return 'autorole.roleAboveYou';
+  return null;
+}
 
 function showText(interaction, lang, config, enabled) {
   const guild = interaction.guild;
@@ -135,14 +140,15 @@ async function execute(interaction, ctx) {
     // `/autorole disable` keeps the lists, so adding a listed role is how the feature comes back on.
     if (!result.ok && result.reason === 'exists' && !enabled) {
       await saveAll(readConfig(config), true);
-      return reply(interaction, t(lang, 'autorole.enabledAgain', { role: mention(role.id) })
-        + tooHighWarning(interaction, lang, role));
+      return reply(interaction, t(lang, 'autorole.enabledAgain', { role: mention(role.id) }));
     }
     if (!result.ok) return failure(result, 'autorole.full');
+    const unsafe = unsafeRoleKey(interaction, role);
+    if (unsafe) return reply(interaction, t(lang, unsafe));
     await saveAll(result.config, true);
     return reply(interaction, t(lang, 'autorole.added', {
       role: mention(role.id), target: t(lang, target === 'bots' ? 'autorole.targetBots' : 'autorole.targetHumans'),
-    }) + tooHighWarning(interaction, lang, role));
+    }));
   }
 
   if (!group && sub === 'remove') {
@@ -170,9 +176,10 @@ async function execute(interaction, ctx) {
     }
     const result = addTimed(config, role.id, seconds);
     if (!result.ok) return failure(result, 'autorole.full', MAX_TIMED);
+    const unsafe = unsafeRoleKey(interaction, role);
+    if (unsafe) return reply(interaction, t(lang, unsafe));
     await saveAll(result.config, true);
-    return reply(interaction, t(lang, 'autorole.timedAdded', { role: mention(role.id), delay: formatDuration(seconds) })
-      + tooHighWarning(interaction, lang, role));
+    return reply(interaction, t(lang, 'autorole.timedAdded', { role: mention(role.id), delay: formatDuration(seconds) }));
   }
 
   if (group === 'timed' && sub === 'remove') {

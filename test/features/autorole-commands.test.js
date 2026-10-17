@@ -75,18 +75,21 @@ const ROLES = {
   hi: { id: 'hi', managed: false, position: 50 },
   g1: { id: 'g1', managed: false, position: 0 },
   mg: { id: 'mg', managed: true, position: 1 },
+  dg: { id: 'dg', managed: false, position: 3, permissions: { has: (p) => p === 'BanMembers' } },
+  ab: { id: 'ab', managed: false, position: 5 },
 };
 
-function fake(path, { roles = {}, strings = {}, ids = ['r1', 'r2', 'hi'] } = {}) {
+function fake(path, { roles = {}, strings = {}, ids = ['r1', 'r2', 'hi', 'dg', 'ab'], callerTop = 60, callerId = 'u1' } = {}) {
   const [group, sub] = path.includes(' ') ? path.split(' ') : [null, path];
   const calls = { reply: [] };
   return {
     calls,
     guildId: 'g1',
     inGuild: () => true,
-    member: { permissions: { has: () => true }, guild: { id: 'g1' }, roles: { cache: { has: () => false } } },
+    member: { id: callerId, permissions: { has: () => true }, guild: { id: 'g1' }, roles: { cache: { has: () => false }, highest: { position: callerTop } } },
     guild: {
       id: 'g1',
+      ownerId: 'owner',
       roles: { cache: new Map(ids.map((id) => [id, ROLES[id]])) },
       members: { me: { roles: { highest: { position: 10 } } } },
     },
@@ -113,11 +116,64 @@ test('add stores the role, enables the feature and replies', async () => {
   assert.equal(text(i), t('en', 'autorole.added', { role: '<@&r1>', target: t('en', 'autorole.targetHumans') }));
 });
 
-test('add with target bots stores a bot role; a role above the bot adds the warning', async () => {
-  const i = fake('add', { roles: { role: 'hi' }, strings: { target: 'bots' } });
+test('add with target bots stores a bot role', async () => {
+  const i = fake('add', { roles: { role: 'r1' }, strings: { target: 'bots' } });
   await run(i);
-  assert.deepEqual((await state()).config.botRoles, ['hi']);
-  assert.ok(text(i).includes(t('en', 'autorole.tooHigh')));
+  assert.deepEqual((await state()).config.botRoles, ['r1']);
+});
+
+// Setup refuses unsafe roles (same checks as the auto-mod timed role); nothing is saved.
+const UNSAFE = [
+  ['a role above the bot', 'hi', {}, 'autorole.roleTooHigh'],
+  ['a role with staff permissions', 'dg', {}, 'autorole.roleDangerous'],
+  ['a role at or above the caller', 'ab', { callerTop: 5 }, 'autorole.roleAboveYou'],
+];
+const SETUPS = [
+  ['add', {}], ['add', { strings: { target: 'bots' } }], ['timed add', { strings: { delay: '1h' } }],
+];
+
+test('add and timed add refuse unsafe roles with an ephemeral reply and save nothing', async () => {
+  for (const [path, extra] of SETUPS) {
+    for (const [label, role, opts, key] of UNSAFE) {
+      const i = fake(path, { roles: { role }, ...extra, ...opts });
+      await run(i);
+      assert.equal(text(i), t('en', key), `${path} ${label}`);
+      assert.equal(i.calls.reply.at(-1).flags !== undefined, true, 'ephemeral');
+    }
+  }
+  assert.deepEqual((await state()).config, {});
+});
+
+test('the server owner may add a role at or above their top role', async () => {
+  await run(fake('add', { roles: { role: 'ab' }, callerTop: 1, callerId: 'owner' }));
+  assert.deepEqual((await state()).config.roles, ['ab']);
+});
+
+test('a harmless role below the bot and the caller still saves', async () => {
+  for (const [path, extra] of SETUPS) await run(fake(path, { roles: { role: 'r1' }, ...extra }));
+  const { config } = await state();
+  assert.deepEqual([config.roles, config.botRoles], [['r1'], ['r1']]);
+  assert.deepEqual(config.timed, [{ roleId: 'r1', seconds: 3600 }]);
+});
+
+test('an already-configured unsafe role keeps working: re-adding it only says exists, remove and show still work', async () => {
+  await setFeature(db, 'g1', 'autorole', { enabled: false, config: { roles: ['dg'], timed: [{ roleId: 'hi', seconds: 60 }] } });
+  const again = fake('add', { roles: { role: 'dg' } });
+  await run(again);
+  assert.equal((await state()).enabled, true);
+  assert.deepEqual((await state()).config.roles, ['dg']);
+  assert.deepEqual((await state()).config.timed, [{ roleId: 'hi', seconds: 60 }]);
+  const gone = fake('remove', { roles: { role: 'dg' } });
+  await run(gone);
+  assert.equal(text(gone), t('en', 'autorole.removed', { role: '<@&dg>' }));
+});
+
+test('the new refusal reasons exist in every language', () => {
+  for (const lang of ['en', 'fr', 'ar']) {
+    for (const key of ['autorole.roleTooHigh', 'autorole.roleDangerous', 'autorole.roleAboveYou']) {
+      assert.notEqual(t(lang, key), key, `${lang} ${key}`);
+    }
+  }
 });
 
 test('add of the same role twice replies exists and keeps one copy', async () => {
@@ -150,18 +206,18 @@ test('add rejects @everyone and managed roles without saving', async () => {
 
 test('legacy keys are folded, nulled in storage and cannot come back', async () => {
   await setFeature(db, 'g1', 'autorole', { enabled: true, config: { humanRoleId: 'r2', botRoleId: 'r1' } });
-  await run(fake('add', { roles: { role: 'hi' } }));
+  await run(fake('add', { roles: { role: 'ab' } }));
   const { config } = await state();
   assert.equal(config.humanRoleId, null);
   assert.equal(config.botRoleId, null);
-  assert.deepEqual(readConfig(config).roles, ['r2', 'hi']);
+  assert.deepEqual(readConfig(config).roles, ['r2', 'ab']);
   assert.deepEqual(readConfig(config).botRoles, ['r1']);
   const bot = fake('remove', { roles: { role: 'r1' } });
   await run(bot);
   assert.equal(text(bot), t('en', 'autorole.removed', { role: '<@&r1>' }));
   assert.deepEqual(readConfig((await state()).config).botRoles, []);
   await run(fake('remove', { roles: { role: 'r2' } }));
-  assert.deepEqual(readConfig((await state()).config).roles, ['hi']);
+  assert.deepEqual(readConfig((await state()).config).roles, ['ab']);
 });
 
 test('a change drops roles that no longer exist in the guild, and their pending grants', async () => {
@@ -216,15 +272,6 @@ test('timed add with a bad delay stores nothing', async () => {
     assert.match(text(i), /30d/);
   }
   assert.deepEqual((await state()).config, {});
-});
-
-test('timed add of a role above the bot adds the warning', async () => {
-  const i = fake('timed add', { roles: { role: 'hi' }, strings: { delay: '1h' } });
-  await run(i);
-  assert.ok(text(i).includes(t('en', 'autorole.tooHigh')));
-  const low = fake('timed add', { roles: { role: 'r1' }, strings: { delay: '1h' } });
-  await run(low);
-  assert.ok(!text(low).includes(t('en', 'autorole.tooHigh')));
 });
 
 test('timed add stores the delay; timed remove deletes it and cancels pending grants', async () => {
