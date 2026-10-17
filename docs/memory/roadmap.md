@@ -7,7 +7,7 @@ Full detail: `docs/tiered-powers/specs/2026-10-14-feature-roadmap.md`. Original 
 2. **Phase 2 Moderation**, strict order: mod cases + warn/kick/ban/timeout and timed actions (both built and merged into `autorole-upgrade`, see below) -> channel tools (purge, slowmode, lock; built on `phase-2`, see Done) -> auto-mod -> verification -> anti-raid.
 3. **Phase 3 Automation**, any order: autoresponder, reaction roles, quote.
 4. **Phase 4 Community**: scheduler group (reminders, birthdays, stats channels); event group (AFK, leveling, starboard); staff group (tickets, confessions). Extend `/userinfo` last (needs levels, warnings, birthdays).
-5. **Phase 5**: backup/restore, translate (needs an API key in `.env`).
+5. **Phase 5**: backup/restore, translate (needs an API key in `.env`), gif reactions (added 2026-10-17; scope to decide: reaction-GIF commands like /hug vs. reacting to messages with GIFs; a GIF provider API such as Tenor or Giphy needs a key in `.env`).
 
 ## Done
 - **Logging Carl-parity** (plan: `docs/tiered-powers/plans/2026-10-14-logging-carl-parity.md`): built and merged into `autorole-upgrade` (not yet deployed: run `npm run deploy` to register the new subcommands). See [[features-built]]. Modlog and cases are deliberately left for Phase 2 (mod-case store), which can log to the existing `mod` category.
