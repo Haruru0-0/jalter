@@ -329,6 +329,7 @@ Needs the bot to see the trap channel and hold Manage Messages in it. Use a hidd
 - [ ] `/automod honeypot channel:#trap` replies that it is set and reminds you to turn the rule on; `/automod status` shows the honeypot channel. Setting the channel does not enable the rule: a post there changes nothing until `/automod rule rule:honeypot state:on`.
 - [ ] If the bot cannot see the channel or lacks Manage Messages in it, the command is refused. Only text and announcement channels can be picked. `/automod honeypot off:true` clears it.
 - [ ] With the rule on, any post in the trap channel (even an empty-looking or harmless one) is deleted and the default step (`1 strike: timeout 10m`) times the member out (case created, mod log line). Posts elsewhere are not affected.
+- [ ] Editing a trapped message (or an embed unfurling on it, or pinning it, if it was not deleted) does not punish the member again: no second timeout, case or log line.
 - [ ] Exempt members (Manage Server, bot manager role, Moderate Members, permitted role, `/automod exempt` roles) and bots are untouched. An `/automod age` limit on the honeypot rule makes it catch only matching members.
 - [ ] Deleting the trap channel causes no console error; nothing matches afterwards.
 
@@ -348,7 +349,7 @@ Needs the bot to see the trap channel and hold Manage Messages in it. Use a hidd
 
 Needs Manage Roles, and the chosen role must be below the bot's top role.
 
-- [ ] `/automod role rule:spam role:@Muted-ish duration:10m` is accepted. @everyone, a managed (bot or integration) role, or a role at or above the bot's top role is refused; a duration outside 1 minute to 7 days is refused. `off:true` stops giving a role; omitting `duration` keeps the current length (default 10 minutes).
+- [ ] `/automod role rule:spam role:@Muted-ish duration:10m` is accepted. @everyone, a managed (bot or integration) role, a role at or above the bot's top role, a role with staff permissions (Administrator, Manage Server, Manage Roles, Ban, Kick, Timeout, Manage Channels, Manage Messages, Manage Webhooks or Mention Everyone), or a role at or above your own top role (unless you own the server) is refused, and so is a duration outside 1 minute to 7 days. If the role gains a staff permission later, the bot stops giving it and logs a console warning. `off:true` stops giving a role; omitting `duration` keeps the current length (default 10 minutes).
 - [ ] When the rule reaches a step (the strike count that triggers warn or timeout), the member also gets the role and the history row lists `role` among the actions. The role is removed after the duration (scheduler job `automod.removeRole`, checked every 30 s). A strike below the first step gives no role.
 - [ ] Triggering again while the role is still pending moves the removal time. A member who already has the role from elsewhere (no pending removal) is left alone and keeps it.
 - [ ] Restart the bot during the timer: the role is still removed afterwards. If the member left or the role was deleted, nothing errors.
@@ -361,7 +362,7 @@ Needs the Manage Server permission for the bot (the AutoMod execution events and
 - [ ] `/automod rule rule:native state:on`. A member triggering the Discord rule gets a strike on the `native` rule (default step `3 strikes: warn`); a mod log line or history row appears. Native delete is off by default, and a message Discord already blocked has nothing left to delete.
 - [ ] `/automod native add-rule id:<rule id>` makes the bot follow only that rule (a non-numeric id is refused, a duplicate says it exists, the list holds up to 25). `remove-rule` undoes it; with an empty list every Discord AutoMod rule counts.
 - [ ] Exempt members and bots are skipped, and an age limit on the native rule applies.
-- [ ] Known limit: two different messages blocked by the same rule from the same member within 5 seconds count as one strike (blocked messages have no message id, so they are de-duplicated on rule and member only).
+- [ ] Two different messages blocked by the same rule from the same member within 5 seconds count as two strikes (blocked messages have no message id, so they are told apart by their content). Known limit: the same blocked text sent twice within 5 seconds counts once.
 
 ### History and permissions
 
