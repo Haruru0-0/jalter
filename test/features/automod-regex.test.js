@@ -16,9 +16,14 @@ test('rejects over 250 characters', () => {
 test('(a+)+$ against 50000 a characters plus ! returns in under 100 ms', () => {
   const regexes = compilePatterns(['(a+)+$']);
   assert.equal(regexes.length, 1);
-  const text = 'a'.repeat(50_000) + '!';
-  const start = performance.now();
-  matchPatterns(text, regexes);
+  // The ! sits inside the 1000-character window, so matchPatterns really runs the pattern on it.
+  // A backtracking engine takes seconds at 25 a's and never finishes at 990.
+  let start = performance.now();
+  assert.equal(matchPatterns('a'.repeat(990) + '!', regexes), null);
+  assert.ok(performance.now() - start < 100);
+  // The compiled RE2 itself on the full 50,001 characters.
+  start = performance.now();
+  assert.equal(regexes[0].test('a'.repeat(50_000) + '!'), false);
   assert.ok(performance.now() - start < 100);
 });
 
@@ -58,6 +63,13 @@ test('getCompiled reuses the compiled patterns until the sources change', () => 
   const b = getCompiled('g1', ['foo']);
   assert.notEqual(b, a);
   assert.notEqual(getCompiled('g2', ['foo']), b);
+});
+
+test('getCompiled tells one pattern containing a newline from two patterns', () => {
+  const one = getCompiled('g3', ['a\nb']);
+  const two = getCompiled('g3', ['a', 'b']);
+  assert.notEqual(one, two);
+  assert.equal(two.length, 2);
 });
 
 test('findPattern uses the stored patterns of the guild', () => {

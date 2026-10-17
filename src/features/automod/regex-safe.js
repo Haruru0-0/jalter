@@ -55,7 +55,7 @@ const cache = new Map(); // guildId -> { key, regexes }
 
 /** Compiled patterns for a guild, reused until its sources change. Oldest guild is dropped past 500. */
 export function getCompiled(guildId, patterns) {
-  const key = patterns.join('\n');
+  const key = JSON.stringify(patterns);
   const hit = cache.get(guildId);
   if (hit?.key === key) return hit.regexes;
   const regexes = compilePatterns(patterns);
