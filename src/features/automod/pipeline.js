@@ -11,6 +11,7 @@ import { enforce, attempt, warn } from './enforce.js';
 import { createSpamTracker } from './detect-spam.js';
 import { extractLinks, extractInviteCodes, evaluateLinks, evaluateInvites } from './detect-links.js';
 import { effectiveWords, findBadWord, findPattern } from './detect-words.js';
+import { passesAge } from './age.js';
 import { isExempt } from './exempt.js';
 import { checkMember as realCheckMember } from './nickname.js';
 
@@ -78,10 +79,12 @@ export function createEngine(deps = {}) {
   const checkMember = (ctx, member) => checkMemberImpl(ctx, member, { lastRenamed, sendLog, now: clock });
 
   /** Returns the findings [{ rule, reason }] for the rules the message trips, cheap rules first, invites last. */
-  async function evaluate(ctx, message, content, rules, now, edited) {
+  async function evaluate(ctx, message, member, content, rules, now, edited) {
     const tripped = [];
+    // A rule limited by account or join age is skipped, before its detector runs, for members outside it.
+    const applies = (rule) => rules[rule].enabled && passesAge(member, rules[rule], now);
     const trip = (rule, reason = rule) => tripped.push({ rule, reason });
-    if (rules.spam.enabled) {
+    if (applies('spam')) {
       const mentions = (message.mentions?.users?.size ?? 0) + (message.mentions?.roles?.size ?? 0);
       const found = spam.check({
         guildId: message.guildId,
@@ -94,12 +97,12 @@ export function createEngine(deps = {}) {
       }, rules.spam, now, { edited });
       if (found.length) trip('spam');
     }
-    if (rules.words.enabled) {
+    if (applies('words')) {
       if (findBadWord(content, effectiveWords(rules.words))) trip('words');
       else if (message.guildId && findPattern(content, rules.words, message.guildId)) trip('words', 'pattern');
     }
-    if (rules.links.enabled && evaluateLinks(content, rules.links).violated) trip('links');
-    if (rules.invites.enabled && extractInviteCodes(content).length) {
+    if (applies('links') && evaluateLinks(content, rules.links).violated) trip('links');
+    if (applies('invites') && extractInviteCodes(content).length) {
       const result = await evaluateInvites(content, rules.invites, {
         ownGuildId: message.guildId,
         resolve: (code) => resolveInvite(code, ctx),
@@ -135,7 +138,7 @@ export function createEngine(deps = {}) {
     if (opts?.edited && opts.oldContent !== undefined && opts.oldContent === content) return;
 
     const now = clock();
-    const tripped = await evaluate(ctx, message, content, auto.rules, now, Boolean(opts?.edited));
+    const tripped = await evaluate(ctx, message, member, content, auto.rules, now, Boolean(opts?.edited));
     if (!tripped.length) return;
 
     const lang = await getLang(ctx.db, guildId);

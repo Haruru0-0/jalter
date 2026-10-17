@@ -7,6 +7,8 @@ export const MAX_EXEMPT_CHANNELS = 20;
 export const MAX_LIST = 100;
 export const MAX_PATTERNS = 10;
 export const MAX_STEPS = 8;
+export const AGE_MIN = 60;
+export const AGE_MAX = 315_360_000; // 10 years
 
 export const STRIKES_MIN = 1;
 export const STRIKES_MAX = 50;
@@ -75,6 +77,10 @@ function readRule(raw, rule) {
     delete: bool(r.delete, true),
     windowSeconds: intIn(r.windowSeconds, WINDOW_MIN, WINDOW_MAX, 600),
     steps: readSteps(r.steps, rule),
+    age: {
+      accountYoungerThanSeconds: intIn(obj(r.age).accountYoungerThanSeconds, AGE_MIN, AGE_MAX, null),
+      joinedWithinSeconds: intIn(obj(r.age).joinedWithinSeconds, AGE_MIN, AGE_MAX, null),
+    },
   };
   if (rule === 'spam') {
     for (const [name, fields] of Object.entries(SPAM_CHECKS)) {

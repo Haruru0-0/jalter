@@ -8,7 +8,7 @@ import { capList } from '../../core/lists.js';
 import { t } from '../../i18n/index.js';
 import {
   readConfig, setSteps, RULES, SPAM_CHECKS, MAX_STEPS,
-  STRIKES_MIN, STRIKES_MAX, WINDOW_MIN, WINDOW_MAX, TIMEOUT_MIN, TIMEOUT_MAX,
+  STRIKES_MIN, STRIKES_MAX, WINDOW_MIN, WINDOW_MAX, TIMEOUT_MIN, TIMEOUT_MAX, AGE_MIN, AGE_MAX,
 } from './config.js';
 
 const SPAM_NAMES = Object.keys(SPAM_CHECKS);
@@ -89,7 +89,16 @@ export function addSettingsSubcommands(builder) {
           o.setName('value').setDescription('The new limit').setMinValue(1).setMaxValue(100).setRequired(true)))
     .addSubcommand((s) =>
       s.setName('nickname').setDescription('Check member names for banned words')
-        .addStringOption(stateOption));
+        .addStringOption(stateOption))
+    .addSubcommand((s) =>
+      s.setName('age').setDescription('Limit a rule to new accounts or recent joiners')
+        .addStringOption(ruleOption)
+        .addStringOption((o) =>
+          o.setName('kind').setDescription('Which age to limit').setRequired(true)
+            .addChoices({ name: 'account', value: 'account' }, { name: 'joined', value: 'joined' }))
+        .addStringOption((o) =>
+          o.setName('duration').setDescription('For example 7d or 1h, or off to clear the limit')
+            .setMaxLength(32).setRequired(true)));
 }
 
 export const reply = (interaction, content) => {
@@ -130,6 +139,13 @@ export function statusText(lang, enabled, config) {
       window: formatDuration(r.windowSeconds),
       steps: r.steps.map((s) => stepText(lang, s)).join(', '),
     }));
+    const { accountYoungerThanSeconds: account, joinedWithinSeconds: joined } = r.age;
+    if (account !== null || joined !== null) {
+      lines.push(t(lang, 'automod.settings.age_line', {
+        account: account === null ? none : formatDuration(account),
+        joined: joined === null ? none : formatDuration(joined),
+      }));
+    }
     if (rule === 'spam') {
       for (const name of SPAM_NAMES) {
         const c = r[name];
@@ -207,6 +223,21 @@ export const settingsHandlers = {
     }
     await save(withRule(config, 'spam', { [check]: { ...config.rules.spam[check], [field]: value } }));
     return reply(i, t(lang, 'automod.settings.limit_set', { check, value }));
+  },
+
+  async age(i, { lang, config, save }) {
+    const rule = i.options.getString('rule', true);
+    const kind = i.options.getString('kind', true);
+    const input = i.options.getString('duration', true).trim().toLowerCase();
+    const field = kind === 'account' ? 'accountYoungerThanSeconds' : kind === 'joined' ? 'joinedWithinSeconds' : null;
+    const seconds = input === 'off' ? null : parseDuration(input);
+    if (!RULES.includes(rule) || !field || (input !== 'off' && (seconds === null || seconds < AGE_MIN || seconds > AGE_MAX))) {
+      return reply(i, t(lang, 'automod.settings.bad_age'));
+    }
+    await save(withRule(config, rule, { age: { ...config.rules[rule].age, [field]: seconds } }));
+    const name = t(lang, `automod.rule.${rule}`);
+    if (seconds === null) return reply(i, t(lang, `automod.settings.age_${kind}_off`, { rule: name }));
+    return reply(i, t(lang, `automod.settings.age_${kind}_set`, { rule: name, duration: formatDuration(seconds) }));
   },
 
   async nickname(i, { lang, config, save }) {
