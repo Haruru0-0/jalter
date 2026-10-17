@@ -1,6 +1,7 @@
 // Pure bad-word matching. Words and text share the same normaliser.
 import { normalizeText, tokens } from './normalize.js';
 import { BUILTIN_WORDS } from './words-default.js';
+import { getCompiled, matchPatterns } from './regex-safe.js';
 
 const ARABIC = /\p{Script=Arabic}/u;
 
@@ -51,4 +52,11 @@ export function findBadWord(text, words) {
     for (const [w, raw] of subs) if (sq.includes(squeeze(w))) return raw;
   }
   return null;
+}
+
+/** cfg is config.rules.words. Returns the source of the first admin regex matching text, or null. */
+export function findPattern(text, cfg, guildId) {
+  const patterns = cfg?.patterns;
+  if (!Array.isArray(patterns) || patterns.length === 0) return null;
+  return matchPatterns(text, getCompiled(guildId, patterns));
 }

@@ -1,8 +1,11 @@
+import { validatePattern } from './regex-safe.js';
+
 export const RULES = ['spam', 'invites', 'links', 'words'];
 
 export const MAX_EXEMPT_ROLES = 10;
 export const MAX_EXEMPT_CHANNELS = 20;
 export const MAX_LIST = 100;
+export const MAX_PATTERNS = 10;
 export const MAX_STEPS = 8;
 
 export const STRIKES_MIN = 1;
@@ -89,6 +92,7 @@ function readRule(raw, rule) {
   if (rule === 'words') {
     out.custom = cleanList(r.custom, MAX_LIST);
     out.removedBuiltin = cleanList(r.removedBuiltin, MAX_LIST);
+    out.patterns = cleanList(r.patterns, MAX_PATTERNS);
     out.useBuiltin = bool(r.useBuiltin, true);
   }
   return out;
@@ -119,6 +123,7 @@ const LISTS = {
   'links.block': { rule: 'links', key: 'block', max: MAX_LIST },
   'words.custom': { rule: 'words', key: 'custom', max: MAX_LIST },
   'words.removedBuiltin': { rule: 'words', key: 'removedBuiltin', max: MAX_LIST },
+  'words.patterns': { rule: 'words', key: 'patterns', max: MAX_PATTERNS },
 };
 
 const getList = (config, path) => {
@@ -141,6 +146,10 @@ export function addToList(config, path, value) {
   if (!isPath(path) || typeof value !== 'string' || value === '') return fail('invalid');
   const current = readConfig(config);
   const list = getList(current, path);
+  if (path === 'words.patterns') {
+    const v = validatePattern(value);
+    if (!v.ok) return fail(v.reason);
+  }
   if (list.includes(value)) return fail('exists');
   if (list.length >= LISTS[path].max) return fail('full');
   return ok(withList(current, path, [...list, value]));
