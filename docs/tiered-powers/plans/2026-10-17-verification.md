@@ -18,7 +18,7 @@
 - "`@everyone` can view" = the computed `@everyone` permission alone: guild-level `@everyone` ViewChannel bit adjusted by the channel's `@everyone` overwrite. Channels where it is false are left untouched.
 - Setup states: `none`, `rolling_out`, `active`, `failed`. Rollout order is fixed: create role/channel/message, then grant Verified to every member present at Confirm (bots included), then gate channels, then `active`. Never gate before granting is finished.
 - Undo record: the first recorded original per channel wins and is never overwritten; a missing overwrite is recorded as `existed: false`.
-- Captcha (Stage 2): 5 characters from `ABCDEFGHJKMNPQRSTUVWXYZ23456789`, case-insensitive entry, valid 5 minutes, single use, in memory; 3 wrong entries then a 30-second cooldown, then a new code.
+- Captcha (Stage 2): 5 characters from `ABCDEFGHJKMNPQRSTUVWXYZ23456789`, case-insensitive entry, valid 5 minutes, single use, in memory; 3 wrong entries then a 30-second cooldown, then a new code. The captcha is **always in English**, whatever the server language: the image uses only Latin letters and digits, and every message, button and modal text in the captcha flow comes from fixed English strings (`verification.captcha.*` keys exist in all three i18n files with the same English text, so parity holds and nothing is translated).
 - Mod log: one line through `sendLog(ctx, guildId, 'modAction', embed)` for setup confirmed, rollout finished/failed, member verified, manual verify/unverify, undo, and a failed gate of a new channel. Failed captcha attempts are not logged.
 - i18n: every user-facing string in `src/i18n/en.json`, `fr.json`, `ar.json` (flat dotted keys under `verification.`, real translations, `{name}` placeholders); parity is enforced by `test/i18n.test.js`.
 - Bot permissions checked at setup: Manage Roles, Manage Channels, View Channel, Send Messages, Embed Links, Attach Files. Missing one refuses with a localized reply.
@@ -306,7 +306,7 @@ Add the keys `verification.log.member`, `.actor`, `.detail`, `.setup`, `.rollout
 - Consumes: `createChallengeStore`, `renderCaptcha` (Task 11), `verifyMember` (Task 6).
 - Produces: in `captcha` mode `verification:go` replies privately with the image attachment and a button `verification:enter:<userId>` (during a cooldown it says how long to wait); that button opens a modal `verification:code:<userId>` with one required text input (min 5, max 5 length); a modal submit from a user other than `<userId>` is refused; a correct code calls `verifyMember` with method `captcha` and answers privately; a wrong code says how many tries remain or that a cooldown started and offers the Verify button again. The challenge store is created once per process in `verify.js`.
 
-- [ ] **Step 1: Write the failing tests:** `go in captcha mode replies with an image and the enter button`, `the enter button opens the modal for the right user`, `the modal from another user is refused`, `a correct code verifies and answers privately`, `a wrong code reports tries left`, `three wrong codes show the cooldown`, `button mode is unchanged`.
+- [ ] **Step 1: Write the failing tests:** `go in captcha mode replies with an image and the enter button`, `the enter button opens the modal for the right user`, `the modal from another user is refused`, `a correct code verifies and answers privately`, `a wrong code reports tries left`, `three wrong codes show the cooldown`, `captcha texts are English even when the server language is French or Arabic` (all captcha replies, the enter button and the modal use `t('en', 'verification.captcha.*')`), `button mode is unchanged`.
 - [ ] **Step 2: Run the file.** Expected: FAIL.
 - [ ] **Step 3: Implement** the branches.
 - [ ] **Step 4: Run** the file, the button-mode file (`verification-verify.test.js`) and `test/i18n.test.js`. Expected: PASS.
@@ -316,7 +316,7 @@ Add the keys `verification.log.member`, `.actor`, `.detail`, `.setup`, `.rollout
 
 ## Wrap-up
 
-### Task 13: Setup guide permissions
+### Task 13: Setup guide invite list
 
 **Files:**
 - Modify: `docs/discord-bot-setup.md`
@@ -326,8 +326,13 @@ Add the keys `verification.log.member`, `.actor`, `.detail`, `.setup`, `.rollout
 **Interfaces:**
 - Produces: documentation only.
 
-- [ ] **Step 1: Append** under the invite-permissions section: `- Verification: Manage Roles (creates and grants the Verified role, which must sit below the bot's top role), Manage Channels (creates the verify channel and edits channel permissions), View Channel, Send Messages, Embed Links and Attach Files (the verify message and the captcha image). Run \`npm run deploy\` to register \`/verification\`; migration 008 runs on the next start.`
-- [ ] **Step 2: Commit** `docs: verification permissions in the setup guide`.
+- [ ] **Step 1: Append** this one bullet at the end of the invite list section (verbatim):
+
+```markdown
+- Verification: Manage Roles (creates and grants the Verified role, which must sit below the bot's top role), Manage Channels (creates the verify channel and edits channel overwrites), View Channel, Send Messages, Embed Links and Attach Files (the verify message and the captcha image). Run `npm run deploy` to register `/verification`; migration 008 runs on the next start.
+```
+
+- [ ] **Step 2: Commit** `docs: verification invite list in the setup guide`.
 
 ### Task 14: Checklist and memory notes
 
@@ -346,5 +351,14 @@ Add the keys `verification.log.member`, `.actor`, `.detail`, `.setup`, `.rollout
 
 **Tier:** haiku - run and report.
 
-- [ ] **Step 1: Run** `npm test`. Expected: all pass; report the totals and any failure with its output (do not fix).
-- [ ] **Step 2: Run** `graphify update .` and report whether it succeeded.
+- [ ] **Step 1: Run** the command below. Expected: all pass; report the totals and any failure with its output (do not fix).
+
+```bash
+npm test
+```
+
+- [ ] **Step 2: Run** the command below and report whether it succeeded.
+
+```bash
+graphify update .
+```
