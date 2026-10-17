@@ -21,11 +21,15 @@ const rows = async () => (await db.query(
   'SELECT type, key, payload, (EXTRACT(EPOCH FROM due_at)*1000)::bigint AS due FROM scheduled_jobs',
 )).rows;
 
+const permsOf = (list) => ({ has: (p) => list.includes(p) });
+const DANGEROUS = ['Administrator', 'ManageGuild', 'ManageRoles', 'BanMembers', 'KickMembers', 'ModerateMembers',
+  'ManageChannels', 'ManageMessages', 'ManageWebhooks', 'MentionEveryone'];
+
 /** A guild with a role, a bot at position 10, and a member who may already hold roles. */
-function world({ has = [], rolePosition = 5, managed = false, noRole = false, add, remove, fetch } = {}) {
+function world({ has = [], rolePosition = 5, managed = false, noRole = false, perms = [], add, remove, fetch } = {}) {
   const calls = { add: [], remove: [] };
   const held = new Set(has);
-  const role = { id: 'r1', position: rolePosition, managed };
+  const role = { id: 'r1', position: rolePosition, managed, permissions: permsOf(perms) };
   const member = {
     id: 'u1',
     roles: {
@@ -78,6 +82,19 @@ test('does nothing without a configured role, a missing role, a managed role or 
     assert.equal(w.calls.add.length, 0);
   }
   assert.equal((await rows()).length, 0);
+});
+
+test('grant refuses a role that gained a dangerous permission, quietly with a warning', async (tc) => {
+  const warn = tc.mock.method(console, 'warn', () => {});
+  for (const perm of DANGEROUS) {
+    const w = world({ perms: [perm] });
+    assert.equal(await grantTimedRole(w.ctx, w.member, cfg, NOW), false, perm);
+    assert.equal(w.calls.add.length, 0, perm);
+  }
+  assert.equal((await rows()).length, 0);
+  assert.equal(warn.mock.callCount(), DANGEROUS.length);
+  const harmless = world({ perms: ['SendMessages', 'AddReactions'] });
+  assert.equal(await grantTimedRole(harmless.ctx, harmless.member, cfg, NOW), true);
 });
 
 test('a re-trigger moves the removal time', async () => {
@@ -197,14 +214,14 @@ test('enforce never throws because of the role effect', async (tc) => {
 
 // --- /automod role ---
 const { commands } = automod;
-function fake(strings, { role = null, off = null } = {}) {
+function fake(strings, { role = null, off = null, callerId = 'mod', callerTop = 8 } = {}) {
   const calls = { reply: [] };
   return {
     calls,
     guildId: G,
     inGuild: () => true,
-    member: { permissions: { has: () => true }, guild: { id: G }, roles: { cache: { has: () => false } } },
-    guild: { id: G, members: { me: { roles: { highest: { position: 10 } } } } },
+    member: { id: callerId, permissions: { has: () => true }, guild: { id: G }, roles: { cache: { has: () => false }, highest: { position: callerTop } } },
+    guild: { id: G, ownerId: 'owner', members: { me: { roles: { highest: { position: 10 } } } } },
     options: {
       getSubcommand: () => 'role',
       getSubcommandGroup: () => null,
@@ -246,4 +263,40 @@ test('setup refuses a role above the bot, a managed role, @everyone and a bad du
     assert.equal(i.calls.reply.at(-1).content, t('en', key), key);
   }
   assert.equal((await saved()).rules.words.giveRole.roleId, null);
+});
+
+const plainRole = (o = {}) => ({ id: 'r1', position: 5, managed: false, permissions: permsOf(['SendMessages']), ...o });
+
+test('setup refuses a role with a dangerous permission', async () => {
+  for (const perm of DANGEROUS) {
+    const i = fake({ rule: 'words' }, { role: plainRole({ permissions: permsOf([perm]) }) });
+    await run(i);
+    assert.equal(i.calls.reply.at(-1).content, t('en', 'automod.settings.role_dangerous'), perm);
+  }
+  assert.equal((await saved()).rules.words.giveRole.roleId, null);
+});
+
+test('setup refuses a role at or above the caller, unless the caller owns the server', async () => {
+  for (const callerTop of [5, 4]) {
+    const i = fake({ rule: 'words' }, { role: plainRole(), callerTop });
+    await run(i);
+    assert.equal(i.calls.reply.at(-1).content, t('en', 'automod.settings.role_above_you'), String(callerTop));
+  }
+  assert.equal((await saved()).rules.words.giveRole.roleId, null);
+  await run(fake({ rule: 'words' }, { role: plainRole(), callerId: 'owner', callerTop: 1 }));
+  assert.equal((await saved()).rules.words.giveRole.roleId, 'r1');
+});
+
+test('setup still takes a harmless role below the caller', async () => {
+  const i = fake({ rule: 'words' }, { role: plainRole(), callerTop: 6 });
+  await run(i);
+  assert.equal((await saved()).rules.words.giveRole.roleId, 'r1');
+});
+
+test('the new refusal reasons exist in every language', () => {
+  for (const lang of ['en', 'fr', 'ar']) {
+    for (const key of ['automod.settings.role_dangerous', 'automod.settings.role_above_you']) {
+      assert.notEqual(t(lang, key), key, `${lang} ${key}`);
+    }
+  }
 });

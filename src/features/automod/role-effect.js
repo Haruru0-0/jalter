@@ -11,6 +11,24 @@ const isPermanent = (err) => err?.status >= 400 && err?.status < 500 && err.stat
 const auditReason = (text) => text.slice(0, AUDIT_REASON_MAX);
 const jobKey = (userId, roleId) => `${userId}:${roleId}`;
 
+// A punishment role must never carry staff power: someone able to set it could trip the rule from an alt.
+const DANGEROUS_PERMISSIONS = [
+  'Administrator', 'ManageGuild', 'ManageRoles', 'BanMembers', 'KickMembers', 'ModerateMembers',
+  'ManageChannels', 'ManageMessages', 'ManageWebhooks', 'MentionEveryone',
+];
+
+/** True when the role's own permissions include any staff power. */
+export function isDangerousRole(role) {
+  return DANGEROUS_PERMISSIONS.some((p) => role?.permissions?.has(p) === true);
+}
+
+/** True when the member may hand out the role: the server owner, or their top role is strictly above it. */
+export function callerCanGive(guild, member, role) {
+  if (member?.id && member.id === guild?.ownerId) return true;
+  const top = member?.roles?.highest?.position;
+  return top !== undefined && role.position < top;
+}
+
 /** True when the bot can hand out this role: not @everyone, not managed, strictly below its top role. */
 export function botCanGive(guild, role) {
   if (!role || role.id === guild.id || role.managed) return false;
@@ -35,7 +53,13 @@ export async function grantTimedRole(ctx, member, ruleCfg, now) {
   const { roleId, seconds } = ruleCfg?.giveRole ?? {};
   if (!roleId || !member) return false;
   const guild = member.guild;
-  if (!botCanGive(guild, guild.roles.cache.get(roleId))) return false;
+  const role = guild.roles.cache.get(roleId);
+  if (!botCanGive(guild, role)) return false;
+  // Checked again here: the role may have gained permissions since setup.
+  if (isDangerousRole(role)) {
+    console.warn(`Auto-mod timed role ${roleId} in ${guild.id} has staff permissions; not given.`);
+    return false;
+  }
   const userId = member.id;
   const dueAt = now + seconds * 1000;
   const job = { guildId: guild.id, type: REMOVE_ROLE_JOB, key: jobKey(userId, roleId), payload: { userId, roleId }, dueAt };

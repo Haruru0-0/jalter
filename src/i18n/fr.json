@@ -443,6 +443,8 @@
   "automod.settings.role_everyone": "Le rôle @everyone ne peut pas être donné.",
   "automod.settings.role_managed": "Ce rôle est géré par une intégration et ne peut pas être donné.",
   "automod.settings.role_too_high": "Ce rôle n'est pas en dessous de mon rôle le plus élevé, je ne pourrais donc pas le donner. Placez d'abord mon rôle au-dessus.",
+  "automod.settings.role_dangerous": "Ce rôle a des permissions de modération (comme Administrateur, Gérer le serveur, Gérer les rôles, Bannir, Expulser, Exclure temporairement, Gérer les salons, Gérer les messages, Gérer les webhooks ou Mentionner everyone), il ne peut donc pas servir de rôle de sanction.",
+  "automod.settings.role_above_you": "Ce rôle n'est pas en dessous de votre rôle le plus élevé, vous ne pouvez donc pas le choisir comme rôle de sanction.",
   "automod.settings.role_line": "Donne {role} pendant {duration}",
   "automod.settings.honeypot_set": "{channel} est maintenant le salon piège. Toute personne qui y écrit est sanctionnée : gardez-le caché aux membres qui ne doivent pas l'être. Activez la règle avec /automod rule.",
   "automod.settings.honeypot_off": "Le salon piège est retiré.",

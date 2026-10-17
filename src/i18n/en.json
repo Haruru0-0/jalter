@@ -443,6 +443,8 @@
   "automod.settings.role_everyone": "The @everyone role cannot be given.",
   "automod.settings.role_managed": "That role is managed by an integration and cannot be given.",
   "automod.settings.role_too_high": "That role is not below my highest role, so I could not give it. Move my role above it first.",
+  "automod.settings.role_dangerous": "That role has staff permissions (such as Administrator, Manage Server, Manage Roles, Ban, Kick, Timeout, Manage Channels, Manage Messages, Manage Webhooks or Mention Everyone), so it cannot be used as a punishment role.",
+  "automod.settings.role_above_you": "That role is not below your highest role, so you cannot set it as a punishment role.",
   "automod.settings.role_line": "Gives {role} for {duration}",
   "automod.settings.honeypot_set": "{channel} is now the honeypot channel. Anyone who posts there is punished, so keep it hidden from members who should not be punished. Turn the rule on with /automod rule.",
   "automod.settings.honeypot_off": "The honeypot channel is cleared.",

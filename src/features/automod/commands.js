@@ -10,7 +10,7 @@ import {
   readConfig, setSteps, addToList, removeFromList, MAX_NATIVE_RULES, RULES, SPAM_CHECKS, MAX_STEPS,
   STRIKES_MIN, STRIKES_MAX, WINDOW_MIN, WINDOW_MAX, TIMEOUT_MIN, TIMEOUT_MAX, AGE_MIN, AGE_MAX, ROLE_MIN, ROLE_MAX,
 } from './config.js';
-import { botCanGive } from './role-effect.js';
+import { botCanGive, isDangerousRole, callerCanGive } from './role-effect.js';
 import { listNativeRules } from './native.js';
 
 const SPAM_NAMES = Object.keys(SPAM_CHECKS);
@@ -290,6 +290,8 @@ export const settingsHandlers = {
     if (role.id === i.guildId) return reply(i, t(lang, 'automod.settings.role_everyone'));
     if (role.managed) return reply(i, t(lang, 'automod.settings.role_managed'));
     if (!botCanGive(i.guild, role)) return reply(i, t(lang, 'automod.settings.role_too_high'));
+    if (isDangerousRole(role)) return reply(i, t(lang, 'automod.settings.role_dangerous'));
+    if (!callerCanGive(i.guild, i.member, role)) return reply(i, t(lang, 'automod.settings.role_above_you'));
     await save(withRule(config, rule, { giveRole: { roleId: role.id, seconds } }));
     return reply(i, t(lang, 'automod.settings.role_set', { rule: name, role: `<@&${role.id}>`, duration: formatDuration(seconds) }));
   },
