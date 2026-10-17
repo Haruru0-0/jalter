@@ -1,21 +1,20 @@
 // Auto-mod pipeline: decides what a message violates and enforces it. handleMessage never throws.
 import { getFeature } from '../../db/settings.js';
-import { getLang, t } from '../../i18n/index.js';
+import { getLang } from '../../i18n/index.js';
 import { runAction as realRunAction } from '../moderation/actions.js';
 import { readConfig as readModConfig } from '../moderation/config.js';
 import { sendLog as realSendLog } from '../logging/send-log.js';
 import { readConfig } from './config.js';
 import { addHistory as realAddHistory } from './history.js';
-import { createStrikeStore, stepReached, isTopStep } from './strikes.js';
+import { createStrikeStore } from './strikes.js';
+import { enforce, attempt, warn } from './enforce.js';
 import { createSpamTracker } from './detect-spam.js';
 import { extractLinks, extractInviteCodes, evaluateLinks, evaluateInvites } from './detect-links.js';
 import { effectiveWords, findBadWord } from './detect-words.js';
 import { isExempt } from './exempt.js';
 import { checkMember as realCheckMember } from './nickname.js';
 
-const UNKNOWN_MESSAGE = 10008;
 const MAX_WINDOW_MS = 86_400_000;
-const DEFAULT_TIMEOUT_SECONDS = 600;
 const INVITE_TIMEOUT_MS = 3000;
 const INVITE_TTL_MS = 10 * 60 * 1000;
 const INVITE_CACHE_MAX = 500;
@@ -53,18 +52,6 @@ export function createInviteResolver({ timeoutMs = INVITE_TIMEOUT_MS, ttlMs = IN
       clearTimeout(timer);
     }
   };
-}
-
-const warn = (what, err) => console.warn(`Auto-mod ${what} failed: ${err?.message ?? err}`);
-
-/** Runs fn, logs and swallows any failure. */
-async function attempt(what, fn) {
-  try {
-    return await fn();
-  } catch (err) {
-    warn(what, err);
-    return undefined;
-  }
 }
 
 const userIdOf = (message) => message.author.id;
@@ -148,77 +135,17 @@ export function createEngine(deps = {}) {
     if (!tripped.length) return;
 
     const lang = await getLang(ctx.db, guildId);
-    const userId = message.author.id;
-    const actions = [];
-    let caseNumber = null;
-
-    const counts = tripped.map((rule) => ({
-      rule,
-      step: null,
-      ...strikes.add(guildId, userId, rule, now, auto.rules[rule].windowSeconds * 1000),
-    }));
-
-    // One enforcement per message: the most severe step among the rules that crossed one.
-    const crossed = counts
-      .map((c) => ({ rule: c.rule, step: stepReached(auto.rules[c.rule].steps, c.previous, c.count) }))
-      .filter((c) => c.step);
-    // Reset before any await so strikes added meanwhile (during the delete or the action) are not wiped.
-    for (const c of crossed) {
-      if (isTopStep(auto.rules[c.rule].steps, c.step)) strikes.reset(guildId, userId, c.rule);
-    }
-
-    if (tripped.some((rule) => auto.rules[rule].delete)) {
-      const deleted = await attempt('delete', async () => {
-        try {
-          await message.delete();
-          return true;
-        } catch (err) {
-          if (err?.code !== UNKNOWN_MESSAGE) warn('delete', err);
-          return false;
-        }
-      });
-      if (deleted) actions.push('delete');
-    }
-
-    if (crossed.length) {
-      const secondsOf = (step) => (step.action === 'timeout' ? (step.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS) : 0);
-      const severity = (step) => (step.action === 'timeout' ? 1 : 0);
-      const best = crossed.map((c) => c.step).reduce((a, b) => (
-        severity(b) > severity(a) || (severity(b) === severity(a) && secondsOf(b) > secondsOf(a)) ? b : a
-      ));
-      const result = await attempt('action', () => runAction(ctx, {
-        guild: message.guild,
-        actor: message.guild.members.me,
-        type: best.action,
-        targetId: userId,
-        target: member,
-        config: mod,
-        lang,
-        reason: t(lang, 'automod.reason', { rules: crossed.map((c) => c.rule).join(', ') }),
-        durationSeconds: best.action === 'timeout' ? secondsOf(best) : undefined,
-      }));
-      if (result?.ok) {
-        actions.push(best.action);
-        if (result.modCase) caseNumber = result.modCase.number ?? null;
-      } else if (result) {
-        console.warn(`Auto-mod ${best.action} refused in ${guildId}: ${result.reason}`);
-      }
-    }
-
-    if (caseNumber === null) {
-      await attempt('log', () => sendLog(ctx, guildId, 'modAction', {
-        title: t(lang, 'automod.log.title'),
-        description: `<@${userId}> <#${message.channelId}>`,
-        fields: [
-          { name: t(lang, 'automod.log.rules'), value: tripped.join(', ') },
-          { name: t(lang, 'automod.log.actions'), value: actions.length ? actions.join(', ') : '—' },
-        ],
-      }));
-    }
-
-    await attempt('history', () => addHistory(ctx.db, {
-      guildId, userId, rules: tripped, messageId: message.id, actions, caseNumber,
-    }));
+    await enforce(ctx, {
+      guild: message.guild,
+      member: member ?? { id: message.author.id },
+      message,
+      findings: tripped.map((rule) => ({ rule, reason: rule })),
+      autoConfig: auto,
+      modConfig: mod,
+      lang,
+      deps: { runAction, sendLog, addHistory, now: clock },
+      strikes,
+    });
   }
 
   return {
