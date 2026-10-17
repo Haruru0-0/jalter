@@ -12,6 +12,7 @@ import { createSpamTracker } from './detect-spam.js';
 import { extractLinks, extractInviteCodes, evaluateLinks, evaluateInvites } from './detect-links.js';
 import { effectiveWords, findBadWord, findPattern } from './detect-words.js';
 import { passesAge } from './age.js';
+import { honeypotFinding } from './honeypot.js';
 import { isExempt } from './exempt.js';
 import { checkMember as realCheckMember } from './nickname.js';
 
@@ -126,6 +127,19 @@ export function createEngine(deps = {}) {
     const managerRoleId = panel?.managerRoleId && panel.managerRoleId !== guildId ? panel.managerRoleId : null;
     if (isExempt(member, message.channel, auto, mod, managerRoleId)) return;
 
+    // A post in the honeypot channel is punished at once, before any scan. Exemptions above still apply,
+    // and the rule's age limits work like any other rule's.
+    const now = clock();
+    const trapped = passesAge(member, auto.rules.honeypot, now) ? honeypotFinding(message, auto) : null;
+    if (trapped) {
+      const lang = await getLang(ctx.db, guildId);
+      await enforce(ctx, {
+        guild: message.guild, member, message, findings: [trapped], autoConfig: auto, modConfig: mod, lang,
+        deps: { runAction, sendLog, addHistory, now: clock }, strikes,
+      });
+      return;
+    }
+
     // First message of a member since start: check their nickname once. Never blocks scanning.
     const memberKey = `${guildId}:${userIdOf(message)}`;
     if (!checkedMembers.has(memberKey)) {
@@ -137,7 +151,6 @@ export function createEngine(deps = {}) {
     const content = typeof message.content === 'string' ? message.content : '';
     if (opts?.edited && opts.oldContent !== undefined && opts.oldContent === content) return;
 
-    const now = clock();
     const tripped = await evaluate(ctx, message, member, content, auto.rules, now, Boolean(opts?.edited));
     if (!tripped.length) return;
 

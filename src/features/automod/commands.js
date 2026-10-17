@@ -1,4 +1,4 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { SlashCommandBuilder, ChannelType } from 'discord.js';
 import { getFeature, setFeature } from '../../db/settings.js';
 import { guard } from '../../core/guard.js';
 import { handleToggle, toggleSubcommands } from '../../core/toggle.js';
@@ -107,7 +107,13 @@ export function addSettingsSubcommands(builder) {
         .addBooleanOption((o) => o.setName('off').setDescription('Stop giving a role'))
         .addStringOption((o) =>
           o.setName('duration').setDescription('How long they keep it, like 10m or 1d (1 minute to 7 days)')
-            .setMaxLength(32)));
+            .setMaxLength(32)))
+    .addSubcommand((s) =>
+      s.setName('honeypot').setDescription('Punish anyone who posts in a trap channel')
+        .addChannelOption((o) =>
+          o.setName('channel').setDescription('The trap channel')
+            .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement))
+        .addBooleanOption((o) => o.setName('off').setDescription('Stop using a trap channel')));
 }
 
 export const reply = (interaction, content) => {
@@ -163,6 +169,9 @@ export function statusText(lang, enabled, config) {
         const c = r[name];
         lines.push(`${name}: ${onOff(c.enabled)} (${t(lang, `automod.settings.limit_${name}`, c)})`);
       }
+    }
+    if (rule === 'honeypot') {
+      lines.push(t(lang, 'automod.settings.honeypot_line', { channel: r.channelId ? `<#${r.channelId}>` : none }));
     }
     if (rule === 'links' || rule === 'invites') {
       lines.push(t(lang, r.blockAllExceptAllowed ? 'automod.settings.mode_allowlist' : 'automod.settings.mode_blocklist'));
@@ -271,6 +280,20 @@ export const settingsHandlers = {
     if (!botCanGive(i.guild, role)) return reply(i, t(lang, 'automod.settings.role_too_high'));
     await save(withRule(config, rule, { giveRole: { roleId: role.id, seconds } }));
     return reply(i, t(lang, 'automod.settings.role_set', { rule: name, role: `<@&${role.id}>`, duration: formatDuration(seconds) }));
+  },
+
+  async honeypot(i, { lang, config, save }) {
+    if (i.options.getBoolean('off') === true) {
+      await save(withRule(config, 'honeypot', { channelId: null }));
+      return reply(i, t(lang, 'automod.settings.honeypot_off'));
+    }
+    const channel = i.options.getChannel('channel');
+    if (!channel) return reply(i, t(lang, 'automod.settings.honeypot_missing'));
+    // The bot must see the channel and be able to delete what lands in it.
+    const perms = channel.permissionsFor?.(i.guild?.members?.me);
+    if (!perms?.has('ViewChannel') || !perms.has('ManageMessages')) return reply(i, t(lang, 'automod.settings.honeypot_no_access'));
+    await save(withRule(config, 'honeypot', { channelId: channel.id }));
+    return reply(i, t(lang, 'automod.settings.honeypot_set', { channel: `<#${channel.id}>` }));
   },
 
   async nickname(i, { lang, config, save }) {

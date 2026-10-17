@@ -1,6 +1,6 @@
 import { validatePattern } from './regex-safe.js';
 
-export const RULES = ['spam', 'invites', 'links', 'words'];
+export const RULES = ['spam', 'invites', 'links', 'words', 'honeypot'];
 
 export const MAX_EXEMPT_ROLES = 10;
 export const MAX_EXEMPT_CHANNELS = 20;
@@ -28,7 +28,9 @@ const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
 const WARN_STEPS = [{ strikes: 3, action: 'warn', timeoutSeconds: null }];
 // Spam escalates by default: a warning at 3 strikes, a 10 minute timeout at 5.
 const SPAM_STEPS = [...WARN_STEPS, { strikes: 5, action: 'timeout', timeoutSeconds: 600 }];
-const defaultSteps = (rule) => (rule === 'spam' ? SPAM_STEPS : WARN_STEPS).map((s) => ({ ...s }));
+// One post in the honeypot channel is enough: a 10 minute timeout at the first strike.
+const HONEYPOT_STEPS = [{ strikes: 1, action: 'timeout', timeoutSeconds: 600 }];
+const defaultSteps = (rule) => (rule === 'spam' ? SPAM_STEPS : rule === 'honeypot' ? HONEYPOT_STEPS : WARN_STEPS).map((s) => ({ ...s }));
 
 /** Spam sub-checks: [key, [[field, min, max, default], ...]]. Each also has `enabled` (default true). */
 export const SPAM_CHECKS = {
@@ -101,6 +103,9 @@ function readRule(raw, rule) {
     out.allow = cleanList(r.allow, MAX_LIST);
     out.block = cleanList(r.block, MAX_LIST);
     out.blockAllExceptAllowed = bool(r.blockAllExceptAllowed, rule === 'invites');
+  }
+  if (rule === 'honeypot') {
+    out.channelId = typeof r.channelId === 'string' && r.channelId !== '' ? r.channelId : null;
   }
   if (rule === 'words') {
     out.custom = cleanList(r.custom, MAX_LIST);

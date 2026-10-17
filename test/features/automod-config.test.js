@@ -5,7 +5,7 @@ import { RULES, readConfig, addToList, removeFromList, setSteps } from '../../sr
 test('defaults for empty and garbage input', () => {
   const base = readConfig({});
   for (const raw of [undefined, null, 'x', 5, [], true]) assert.deepEqual(readConfig(raw), base);
-  assert.deepEqual(RULES, ['spam', 'invites', 'links', 'words']);
+  assert.deepEqual(RULES, ['spam', 'invites', 'links', 'words', 'honeypot']);
   assert.deepEqual(base.exemptRoles, []);
   assert.deepEqual(base.exemptChannels, []);
   assert.deepEqual(base.nickname, { enabled: false });
@@ -17,7 +17,9 @@ test('defaults for empty and garbage input', () => {
       base.rules[r].steps,
       r === 'spam'
         ? [{ strikes: 3, action: 'warn', timeoutSeconds: null }, { strikes: 5, action: 'timeout', timeoutSeconds: 600 }]
-        : [{ strikes: 3, action: 'warn', timeoutSeconds: null }],
+        : r === 'honeypot'
+          ? [{ strikes: 1, action: 'timeout', timeoutSeconds: 600 }]
+          : [{ strikes: 3, action: 'warn', timeoutSeconds: null }],
     );
   }
   assert.deepEqual(base.rules.spam.burst, { enabled: true, messages: 5, seconds: 5 });
