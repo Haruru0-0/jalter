@@ -32,7 +32,7 @@ export function createNativeHandler(deps = {}) {
   const addHistory = deps.addHistory ?? realAddHistory;
   const clock = deps.now ?? Date.now;
   const strikes = deps.strikes ?? createStrikeStore();
-  // ruleId:userId:messageId -> when it was first seen. Discord can report one hit more than once.
+  // ruleId:userId:(messageId, or c:content when blocked) -> when it was first seen. Discord can report one hit more than once.
   const seen = new Map();
 
   /** Drops expired keys, then records this one. True when it was already seen inside the window. */
@@ -68,7 +68,9 @@ export function createNativeHandler(deps = {}) {
     if (rule.ruleIds.length && !rule.ruleIds.includes(execution.ruleId)) return;
 
     const now = clock();
-    if (duplicate(`${execution.ruleId}:${execution.userId}:${execution.messageId ?? ''}`, now)) return;
+    // A blocked message has no id; its content still tells separate hits apart (one hit's events share it).
+    const hit = execution.messageId ?? `c:${execution.content ?? ''}`;
+    if (duplicate(`${execution.ruleId}:${execution.userId}:${hit}`, now)) return;
 
     const member = await guild.members.fetch(execution.userId).catch(() => null);
     if (!member) return;

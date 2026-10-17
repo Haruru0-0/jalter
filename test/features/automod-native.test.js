@@ -134,6 +134,21 @@ test('different messages or users are not de-duplicated', async () => {
   assert.equal(s.calls.history.length, 3);
 });
 
+test('blocked messages (no message id) are told apart by their content', async () => {
+  const s = setup();
+  await enable();
+  // Block, Alert and Timeout events of one hit carry the same content: one strike.
+  await s.handler.handle(s.ctx, s.exec({ messageId: undefined, content: 'bad one' }));
+  await s.handler.handle(s.ctx, s.exec({ messageId: undefined, content: 'bad one' }));
+  assert.equal(s.calls.history.length, 1);
+  // A second blocked message with other content inside 5 s is a separate hit.
+  await s.handler.handle(s.ctx, s.exec({ messageId: undefined, content: 'bad two' }));
+  assert.equal(s.calls.history.length, 2);
+  s.clock.t += 5_001;
+  await s.handler.handle(s.ctx, s.exec({ messageId: undefined, content: 'bad one' }));
+  assert.equal(s.calls.history.length, 3);
+});
+
 test('the de-duplication memory is pruned', async () => {
   const s = setup();
   await enable();
