@@ -7,3 +7,4 @@ export const commands = [createAutomodCommand({
   groupHandlers: listGroupHandlers,
 })];
 export { events } from './events.js';
+export { jobs } from './role-effect.js';

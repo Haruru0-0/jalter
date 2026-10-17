@@ -17,6 +17,9 @@ export const WINDOW_MAX = 86_400;
 export const TIMEOUT_MIN = 60;
 export const TIMEOUT_MAX = 2_419_200;
 const TIMEOUT_DEFAULT = 600;
+export const ROLE_MIN = 60;
+export const ROLE_MAX = 604_800; // 7 days
+export const ROLE_DEFAULT = 600;
 
 const bool = (v, d) => (typeof v === 'boolean' ? v : d);
 const intIn = (v, min, max, d) => (Number.isInteger(v) && v >= min && v <= max ? v : d);
@@ -77,6 +80,10 @@ function readRule(raw, rule) {
     delete: bool(r.delete, true),
     windowSeconds: intIn(r.windowSeconds, WINDOW_MIN, WINDOW_MAX, 600),
     steps: readSteps(r.steps, rule),
+    giveRole: {
+      roleId: typeof obj(r.giveRole).roleId === 'string' && obj(r.giveRole).roleId !== '' ? r.giveRole.roleId : null,
+      seconds: intIn(obj(r.giveRole).seconds, ROLE_MIN, ROLE_MAX, ROLE_DEFAULT),
+    },
     age: {
       accountYoungerThanSeconds: intIn(obj(r.age).accountYoungerThanSeconds, AGE_MIN, AGE_MAX, null),
       joinedWithinSeconds: intIn(obj(r.age).joinedWithinSeconds, AGE_MIN, AGE_MAX, null),

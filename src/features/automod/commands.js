@@ -8,8 +8,9 @@ import { capList } from '../../core/lists.js';
 import { t } from '../../i18n/index.js';
 import {
   readConfig, setSteps, RULES, SPAM_CHECKS, MAX_STEPS,
-  STRIKES_MIN, STRIKES_MAX, WINDOW_MIN, WINDOW_MAX, TIMEOUT_MIN, TIMEOUT_MAX, AGE_MIN, AGE_MAX,
+  STRIKES_MIN, STRIKES_MAX, WINDOW_MIN, WINDOW_MAX, TIMEOUT_MIN, TIMEOUT_MAX, AGE_MIN, AGE_MAX, ROLE_MIN, ROLE_MAX,
 } from './config.js';
+import { botCanGive } from './role-effect.js';
 
 const SPAM_NAMES = Object.keys(SPAM_CHECKS);
 /** The primary number of each spam check, which /automod spam-limit sets. */
@@ -98,7 +99,15 @@ export function addSettingsSubcommands(builder) {
             .addChoices({ name: 'account', value: 'account' }, { name: 'joined', value: 'joined' }))
         .addStringOption((o) =>
           o.setName('duration').setDescription('For example 7d or 1h, or off to clear the limit')
-            .setMaxLength(32).setRequired(true)));
+            .setMaxLength(32).setRequired(true)))
+    .addSubcommand((s) =>
+      s.setName('role').setDescription('Give a role for a while when a rule takes action')
+        .addStringOption(ruleOption)
+        .addRoleOption((o) => o.setName('role').setDescription('The role to give'))
+        .addBooleanOption((o) => o.setName('off').setDescription('Stop giving a role'))
+        .addStringOption((o) =>
+          o.setName('duration').setDescription('How long they keep it, like 10m or 1d (1 minute to 7 days)')
+            .setMaxLength(32)));
 }
 
 export const reply = (interaction, content) => {
@@ -145,6 +154,9 @@ export function statusText(lang, enabled, config) {
         account: account === null ? none : formatDuration(account),
         joined: joined === null ? none : formatDuration(joined),
       }));
+    }
+    if (r.giveRole.roleId) {
+      lines.push(t(lang, 'automod.settings.role_line', { role: `<@&${r.giveRole.roleId}>`, duration: formatDuration(r.giveRole.seconds) }));
     }
     if (rule === 'spam') {
       for (const name of SPAM_NAMES) {
@@ -238,6 +250,27 @@ export const settingsHandlers = {
     const name = t(lang, `automod.rule.${rule}`);
     if (seconds === null) return reply(i, t(lang, `automod.settings.age_${kind}_off`, { rule: name }));
     return reply(i, t(lang, `automod.settings.age_${kind}_set`, { rule: name, duration: formatDuration(seconds) }));
+  },
+
+  async role(i, { lang, config, save }) {
+    const rule = i.options.getString('rule', true);
+    if (!RULES.includes(rule)) return reply(i, t(lang, 'automod.settings.bad_rule'));
+    const name = t(lang, `automod.rule.${rule}`);
+    const current = config.rules[rule].giveRole;
+    if (i.options.getBoolean('off') === true) {
+      await save(withRule(config, rule, { giveRole: { ...current, roleId: null } }));
+      return reply(i, t(lang, 'automod.settings.role_off', { rule: name }));
+    }
+    const role = i.options.getRole('role');
+    if (!role) return reply(i, t(lang, 'automod.settings.role_missing'));
+    const input = i.options.getString('duration');
+    const seconds = input === null ? current.seconds : parseDuration(input);
+    if (seconds === null || seconds < ROLE_MIN || seconds > ROLE_MAX) return reply(i, t(lang, 'automod.settings.bad_role_duration'));
+    if (role.id === i.guildId) return reply(i, t(lang, 'automod.settings.role_everyone'));
+    if (role.managed) return reply(i, t(lang, 'automod.settings.role_managed'));
+    if (!botCanGive(i.guild, role)) return reply(i, t(lang, 'automod.settings.role_too_high'));
+    await save(withRule(config, rule, { giveRole: { roleId: role.id, seconds } }));
+    return reply(i, t(lang, 'automod.settings.role_set', { rule: name, role: `<@&${role.id}>`, duration: formatDuration(seconds) }));
   },
 
   async nickname(i, { lang, config, save }) {

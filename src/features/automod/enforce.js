@@ -4,6 +4,7 @@ import { runAction as realRunAction } from '../moderation/actions.js';
 import { sendLog as realSendLog } from '../logging/send-log.js';
 import { addHistory as realAddHistory } from './history.js';
 import { stepReached, isTopStep } from './strikes.js';
+import { grantTimedRole } from './role-effect.js';
 
 const UNKNOWN_MESSAGE = 10008;
 const DEFAULT_TIMEOUT_SECONDS = 600;
@@ -88,6 +89,13 @@ export async function enforce(ctx, { guild, member, message, findings, autoConfi
       } else if (result) {
         console.warn(`Auto-mod ${best.action} refused in ${guildId}: ${result.reason}`);
       }
+    }
+
+    // Any step firing hands out the rule's timed role (e.g. a muted role), whatever the step's action.
+    for (const c of crossed) {
+      if (!rules[c.rule].giveRole?.roleId || !member) continue;
+      const given = await attempt('role', () => grantTimedRole(ctx, member, rules[c.rule], now));
+      if (given) actions.push('role');
     }
 
     if (caseNumber === null) {
