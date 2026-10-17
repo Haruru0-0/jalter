@@ -1,6 +1,7 @@
 // Timed role effect: a rule can give the offender a role (e.g. "Muted") that is taken back later.
 import { getLang, t } from '../../i18n/index.js';
 import { scheduleJob, cancelJobs } from '../../core/scheduler.js';
+import { botCanGive, isDangerousRole } from '../../core/role-safety.js';
 
 export const REMOVE_ROLE_JOB = 'automod.removeRole';
 const UNKNOWN_MEMBER = 10007;
@@ -11,37 +12,8 @@ const isPermanent = (err) => err?.status >= 400 && err?.status < 500 && err.stat
 const auditReason = (text) => text.slice(0, AUDIT_REASON_MAX);
 const jobKey = (userId, roleId) => `${userId}:${roleId}`;
 
-// A punishment role must never carry staff power: someone able to set it could trip the rule from an alt.
-const DANGEROUS_PERMISSIONS = [
-  'Administrator', 'ManageGuild', 'ManageRoles', 'BanMembers', 'KickMembers', 'ModerateMembers',
-  'ManageChannels', 'ManageMessages', 'ManageWebhooks', 'MentionEveryone',
-];
-
-/** True when the role's own permissions include any staff power. */
-export function isDangerousRole(role) {
-  try {
-    const perms = role?.permissions;
-    // A raw API role carries a string here, which has no usable has(): not judged dangerous.
-    if (typeof perms?.has !== 'function') return false;
-    return DANGEROUS_PERMISSIONS.some((p) => perms.has(p) === true);
-  } catch {
-    return false;
-  }
-}
-
-/** True when the member may hand out the role: the server owner, or their top role is strictly above it. */
-export function callerCanGive(guild, member, role) {
-  if (member?.id && member.id === guild?.ownerId) return true;
-  const top = member?.roles?.highest?.position;
-  return top !== undefined && role.position < top;
-}
-
-/** True when the bot can hand out this role: not @everyone, not managed, strictly below its top role. */
-export function botCanGive(guild, role) {
-  if (!role || role.id === guild.id || role.managed) return false;
-  const botTop = guild.members.me?.roles.highest.position;
-  return botTop !== undefined && role.position < botTop;
-}
+// The role-safety helpers live in core so other features (autorole) share them.
+export { botCanGive, isDangerousRole, callerCanGive } from '../../core/role-safety.js';
 
 async function hasPendingRemoval(db, guildId, userId, roleId) {
   const res = await db.query(

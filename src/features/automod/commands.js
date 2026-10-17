@@ -10,7 +10,7 @@ import {
   readConfig, setSteps, addToList, removeFromList, MAX_NATIVE_RULES, RULES, SPAM_CHECKS, MAX_STEPS,
   STRIKES_MIN, STRIKES_MAX, WINDOW_MIN, WINDOW_MAX, TIMEOUT_MIN, TIMEOUT_MAX, AGE_MIN, AGE_MAX, ROLE_MIN, ROLE_MAX,
 } from './config.js';
-import { botCanGive, isDangerousRole, callerCanGive } from './role-effect.js';
+import { botCanGive, isDangerousRole, callerCanGive } from '../../core/role-safety.js';
 import { listNativeRules } from './native.js';
 
 const SPAM_NAMES = Object.keys(SPAM_CHECKS);
