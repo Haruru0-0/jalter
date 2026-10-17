@@ -31,8 +31,8 @@ function setup(over = {}) {
   if (!deps.addHistory) delete deps.addHistory;
   const autoConfig = readConfig({ rules: { words: { enabled: true, steps: [{ strikes: 2, action: 'warn' }] } } });
   const strikes = createStrikeStore();
-  const run = (message, findings = [{ rule: 'words', reason: 'bad word' }]) =>
-    enforce({ db }, { guild, member, message, findings, autoConfig, modConfig: {}, lang: 'en', deps, strikes });
+  const run = (message, findings = [{ rule: 'words', reason: 'bad word' }], who = member) =>
+    enforce({ db }, { guild, member: who, message, findings, autoConfig, modConfig: {}, lang: 'en', deps, strikes });
   return { calls, run, strikes };
 }
 
@@ -59,12 +59,43 @@ test('enforce warns at the threshold using the findings\' rules', async () => {
   assert.equal(rows[0].caseNumber, 7);
 });
 
-test('enforce never throws when runAction rejects', async () => {
+test('enforce never throws when runAction rejects', async (t) => {
   const warn = mock.method(console, 'warn', () => {});
+  t.after(() => warn.mock.restore());
   const s = setup({ runActionThrows: true });
   await s.run(null);
   await s.run(null);
   assert.equal(s.calls.runAction.length, 1);
-  assert.equal((await listHistory(db, G)).length, 2);
-  warn.mock.restore();
+  assert.equal(s.calls.sendLog.length, 2);
+  const rows = await listHistory(db, G);
+  assert.equal(rows.length, 2);
+  assert.deepEqual(rows[0].actions, []);
+  assert.equal(rows[0].caseNumber, null);
+});
+
+test('enforce deletes a non-null message when the rule deletes', async () => {
+  const s = setup();
+  const del = mock.fn(async () => {});
+  await s.run({ id: 'm9', channelId: 'c1', delete: del });
+  assert.equal(del.mock.callCount(), 1);
+  const rows = await listHistory(db, G);
+  assert.deepEqual(rows[0].actions, ['delete']);
+  assert.equal(rows[0].messageId, 'm9');
+});
+
+test('enforce passes a falsy target and still creates a case when the member is gone', async () => {
+  const s = setup();
+  const message = { id: 'm1', channelId: 'c1', author: { id: 'u1' }, delete: async () => {} };
+  await s.run(message, undefined, null);
+  await s.run(message, undefined, null);
+  assert.equal(s.calls.runAction.length, 1);
+  assert.equal(s.calls.runAction[0].target, undefined);
+  assert.equal(s.calls.runAction[0].targetId, 'u1');
+  assert.equal((await listHistory(db, G))[0].caseNumber, 7);
+});
+
+test('enforce skips a finding whose rule is not configured', async () => {
+  const s = setup();
+  await s.run(null, [{ rule: 'nope', reason: 'x' }, { rule: 'words', reason: 'y' }]);
+  assert.deepEqual((await listHistory(db, G))[0].rules, ['words']);
 });

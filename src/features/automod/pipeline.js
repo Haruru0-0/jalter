@@ -137,7 +137,7 @@ export function createEngine(deps = {}) {
     const lang = await getLang(ctx.db, guildId);
     await enforce(ctx, {
       guild: message.guild,
-      member: member ?? { id: message.author.id },
+      member,
       message,
       findings: tripped.map((rule) => ({ rule, reason: rule })),
       autoConfig: auto,

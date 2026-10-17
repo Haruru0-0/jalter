@@ -30,8 +30,10 @@ export async function enforce(ctx, { guild, member, message, findings, autoConfi
     const now = (deps.now ?? Date.now)();
     const guildId = guild.id;
     const userId = member?.id ?? message?.author?.id;
-    const tripped = findings.map((f) => f.rule);
     const rules = autoConfig.rules;
+    // A finding for a rule missing from the config is skipped, not fatal.
+    const tripped = findings.map((f) => f.rule).filter((rule) => rules[rule]);
+    if (!tripped.length) return;
     const actions = [];
     let caseNumber = null;
 
@@ -74,7 +76,7 @@ export async function enforce(ctx, { guild, member, message, findings, autoConfi
         actor: guild.members.me,
         type: best.action,
         targetId: userId,
-        target: member,
+        target: member ?? undefined,
         config: modConfig,
         lang,
         reason: t(lang, 'automod.reason', { rules: crossed.map((c) => c.rule).join(', ') }),
