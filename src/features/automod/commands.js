@@ -7,10 +7,11 @@ import { parseDuration, formatDuration } from '../../core/duration.js';
 import { capList } from '../../core/lists.js';
 import { t } from '../../i18n/index.js';
 import {
-  readConfig, setSteps, RULES, SPAM_CHECKS, MAX_STEPS,
+  readConfig, setSteps, addToList, removeFromList, MAX_NATIVE_RULES, RULES, SPAM_CHECKS, MAX_STEPS,
   STRIKES_MIN, STRIKES_MAX, WINDOW_MIN, WINDOW_MAX, TIMEOUT_MIN, TIMEOUT_MAX, AGE_MIN, AGE_MAX, ROLE_MIN, ROLE_MAX,
 } from './config.js';
 import { botCanGive } from './role-effect.js';
+import { listNativeRules } from './native.js';
 
 const SPAM_NAMES = Object.keys(SPAM_CHECKS);
 /** The primary number of each spam check, which /automod spam-limit sets. */
@@ -55,6 +56,8 @@ const stateOption = (o) =>
 const ruleOption = (o) =>
   o.setName('rule').setDescription('The rule').setRequired(true)
     .addChoices(...RULES.map((r) => ({ name: r, value: r })));
+const nativeIdOption = (o) =>
+  o.setName('id').setDescription('The AutoMod rule id (see /automod native list)').setMaxLength(32).setRequired(true);
 const checkOption = (o) =>
   o.setName('check').setDescription('The spam check').setRequired(true)
     .addChoices(...SPAM_NAMES.map((c) => ({ name: c, value: c })));
@@ -113,7 +116,13 @@ export function addSettingsSubcommands(builder) {
         .addChannelOption((o) =>
           o.setName('channel').setDescription('The trap channel')
             .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement))
-        .addBooleanOption((o) => o.setName('off').setDescription('Stop using a trap channel')));
+        .addBooleanOption((o) => o.setName('off').setDescription('Stop using a trap channel')))
+    .addSubcommandGroup((g) => g.setName('native').setDescription('React to the rules of Discord AutoMod')
+      .addSubcommand((s) => s.setName('list').setDescription('Show the AutoMod rules of this server'))
+      .addSubcommand((s) => s.setName('add-rule').setDescription('React only to this AutoMod rule')
+        .addStringOption(nativeIdOption))
+      .addSubcommand((s) => s.setName('remove-rule').setDescription('Stop reacting to this AutoMod rule')
+        .addStringOption(nativeIdOption)));
 }
 
 export const reply = (interaction, content) => {
@@ -172,6 +181,9 @@ export function statusText(lang, enabled, config) {
     }
     if (rule === 'honeypot') {
       lines.push(t(lang, 'automod.settings.honeypot_line', { channel: r.channelId ? `<#${r.channelId}>` : none }));
+    }
+    if (rule === 'native') {
+      lines.push(t(lang, 'automod.settings.native_line', { rules: r.ruleIds.length ? r.ruleIds.join(', ') : t(lang, 'automod.settings.native_all') }));
     }
     if (rule === 'links' || rule === 'invites') {
       lines.push(t(lang, r.blockAllExceptAllowed ? 'automod.settings.mode_allowlist' : 'automod.settings.mode_blocklist'));
@@ -303,6 +315,45 @@ export const settingsHandlers = {
   },
 };
 
+const SNOWFLAKE = /^\d{17,20}$/;
+
+/** Handlers of /automod native: each gets (interaction, { lang, config, save }). */
+export const nativeHandlers = {
+  async list(i, { lang, config }) {
+    const rules = await listNativeRules(i.guild);
+    if (!rules.length) return reply(i, t(lang, 'automod.native.none'));
+    const onOff = (v) => t(lang, v ? 'common.on' : 'common.off');
+    const lines = rules.map((r) => t(lang, 'automod.native.line', { id: r.id, name: r.name, state: onOff(r.enabled) }));
+    const tracked = config.rules.native.ruleIds;
+    const out = [
+      `**${t(lang, 'automod.native.title')}**`,
+      ...lines,
+      t(lang, 'automod.settings.native_line', { rules: tracked.length ? tracked.join(', ') : t(lang, 'automod.settings.native_all') }),
+    ].join('\n');
+    return reply(i, out.length > STATUS_MAX ? `${out.slice(0, STATUS_MAX - 1)}…` : out);
+  },
+
+  async 'add-rule'(i, { lang, config, save }) {
+    const id = String(i.options.getString('id', true)).trim();
+    if (!SNOWFLAKE.test(id)) return reply(i, t(lang, 'automod.native.bad_id'));
+    const result = addToList(config, 'native.ruleIds', id);
+    if (!result.ok) {
+      return reply(i, t(lang, result.reason === 'exists' ? 'automod.native.exists' : 'automod.native.full', { max: MAX_NATIVE_RULES }));
+    }
+    await save(result.config);
+    return reply(i, t(lang, 'automod.native.added', { id }));
+  },
+
+  async 'remove-rule'(i, { lang, config, save }) {
+    const id = String(i.options.getString('id', true)).trim();
+    if (!SNOWFLAKE.test(id)) return reply(i, t(lang, 'automod.native.bad_id'));
+    const result = removeFromList(config, 'native.ruleIds', id);
+    if (!result.ok) return reply(i, t(lang, 'automod.native.missing'));
+    await save(result.config);
+    return reply(i, t(lang, 'automod.native.removed', { id }));
+  },
+};
+
 /**
  * Builds the /automod command. Task 12 passes `extend` (adds subcommands/groups to the builder)
  * and `handlers` ({ subName: fn }) and/or `groupHandlers` ({ groupName: { subName: fn } }).
@@ -312,6 +363,7 @@ export function createAutomodCommand({ extend = (b) => b, handlers = {}, groupHa
     new SlashCommandBuilder().setName('automod').setDescription('Auto-mod settings'),
   ));
   const table = { ...settingsHandlers, ...handlers };
+  const groups = { native: nativeHandlers, ...groupHandlers };
 
   async function execute(interaction, ctx) {
     const sub = interaction.options.getSubcommand();
@@ -323,7 +375,7 @@ export function createAutomodCommand({ extend = (b) => b, handlers = {}, groupHa
     const { enabled, config: raw } = await getFeature(ctx.db, guildId, 'automod');
     const config = readConfig(raw);
     const save = (next) => setFeature(ctx.db, guildId, 'automod', { config: readConfig(next) });
-    const handler = group ? (Object.hasOwn(groupHandlers, group) && Object.hasOwn(groupHandlers[group], sub) ? groupHandlers[group][sub] : undefined) : Object.hasOwn(table, sub) ? table[sub] : undefined;
+    const handler = group ? (Object.hasOwn(groups, group) && Object.hasOwn(groups[group], sub) ? groups[group][sub] : undefined) : Object.hasOwn(table, sub) ? table[sub] : undefined;
     if (!handler) return reply(interaction, t(lang, 'automod.error.generic'));
     return handler(interaction, { ctx, lang, enabled, config, save });
   }

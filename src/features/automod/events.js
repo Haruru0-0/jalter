@@ -2,6 +2,7 @@
 import { Events } from 'discord.js';
 import { safe } from '../logging/send-log.js';
 import { createEngine } from './pipeline.js';
+import { createNativeHandler } from './native.js';
 
 const SWEEP_MS = 60_000;
 
@@ -28,7 +29,7 @@ export function stopAutomodSweep() {
 }
 
 /** Builds the event list around an engine (tests pass a fake one). */
-export function createEvents(engine) {
+export function createEvents(engine, native = createNativeHandler({ strikes: engine.strikes })) {
   const onCreate = safe('automodMessageCreate', async (ctx, message) => {
     startAutomodSweep(engine);
     await engine.handleMessage(ctx, message, { edited: false });
@@ -58,11 +59,18 @@ export function createEvents(engine) {
     await engine.checkMember(ctx, newMember);
   });
 
+  // Discord's own AutoMod fired. Needs the AutoModerationExecution intent.
+  const onNativeExecution = safe('automodNativeExecution', async (ctx, execution) => {
+    startAutomodSweep(engine);
+    await native.handle(ctx, execution);
+  });
+
   return [
     { name: Events.MessageCreate, execute: onCreate },
     { name: Events.MessageUpdate, execute: onUpdate },
     { name: Events.GuildMemberAdd, execute: onMemberAdd },
     { name: Events.GuildMemberUpdate, execute: onMemberUpdate },
+    { name: Events.AutoModerationActionExecution, execute: onNativeExecution },
   ];
 }
 

@@ -20,6 +20,7 @@ const client = new Client({
     GatewayIntentBits.GuildExpressions,
     GatewayIntentBits.GuildModeration,
     GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.AutoModerationExecution,
   ],
   partials: [Partials.Message, Partials.Channel, Partials.GuildMember, Partials.User],
 });

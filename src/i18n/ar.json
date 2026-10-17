@@ -493,5 +493,17 @@
   "automod.patterns.count": "الأنماط ({count}): {patterns}",
   "automod.history.title": "آخر إجراءات الإشراف التلقائي",
   "automod.history.empty": "لا توجد إجراءات إشراف تلقائي مسجلة.",
-  "automod.history.line": "{user} | {rules} | {actions} | الحالة {case} | {time}"
+  "automod.history.line": "{user} | {rules} | {actions} | الحالة {case} | {time}",
+  "automod.rule.native": "أوتو مود ديسكورد",
+  "automod.settings.native_line": "قواعد أوتو مود ديسكورد المتابعة: {rules}",
+  "automod.settings.native_all": "الكل",
+  "automod.native.title": "قواعد أوتو مود ديسكورد",
+  "automod.native.line": "{id} | {name} | {state}",
+  "automod.native.none": "لم أجد أي قاعدة من أوتو مود ديسكورد. إما أن السيرفر لا يملك أي قاعدة، أو لا أستطيع رؤيتها: أحتاج إلى صلاحية إدارة السيرفر لقراءتها.",
+  "automod.native.bad_id": "هذا ليس معرّف قاعدة. انسخ الرقم من الأمر /automod native list.",
+  "automod.native.added": "أصبحت قاعدة أوتو مود ديسكورد {id} متابعة الآن. فعّل القاعدة بالأمر /automod rule.",
+  "automod.native.removed": "لم تعد قاعدة أوتو مود ديسكورد {id} متابعة. إذا أصبحت القائمة فارغة فستُحتسب كل قواعد أوتو مود ديسكورد.",
+  "automod.native.exists": "هذه القاعدة موجودة في القائمة بالفعل.",
+  "automod.native.missing": "هذه القاعدة غير موجودة في القائمة.",
+  "automod.native.full": "القائمة ممتلئة (حتى {max} قاعدة). أزل قاعدة أولاً."
 }

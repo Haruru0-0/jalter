@@ -493,5 +493,17 @@
   "automod.patterns.count": "Patterns ({count}): {patterns}",
   "automod.history.title": "Recent auto-mod actions",
   "automod.history.empty": "No auto-mod actions recorded.",
-  "automod.history.line": "{user} | {rules} | {actions} | case {case} | {time}"
+  "automod.history.line": "{user} | {rules} | {actions} | case {case} | {time}",
+  "automod.rule.native": "Discord AutoMod",
+  "automod.settings.native_line": "Discord AutoMod rules followed: {rules}",
+  "automod.settings.native_all": "all",
+  "automod.native.title": "Discord AutoMod rules",
+  "automod.native.line": "{id} | {name} | {state}",
+  "automod.native.none": "I found no Discord AutoMod rules. Either the server has none, or I cannot see them: I need the Manage Server permission to read them.",
+  "automod.native.bad_id": "That is not a rule id. Copy the number from /automod native list.",
+  "automod.native.added": "Now following Discord AutoMod rule {id}. Turn the rule on with /automod rule.",
+  "automod.native.removed": "No longer following Discord AutoMod rule {id}. With no rules left in the list, every Discord AutoMod rule counts.",
+  "automod.native.exists": "That rule is already in the list.",
+  "automod.native.missing": "That rule is not in the list.",
+  "automod.native.full": "The list is full (up to {max} rules). Remove one first."
 }

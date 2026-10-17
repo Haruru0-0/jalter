@@ -493,5 +493,17 @@
   "automod.patterns.count": "Motifs ({count}) : {patterns}",
   "automod.history.title": "Actions récentes de l'auto-modération",
   "automod.history.empty": "Aucune action d'auto-modération enregistrée.",
-  "automod.history.line": "{user} | {rules} | {actions} | cas {case} | {time}"
+  "automod.history.line": "{user} | {rules} | {actions} | cas {case} | {time}",
+  "automod.rule.native": "AutoMod de Discord",
+  "automod.settings.native_line": "Règles AutoMod de Discord suivies : {rules}",
+  "automod.settings.native_all": "toutes",
+  "automod.native.title": "Règles AutoMod de Discord",
+  "automod.native.line": "{id} | {name} | {state}",
+  "automod.native.none": "Je n'ai trouvé aucune règle AutoMod de Discord. Soit le serveur n'en a pas, soit je ne peux pas les voir : il me faut la permission Gérer le serveur pour les lire.",
+  "automod.native.bad_id": "Ce n'est pas un identifiant de règle. Copiez le numéro depuis /automod native list.",
+  "automod.native.added": "La règle AutoMod de Discord {id} est maintenant suivie. Activez la règle avec /automod rule.",
+  "automod.native.removed": "La règle AutoMod de Discord {id} n'est plus suivie. Si la liste est vide, toutes les règles AutoMod de Discord comptent.",
+  "automod.native.exists": "Cette règle est déjà dans la liste.",
+  "automod.native.missing": "Cette règle n'est pas dans la liste.",
+  "automod.native.full": "La liste est pleine (jusqu'à {max} règles). Retirez-en une d'abord."
 }

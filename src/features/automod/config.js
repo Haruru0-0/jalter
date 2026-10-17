@@ -1,11 +1,12 @@
 import { validatePattern } from './regex-safe.js';
 
-export const RULES = ['spam', 'invites', 'links', 'words', 'honeypot'];
+export const RULES = ['spam', 'invites', 'links', 'words', 'honeypot', 'native'];
 
 export const MAX_EXEMPT_ROLES = 10;
 export const MAX_EXEMPT_CHANNELS = 20;
 export const MAX_LIST = 100;
 export const MAX_PATTERNS = 10;
+export const MAX_NATIVE_RULES = 25;
 export const MAX_STEPS = 8;
 export const AGE_MIN = 60;
 export const AGE_MAX = 315_360_000; // 10 years
@@ -79,7 +80,8 @@ function readRule(raw, rule) {
   const r = obj(raw);
   const out = {
     enabled: bool(r.enabled, false),
-    delete: bool(r.delete, true),
+    // Discord's own AutoMod already blocks or flags the message, so deleting again is opt-in.
+    delete: bool(r.delete, rule !== 'native'),
     windowSeconds: intIn(r.windowSeconds, WINDOW_MIN, WINDOW_MAX, 600),
     steps: readSteps(r.steps, rule),
     giveRole: {
@@ -107,6 +109,7 @@ function readRule(raw, rule) {
   if (rule === 'honeypot') {
     out.channelId = typeof r.channelId === 'string' && r.channelId !== '' ? r.channelId : null;
   }
+  if (rule === 'native') out.ruleIds = cleanList(r.ruleIds, MAX_NATIVE_RULES);
   if (rule === 'words') {
     out.custom = cleanList(r.custom, MAX_LIST);
     out.removedBuiltin = cleanList(r.removedBuiltin, MAX_LIST);
@@ -142,6 +145,7 @@ const LISTS = {
   'words.custom': { rule: 'words', key: 'custom', max: MAX_LIST },
   'words.removedBuiltin': { rule: 'words', key: 'removedBuiltin', max: MAX_LIST },
   'words.patterns': { rule: 'words', key: 'patterns', max: MAX_PATTERNS },
+  'native.ruleIds': { rule: 'native', key: 'ruleIds', max: MAX_NATIVE_RULES },
 };
 
 const getList = (config, path) => {
