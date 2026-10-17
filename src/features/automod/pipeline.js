@@ -128,9 +128,10 @@ export function createEngine(deps = {}) {
     if (isExempt(member, message.channel, auto, mod, managerRoleId)) return;
 
     // A post in the honeypot channel is punished at once, before any scan. Exemptions above still apply,
-    // and the rule's age limits work like any other rule's.
+    // and the rule's age limits work like any other rule's. An edit or update (embed unfurl, pin) is not
+    // a new post, so it never re-triggers the trap.
     const now = clock();
-    const trapped = passesAge(member, auto.rules.honeypot, now) ? honeypotFinding(message, auto) : null;
+    const trapped = !opts?.edited && passesAge(member, auto.rules.honeypot, now) ? honeypotFinding(message, auto) : null;
     if (trapped) {
       const lang = await getLang(ctx.db, guildId);
       await enforce(ctx, {

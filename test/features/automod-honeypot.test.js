@@ -88,6 +88,19 @@ test('the first post deletes and times out with the default steps', async () => 
   assert.equal(s.calls.runAction[0].targetId, 'u1');
 });
 
+test('an edit or update of a trapped message is not punished again; a fresh post still is', async () => {
+  const s = setup();
+  await enable();
+  // discord.js fires MessageUpdate for an embed unfurl or a pin, with the content unchanged or not.
+  await s.engine.handleMessage(s.ctx, s.msg(), { edited: true, oldContent: 'hello' });
+  await s.engine.handleMessage(s.ctx, s.msg({ content: 'changed' }), { edited: true, oldContent: 'hello' });
+  assert.equal(s.calls.runAction.length, 0);
+  assert.equal(s.calls.deleted, 0);
+  await s.engine.handleMessage(s.ctx, s.msg({ id: 'm2' }), {});
+  assert.equal(s.calls.runAction.length, 1);
+  assert.equal(s.calls.deleted, 1);
+});
+
 test('a post elsewhere in the same server is left alone', async () => {
   const s = setup();
   await enable();
