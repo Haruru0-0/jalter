@@ -10,7 +10,7 @@ import { createStrikeStore } from './strikes.js';
 import { enforce, attempt, warn } from './enforce.js';
 import { createSpamTracker } from './detect-spam.js';
 import { extractLinks, extractInviteCodes, evaluateLinks, evaluateInvites } from './detect-links.js';
-import { effectiveWords, findBadWord } from './detect-words.js';
+import { effectiveWords, findBadWord, findPattern } from './detect-words.js';
 import { isExempt } from './exempt.js';
 import { checkMember as realCheckMember } from './nickname.js';
 
@@ -77,9 +77,10 @@ export function createEngine(deps = {}) {
   const lastRenamed = new Map();
   const checkMember = (ctx, member) => checkMemberImpl(ctx, member, { lastRenamed, sendLog, now: clock });
 
-  /** Returns the names of rules the message trips, cheap rules first, invites last. */
+  /** Returns the findings [{ rule, reason }] for the rules the message trips, cheap rules first, invites last. */
   async function evaluate(ctx, message, content, rules, now, edited) {
     const tripped = [];
+    const trip = (rule, reason = rule) => tripped.push({ rule, reason });
     if (rules.spam.enabled) {
       const mentions = (message.mentions?.users?.size ?? 0) + (message.mentions?.roles?.size ?? 0);
       const found = spam.check({
@@ -91,16 +92,19 @@ export function createEngine(deps = {}) {
         attachmentCount: message.attachments?.size ?? 0,
         linkCount: extractLinks(content).length + extractInviteCodes(content).length,
       }, rules.spam, now, { edited });
-      if (found.length) tripped.push('spam');
+      if (found.length) trip('spam');
     }
-    if (rules.words.enabled && findBadWord(content, effectiveWords(rules.words))) tripped.push('words');
-    if (rules.links.enabled && evaluateLinks(content, rules.links).violated) tripped.push('links');
+    if (rules.words.enabled) {
+      if (findBadWord(content, effectiveWords(rules.words))) trip('words');
+      else if (message.guildId && findPattern(content, rules.words, message.guildId)) trip('words', 'pattern');
+    }
+    if (rules.links.enabled && evaluateLinks(content, rules.links).violated) trip('links');
     if (rules.invites.enabled && extractInviteCodes(content).length) {
       const result = await evaluateInvites(content, rules.invites, {
         ownGuildId: message.guildId,
         resolve: (code) => resolveInvite(code, ctx),
       });
-      if (result.violated) tripped.push('invites');
+      if (result.violated) trip('invites');
     }
     return tripped;
   }
@@ -139,7 +143,7 @@ export function createEngine(deps = {}) {
       guild: message.guild,
       member,
       message,
-      findings: tripped.map((rule) => ({ rule, reason: rule })),
+      findings: tripped,
       autoConfig: auto,
       modConfig: mod,
       lang,

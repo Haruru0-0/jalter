@@ -1,11 +1,11 @@
-// Auto-mod nickname check: replaces a nickname (or username) containing a listed word with a placeholder.
+// Auto-mod nickname check: replaces a nickname (or username) containing a listed word or pattern with a placeholder.
 import { randomInt } from 'node:crypto';
 import { getFeature } from '../../db/settings.js';
 import { getLang, t } from '../../i18n/index.js';
 import { readConfig as readModConfig } from '../moderation/config.js';
 import { sendLog as realSendLog } from '../logging/send-log.js';
 import { readConfig } from './config.js';
-import { effectiveWords, findBadWord } from './detect-words.js';
+import { effectiveWords, findBadWord, findPattern } from './detect-words.js';
 import { isExempt } from './exempt.js';
 
 const RENAME_COOLDOWN_MS = 10_000;
@@ -37,7 +37,9 @@ export async function checkMember(ctx, member, { lastRenamed = new Map(), sendLo
 
     const words = effectiveWords(auto.rules.words);
     const texts = [member.nickname ?? member.displayName ?? member.user.username, member.user.username];
-    if (!texts.some((text) => typeof text === 'string' && findBadWord(text, words))) return;
+    const bad = (text) => typeof text === 'string'
+      && (findBadWord(text, words) || findPattern(text, auto.rules.words, guildId));
+    if (!texts.some(bad)) return;
 
     const at = now();
     const key = `${guildId}:${member.id}`;

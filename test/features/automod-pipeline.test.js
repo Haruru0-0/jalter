@@ -444,3 +444,13 @@ test('engine.prune prunes strikes and spam', async () => {
   s.engine.prune(1_000_000 + 86_400_000 + 1);
   assert.equal(s.engine.strikes.size(), 0);
 });
+
+test('a pattern match trips the words rule', async () => {
+  const s = setup();
+  await enable({ words: words({ custom: [], patterns: ['b[a4]d[0-9]+'] }) });
+  await s.engine.handleMessage(s.ctx, s.msg({ content: 'hello BAD123 there' }), {});
+  assert.equal(s.calls.deleted, 1);
+  assert.equal(s.engine.strikes.size(), 1);
+  await s.engine.handleMessage(s.ctx, s.msg({ content: 'perfectly fine' }), {});
+  assert.equal(s.calls.deleted, 1);
+});

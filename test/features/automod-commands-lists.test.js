@@ -44,10 +44,11 @@ const letters = (n) => `${String.fromCharCode(97 + (n % 26))}${String.fromCharCo
 
 test('structure: groups and subcommands exist and descriptions fit', () => {
   const names = json.options.map((o) => o.name);
-  for (const n of ['exempt', 'words', 'domains', 'mode', 'history']) assert.ok(names.includes(n), n);
+  for (const n of ['exempt', 'words', 'patterns', 'domains', 'mode', 'history']) assert.ok(names.includes(n), n);
   const sub = (g) => json.options.find((o) => o.name === g).options.map((o) => o.name);
   assert.deepEqual(sub('exempt'), ['add-role', 'remove-role', 'add-channel', 'remove-channel']);
   assert.deepEqual(sub('words'), ['add', 'remove', 'builtin-remove', 'builtin-restore', 'builtin', 'list']);
+  assert.deepEqual(sub('patterns'), ['add', 'remove', 'list']);
   const walk = (o) => {
     assert.ok(o.description.length >= 1 && o.description.length <= 100, o.name);
     for (const c of o.options ?? []) walk(c);
@@ -247,4 +248,55 @@ test('non-managers are refused for the new subcommands', async () => {
   h.member.permissions.has = () => false;
   await run(h);
   assert.equal(text(h), t('en', 'common.notAllowed'));
+});
+
+test('patterns add stores a valid pattern and reports each failure reason', async () => {
+  const ok = fake('patterns', 'add', { strings: { pattern: 'b[a4]d[0-9]+' } });
+  await run(ok);
+  assert.deepEqual((await saved()).rules.words.patterns, ['b[a4]d[0-9]+']);
+  assert.equal(text(ok), t('en', 'automod.patterns.added', { pattern: 'b[a4]d[0-9]+' }));
+  const dup = fake('patterns', 'add', { strings: { pattern: 'b[a4]d[0-9]+' } });
+  await run(dup);
+  assert.equal(text(dup), t('en', 'automod.patterns.exists'));
+  const long = fake('patterns', 'add', { strings: { pattern: 'a'.repeat(251) } });
+  await run(long);
+  assert.equal(text(long), t('en', 'automod.patterns.too_long'));
+});
+
+test('patterns add rejects an invalid pattern with the invalid message', async () => {
+  for (const bad of ['(unclosed', '(a)\\1', '(?=x)y']) {
+    const i = fake('patterns', 'add', { strings: { pattern: bad } });
+    await run(i);
+    assert.equal(text(i), t('en', 'automod.patterns.invalid'), bad);
+  }
+  assert.deepEqual((await saved()).rules.words.patterns, []);
+});
+
+test('patterns add stops at the cap', async () => {
+  for (let n = 0; n < 10; n += 1) await run(fake('patterns', 'add', { strings: { pattern: `word${n}` } }));
+  const i = fake('patterns', 'add', { strings: { pattern: 'extra' } });
+  await run(i);
+  assert.equal(text(i), t('en', 'automod.patterns.full'));
+});
+
+test('patterns list shows the patterns', async () => {
+  const empty = fake('patterns', 'list');
+  await run(empty);
+  assert.ok(text(empty).includes(t('en', 'automod.lists.none')));
+  await run(fake('patterns', 'add', { strings: { pattern: 'b[a4]d[0-9]+' } }));
+  const i = fake('patterns', 'list');
+  await run(i);
+  assert.ok(text(i).includes('`b[a4]d[0-9]+`'));
+  assert.ok(text(i).includes('1'));
+});
+
+test('patterns remove deletes one', async () => {
+  await run(fake('patterns', 'add', { strings: { pattern: 'abc+' } }));
+  const i = fake('patterns', 'remove', { strings: { pattern: 'abc+' } });
+  await run(i);
+  assert.deepEqual((await saved()).rules.words.patterns, []);
+  assert.equal(text(i), t('en', 'automod.patterns.removed', { pattern: 'abc+' }));
+  const miss = fake('patterns', 'remove', { strings: { pattern: 'abc+' } });
+  await run(miss);
+  assert.equal(text(miss), t('en', 'automod.lists.missing'));
 });

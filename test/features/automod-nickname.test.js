@@ -61,6 +61,17 @@ test('renames a bad nickname', async () => {
   assert.ok(!JSON.stringify(logs[0].embed).includes('@everyone'));
 });
 
+test('a pattern match renames a nickname', async () => {
+  await setFeature(db, G, 'automod', {
+    enabled: true,
+    config: { rules: { words: { enabled: true, custom: [], useBuiltin: false, patterns: ['b[a4]d[0-9]+'] } }, nickname: { enabled: true } },
+  });
+  const { member, sets } = mk({ member: { nickname: 'xx BAD99 xx' } });
+  await run(member);
+  assert.equal(sets.length, 1);
+  assert.match(sets[0].name, /^Moderated Nickname \d{4}$/);
+});
+
 test('checks the username when there is no nickname', async () => {
   await enable();
   const { member, sets } = mk({ member: { displayName: 'badword', user: { id: 'u1', username: 'badword', bot: false } } });

@@ -38,6 +38,8 @@ const builtinWords = () => effectiveWords({ useBuiltin: true, removedBuiltin: []
 /** Adds the lists, exemptions and history subcommands to the /automod builder. */
 export function extendWithLists(builder) {
   const word = (o) => o.setName('word').setDescription('The word or phrase').setMaxLength(200).setRequired(true);
+  const pattern = (o) => o.setName('pattern').setDescription('A regular expression, up to 250 characters')
+    .setMaxLength(250).setRequired(true);
   const type = (o) => o.setName('type').setDescription('Links or invites').setRequired(true)
     .addChoices({ name: 'links', value: 'links' }, { name: 'invites', value: 'invites' });
   const state = (o) => o.setName('state').setDescription('On or off').setRequired(true)
@@ -59,6 +61,10 @@ export function extendWithLists(builder) {
       .addSubcommand((s) => s.setName('builtin-restore').setDescription('Ban a removed built-in word again').addStringOption(word))
       .addSubcommand((s) => s.setName('builtin').setDescription('Use the built-in word list or not').addStringOption(state))
       .addSubcommand((s) => s.setName('list').setDescription('Show custom words and removed built-in words')))
+    .addSubcommandGroup((g) => g.setName('patterns').setDescription('Regex patterns the words rule also matches')
+      .addSubcommand((s) => s.setName('add').setDescription('Add a regex pattern').addStringOption(pattern))
+      .addSubcommand((s) => s.setName('remove').setDescription('Remove a regex pattern').addStringOption(pattern))
+      .addSubcommand((s) => s.setName('list').setDescription('Show the regex patterns')))
     .addSubcommand((s) => s.setName('domains').setDescription('Manage allowed and blocked links or invite servers')
       .addStringOption(type)
       .addStringOption((o) => o.setName('list').setDescription('Allow list or block list').setRequired(true)
@@ -109,6 +115,17 @@ const wordList = (items, lang) => capList(items.map((w) => `\`${w.replaceAll('`'
   max: LIST_TEXT_MAX, more: (count) => t(lang, 'automod.lists.more', { count }),
 });
 
+const patternFail = (lang, reason) => t(lang, ['too_long', 'invalid', 'exists', 'full'].includes(reason)
+  ? `automod.patterns.${reason}` : 'automod.lists.missing');
+
+const patternHandler = (mutate, okKey) => async (i, args) => {
+  const pattern = i.options.getString('pattern', true);
+  const result = mutate(args.config, 'words.patterns', pattern);
+  if (!result.ok) return reply(i, patternFail(args.lang, result.reason));
+  await args.save(result.config);
+  return reply(i, t(args.lang, okKey, { pattern: pattern.replaceAll('`', "'") }));
+};
+
 const ruleName = (lang, r) => (RULES.includes(r) ? t(lang, `automod.rule.${r}`) : String(r));
 
 export const listGroupHandlers = {
@@ -142,6 +159,18 @@ export const listGroupHandlers = {
           count: builtinWords().length,
           state: t(lang, useBuiltin ? 'common.on' : 'common.off'),
         }),
+      ].join('\n'));
+    },
+  },
+  patterns: {
+    add: patternHandler(addToList, 'automod.patterns.added'),
+    remove: patternHandler(removeFromList, 'automod.patterns.removed'),
+
+    list(i, { lang, config }) {
+      const { patterns } = config.rules.words;
+      return reply(i, [
+        `**${t(lang, 'automod.patterns.title')}**`,
+        t(lang, 'automod.patterns.count', { count: patterns.length, patterns: patterns.length ? wordList(patterns, lang) : t(lang, 'automod.lists.none') }),
       ].join('\n'));
     },
   },
