@@ -329,7 +329,7 @@ Add the keys `verification.log.member`, `.actor`, `.detail`, `.setup`, `.rollout
 - [ ] **Step 1: Append** this one bullet at the end of the invite list section (verbatim):
 
 ```markdown
-- Verification: Manage Roles (creates and grants the Verified role, which must sit below the bot's top role), Manage Channels (creates the verify channel and edits channel overwrites), View Channel, Send Messages, Embed Links and Attach Files (the verify message and the captcha image). Run `npm run deploy` to register `/verification`; migration 008 runs on the next start.
+- Verification: Manage Roles (creates and grants the Verified role, which must sit below the bot's top role), Manage Channels (creates the verify channel and edits channel overwrites), View Channel, Send Messages, Embed Links and Attach Files (the verify message and the captcha image). Run `npm run deploy` to register `/verification`.
 ```
 
 - [ ] **Step 2: Commit** `docs: verification invite list in the setup guide`.
