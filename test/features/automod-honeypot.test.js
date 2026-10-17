@@ -234,6 +234,14 @@ test('command warns when the chosen channel is exempt, but still saves it', asyn
   assert.ok(text(i).includes(t('en', 'automod.settings.honeypot_exempt')));
 });
 
+test('command warns when the chosen channel sits under an exempt category, but still saves it', async () => {
+  await setFeature(db, G, 'automod', { enabled: true, config: { exemptChannels: ['cat1'] } });
+  const i = fake('honeypot', { channel: { ...chan(['ViewChannel', 'ManageMessages']), parentId: 'cat1' } });
+  await cmd.execute(i, { db });
+  assert.equal((await saved()).channelId, 'c9');
+  assert.ok(text(i).includes(t('en', 'automod.settings.honeypot_exempt')));
+});
+
 test('command off clears the channel', async () => {
   await cmd.execute(fake('honeypot', { channel: chan(['ViewChannel', 'ManageMessages']) }), { db });
   const i = fake('honeypot', { off: true });
