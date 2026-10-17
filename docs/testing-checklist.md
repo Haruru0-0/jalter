@@ -77,6 +77,7 @@ Repeat for `greet`, `leave` and `boost` (leave has no `dm` option).
 - [ ] `/autorole timed add delay:1d role:<role>`, add a new account, then `/autorole timed remove role:<role>`: the waiting member never gets it.
 - [ ] `/autorole reassign state:on`: give a member a role, they leave and rejoin, the roles come back. With `state:off` they do not.
 - [ ] With reassign on, `/autorole blacklist add` a role: it is not given back. `blacklist remove` allows it again.
+- [ ] `/autorole add` and `/autorole timed add` refuse @everyone, a bot-managed role, a role at or above the bot's top role, a role with staff permissions (such as Administrator or Ban Members) and a role at or above your own top role (unless you own the server); a harmless lower role is accepted.
 - [ ] `/autorole disable` turns it off; `/autorole add` turns it back on.
 
 ## 9. Logging
