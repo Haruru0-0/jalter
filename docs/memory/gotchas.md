@@ -41,3 +41,5 @@
 - Auto-mod timed role: a role with staff permissions (Administrator, Manage Server, Manage Roles, Ban, Kick, Moderate Members, Manage Channels, Manage Messages, Manage Webhooks, Mention Everyone) is refused at `/automod role` and again at grant time (console warning, not given), since bot-manager-role holders pass the guard without Manage Roles. Setup also needs the caller's top role above the role, unless they own the server.
 - Auto-mod strikes (message, honeypot and native) live in memory and are lost on restart; only history is stored.
 - Invite permissions now also include Manage Server (optional, only for the auto-mod `native` rule); Manage Roles is also used by the auto-mod timed role. `docs/discord-bot-setup.md` is updated.
+- Auto-mod regex: `re2` is imported at module top level, so a missing native binary stops the whole bot at startup (fail-fast) rather than disabling only the regex checks.
+- Auto-mod timed role: the staff-permission check looks at the role's server-wide permissions only; channel overwrites are not considered.

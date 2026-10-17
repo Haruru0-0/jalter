@@ -226,6 +226,14 @@ test('command refuses a channel the bot cannot manage', async () => {
   assert.equal(text(noPerms), t('en', 'automod.settings.honeypot_no_access'));
 });
 
+test('command warns when the chosen channel is exempt, but still saves it', async () => {
+  await setFeature(db, G, 'automod', { enabled: true, config: { exemptChannels: ['c9'] } });
+  const i = fake('honeypot', { channel: chan(['ViewChannel', 'ManageMessages']) });
+  await cmd.execute(i, { db });
+  assert.equal((await saved()).channelId, 'c9');
+  assert.ok(text(i).includes(t('en', 'automod.settings.honeypot_exempt')));
+});
+
 test('command off clears the channel', async () => {
   await cmd.execute(fake('honeypot', { channel: chan(['ViewChannel', 'ManageMessages']) }), { db });
   const i = fake('honeypot', { off: true });

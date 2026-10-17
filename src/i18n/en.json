@@ -447,6 +447,7 @@
   "automod.settings.role_above_you": "That role is not below your highest role, so you cannot set it as a punishment role.",
   "automod.settings.role_line": "Gives {role} for {duration}",
   "automod.settings.honeypot_set": "{channel} is now the honeypot channel. Anyone who posts there is punished, so keep it hidden from members who should not be punished. Turn the rule on with /automod rule.",
+  "automod.settings.honeypot_exempt": "That channel is exempt from auto-mod, so the trap will never fire while it stays exempt. Remove it from the exempt channels first.",
   "automod.settings.honeypot_off": "The honeypot channel is cleared.",
   "automod.settings.honeypot_missing": "Pick a channel, or set off to true to stop using one.",
   "automod.settings.honeypot_no_access": "I need to see that channel and have Manage Messages in it. Fix my permissions there first.",

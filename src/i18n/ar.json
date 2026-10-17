@@ -447,6 +447,7 @@
   "automod.settings.role_above_you": "هذه الرتبة ليست أدنى من أعلى رتبة لديك، لذلك لا يمكنك تعيينها كرتبة عقوبة.",
   "automod.settings.role_line": "تمنح {role} لمدة {duration}",
   "automod.settings.honeypot_set": "{channel} هي الآن قناة الفخ. كل من يكتب فيها يُعاقَب، لذا أبقِها مخفية عن الأعضاء الذين يجب ألا يُعاقَبوا. فعّل القاعدة بالأمر /automod rule.",
+  "automod.settings.honeypot_exempt": "هذه القناة مستثناة من الإشراف التلقائي، لذا لن يعمل الفخ ما دامت مستثناة. أزلها أولاً من القنوات المستثناة.",
   "automod.settings.honeypot_off": "تمت إزالة قناة الفخ.",
   "automod.settings.honeypot_missing": "اختر قناة، أو اضبط off على true لإيقاف استخدامها.",
   "automod.settings.honeypot_no_access": "أحتاج إلى رؤية تلك القناة وامتلاك صلاحية إدارة الرسائل فيها. صحّح صلاحياتي هناك أولاً.",

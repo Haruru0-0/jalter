@@ -447,6 +447,7 @@
   "automod.settings.role_above_you": "Ce rôle n'est pas en dessous de votre rôle le plus élevé, vous ne pouvez donc pas le choisir comme rôle de sanction.",
   "automod.settings.role_line": "Donne {role} pendant {duration}",
   "automod.settings.honeypot_set": "{channel} est maintenant le salon piège. Toute personne qui y écrit est sanctionnée : gardez-le caché aux membres qui ne doivent pas l'être. Activez la règle avec /automod rule.",
+  "automod.settings.honeypot_exempt": "Ce salon est exclu de l'auto-mod : le piège ne se déclenchera jamais tant qu'il le reste. Retirez-le d'abord des salons exclus.",
   "automod.settings.honeypot_off": "Le salon piège est retiré.",
   "automod.settings.honeypot_missing": "Choisissez un salon, ou mettez off sur true pour arrêter d'en utiliser un.",
   "automod.settings.honeypot_no_access": "Je dois voir ce salon et avoir la permission Gérer les messages dedans. Corrigez d'abord mes permissions là-bas.",

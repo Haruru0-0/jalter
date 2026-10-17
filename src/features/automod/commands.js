@@ -307,7 +307,10 @@ export const settingsHandlers = {
     const perms = channel.permissionsFor?.(i.guild?.members?.me);
     if (!perms?.has('ViewChannel') || !perms.has('ManageMessages')) return reply(i, t(lang, 'automod.settings.honeypot_no_access'));
     await save(withRule(config, 'honeypot', { channelId: channel.id }));
-    return reply(i, t(lang, 'automod.settings.honeypot_set', { channel: `<#${channel.id}>` }));
+    // An exempt channel (or one under an exempt category) is never checked, so the trap would not fire.
+    const exempt = config.exemptChannels.includes(channel.id) || (channel.parentId && config.exemptChannels.includes(channel.parentId));
+    const note = exempt ? ` ${t(lang, 'automod.settings.honeypot_exempt')}` : '';
+    return reply(i, t(lang, 'automod.settings.honeypot_set', { channel: `<#${channel.id}>` }) + note);
   },
 
   async nickname(i, { lang, config, save }) {
