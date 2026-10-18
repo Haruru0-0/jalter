@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  canEveryoneView, roleViewers, planChannel, SEND_BITS,
+  canEveryoneView, everyonePerms, roleViewers, planChannel, SEND_BITS,
 } from '../../src/features/verification/plan.js';
 
 // Literal Discord permission bits, written out by hand so the tests check the
@@ -24,6 +24,9 @@ const MENTION_EVERYONE = 1n << 17n; // unrelated bit used to check preservation
 const MANAGE_CHANNELS = 1n << 4n;   // unrelated bit
 
 const EXPECTED_SEND = SEND | THREAD_SEND | PUB_THREADS | PRIV_THREADS | REACT | APP_CMDS;
+
+// Every bit @everyone could plausibly hold, so public grants are not narrowed.
+const FULL_BASE = VIEW | HISTORY | EXPECTED_SEND | CONNECT | SPEAK;
 
 const G = '100';   // guild id == @everyone role id
 const V = '200';   // Verified role id
@@ -116,7 +119,7 @@ test('existing unrelated bits in the @everyone overwrite are preserved', () => {
 
 test('public denies exactly SEND_BITS', () => {
   for (const type of [TEXT, CATEGORY, ANNOUNCE, FORUM]) {
-    const p = planChannel(snap({ type }), 'public', ids);
+    const p = planChannel(snap({ type, base: FULL_BASE }), 'public', ids);
     assert.deepEqual(p.everyone, { allow: 0n, deny: EXPECTED_SEND }, `type ${type}`);
     assert.deepEqual(p.verified, { allow: EXPECTED_SEND, deny: 0n }, `type ${type}`);
     assert.equal(p.everyone.deny & VIEW, 0n, 'public never denies View');
@@ -125,11 +128,13 @@ test('public denies exactly SEND_BITS', () => {
   // an @everyone allow of SendMessages is removed; View allow is kept
   const p = planChannel(snap({ overwrites: [ow(G, 0, VIEW | SEND | REACT, 0n)] }), 'public', ids);
   assert.deepEqual(p.everyone, { allow: VIEW, deny: EXPECTED_SEND });
+  // Verified only gets what @everyone could use before: base SEND + overwrite REACT
+  assert.deepEqual(p.verified, { allow: SEND | REACT, deny: 0n });
 });
 
 test('public voice also denies Connect and Speak', () => {
   for (const type of [VOICE, STAGE]) {
-    const p = planChannel(snap({ type }), 'public', ids);
+    const p = planChannel(snap({ type, base: FULL_BASE }), 'public', ids);
     const bits = EXPECTED_SEND | CONNECT | SPEAK;
     assert.deepEqual(p.everyone, { allow: 0n, deny: bits }, `type ${type}`);
     assert.deepEqual(p.verified, { allow: bits, deny: 0n }, `type ${type}`);
@@ -137,6 +142,54 @@ test('public voice also denies Connect and Speak', () => {
   // text channels do not get Connect/Speak
   const t = planChannel(snap({ type: TEXT }), 'public', ids);
   assert.equal(t.everyone.deny & (CONNECT | SPEAK), 0n);
+});
+
+test('public never gives Verified a bit @everyone could not already use', () => {
+  // announcement channel where @everyone is denied SendMessages and AddReactions:
+  // Verified gets no allow for those, and they are not added to Verified's deny either
+  const ann = planChannel(snap({
+    type: ANNOUNCE, base: FULL_BASE, overwrites: [ow(G, 0, 0n, SEND | REACT)],
+  }), 'public', ids);
+  assert.deepEqual(ann.everyone, { allow: 0n, deny: EXPECTED_SEND });
+  assert.deepEqual(ann.verified, { allow: EXPECTED_SEND & ~(SEND | REACT), deny: 0n });
+  assert.equal(ann.verified.allow & SEND, 0n);
+
+  // @everyone with all bits: Verified gets the full set
+  const full = planChannel(snap({ base: FULL_BASE }), 'public', ids);
+  assert.deepEqual(full.verified, { allow: EXPECTED_SEND, deny: 0n });
+
+  // guild base lacking UseApplicationCommands: not granted
+  const noCmds = planChannel(snap({ base: FULL_BASE & ~APP_CMDS }), 'public', ids);
+  assert.deepEqual(noCmds.verified, { allow: EXPECTED_SEND & ~APP_CMDS, deny: 0n });
+
+  // voice where @everyone is denied Speak by overwrite: no Speak allow for Verified
+  const voice = planChannel(snap({
+    type: VOICE, base: FULL_BASE, overwrites: [ow(G, 0, 0n, SPEAK)],
+  }), 'public', ids);
+  assert.deepEqual(voice.everyone, { allow: 0n, deny: EXPECTED_SEND | CONNECT | SPEAK });
+  assert.deepEqual(voice.verified, { allow: EXPECTED_SEND | CONNECT, deny: 0n });
+
+  // an @everyone overwrite allow restores a bit the base lacks: granted
+  const ovAllow = planChannel(snap({
+    base: VIEW, overwrites: [ow(G, 0, SEND, 0n)],
+  }), 'public', ids);
+  assert.deepEqual(ovAllow.verified, { allow: SEND, deny: 0n });
+
+  // an existing Verified deny on a bit @everyone lacked is left untouched;
+  // an existing Verified deny on a bit @everyone had moves to allow; other bits kept
+  const pre = planChannel(snap({
+    base: VIEW | SEND,
+    overwrites: [ow(V, 0, HISTORY, REACT | SEND | EMBED)],
+  }), 'public', ids);
+  assert.deepEqual(pre.verified, { allow: HISTORY | SEND, deny: REACT | EMBED });
+  assert.equal(pre.verified.allow & pre.verified.deny, 0n);
+});
+
+test('everyonePerms is the computed @everyone permission alone', () => {
+  assert.equal(everyonePerms(snap({ base: VIEW | SEND }), G), VIEW | SEND);
+  assert.equal(everyonePerms(snap({
+    base: VIEW | SEND, overwrites: [ow(G, 0, REACT, SEND), ow('555', 0, APP_CMDS, VIEW)],
+  }), G), VIEW | REACT);
 });
 
 test('verify hides the channel from Verified and gives the bot its allows', () => {

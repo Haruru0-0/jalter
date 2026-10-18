@@ -48,15 +48,20 @@ function apply(existing, { allowBits = 0n, denyBits = 0n }) {
   return { allow, deny };
 }
 
+const ALL_BITS = (1n << 64n) - 1n;
+
 // The computed permission of the @everyone role alone: the guild-level bits,
 // minus the channel's @everyone deny, plus its @everyone allow. Other roles and
-// member overwrites are ignored on purpose.
-export function canEveryoneView(snap, everyoneId) {
+// member overwrites are ignored on purpose. Administrator means every bit.
+export function everyonePerms(snap, everyoneId) {
   const base = snap.everyoneBase ?? 0n;
-  if ((base & P.Administrator) === P.Administrator) return true;
+  if ((base & P.Administrator) === P.Administrator) return ALL_BITS;
   const o = findOverwrite(snap, everyoneId, ROLE);
-  const perms = (base & ~(o?.deny ?? 0n)) | (o?.allow ?? 0n);
-  return (perms & P.ViewChannel) === P.ViewChannel;
+  return (base & ~(o?.deny ?? 0n)) | (o?.allow ?? 0n);
+}
+
+export function canEveryoneView(snap, everyoneId) {
+  return (everyonePerms(snap, everyoneId) & P.ViewChannel) === P.ViewChannel;
 }
 
 // Ids of roles other than @everyone and Verified whose overwrite in this
@@ -87,10 +92,15 @@ export function planChannel(snap, kind, { everyoneId, verifiedId, botId }) {
 
   if (kind === 'public') {
     const bits = isVoice(snap.type) ? SEND_BITS | VOICE_BITS : SEND_BITS;
+    // Verified only regains what @everyone could use before the change, so the
+    // gate never widens access (e.g. an announcement channel where @everyone
+    // was already denied Send Messages). Bits @everyone lacked stay untouched
+    // on Verified: neither allowed nor added to its deny.
+    const before = everyonePerms(snap, everyoneId);
     return {
       skip: false,
       everyone: apply(everyoneOw, { denyBits: bits }),
-      verified: apply(verifiedOw, { allowBits: bits }),
+      verified: apply(verifiedOw, { allowBits: bits & before }),
     };
   }
 
