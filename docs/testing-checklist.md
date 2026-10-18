@@ -384,7 +384,7 @@ Needs two accounts: your admin account and a test account that joins fresh (an a
 - [ ] Cancel says nothing was changed. Run setup again and wait over 2 minutes before Confirm: it says the confirmation expired. Another admin pressing Confirm is told only the admin who ran the command can use it.
 - [ ] If an ordinary channel has an extra role with its own View Channel allow, the preview lists it as a channel where that role keeps seeing it (informational only).
 - [ ] Confirm creates a "Verified" role just below the bot, a `verify` channel with a Verify embed and button, then the rollout starts. `/verification status` shows state rolling out (granting, then gating) and finally active, with the number of undo records.
-- [ ] Setup refuses (with a clear message) when: the bot lacks a permission, the chosen verify channel is hidden from @everyone, @everyone has Administrator, the chosen role is above the bot or managed, or verification is already set up.
+- [ ] Setup refuses (with a clear message) when: the bot lacks a permission, the chosen verify channel is hidden from @everyone, @everyone has Administrator, the chosen role is above the bot or managed, the chosen role has a staff permission (for example Manage Messages or Ban Members), the chosen role is not below your own highest role (use an admin who is not the owner), or verification is already set up.
 - [ ] `/verification setup` also takes `mode` (button or captcha), `role` and `channel`: your own role and channel are used instead of creating new ones.
 
 ### Existing members and the gate
@@ -398,6 +398,8 @@ Needs two accounts: your admin account and a test account that joins fresh (an a
 - [ ] `/verification skip add channel:#x`: the channel's permissions are left exactly as they were (check before and after). `skip remove` gates it again.
 - [ ] `/verification public list` and `skip list` show the channels, or say the list is empty. `public remove` / `skip remove` on a channel that is not listed says so.
 - [ ] A voice channel in the public list: unverified members can see it but not Connect or Speak.
+- [ ] A channel synced to its category (Permissions show "Synced") is gated too: the unverified account cannot see it, and it gets its own @everyone and Verified overwrites (it may show as no longer synced). Editing a category in Discord never changes its channels, so each one is gated on its own.
+- [ ] Right after a list change, change it back at once (`public add channel:#x` then `public remove channel:#x` within a few seconds): #x ends gated (hidden from the unverified account), and after `public add` again it is visible and read-only. The replies match what happened.
 
 ### Verifying
 
@@ -408,16 +410,18 @@ Needs two accounts: your admin account and a test account that joins fresh (an a
 - [ ] A code older than 5 minutes is expired, with a Verify button to get a new one. Restart the bot: any open captcha stops working (codes are only kept in memory) and a new one can be requested.
 - [ ] Switch back with `/verification mode mode:button`: the Verify button gives the role at once again.
 - [ ] A bot invited after setup gets the Verified role by itself and sees the channels (no mod-log line for it).
-- [ ] Create a new text channel as an admin: it is gated like the others (hidden from the unverified account, visible to Verified). Create one inside a category that is already gated and it follows the category. A private new channel is left alone.
+- [ ] Create a new text channel as an admin: it is gated like the others (hidden from the unverified account, visible to Verified). Create one inside a category that is already gated and it follows the category; after `/verification remove` that channel is visible to everyone again (like its category). A private new channel is left alone.
+- [ ] Give the Verified role a staff permission (for example Manage Messages) in Server Settings: Verify, the captcha and `/verification verify` refuse to give it ("staff permissions"), and a bot that joins does not get it. Remove the permission again afterwards.
 - [ ] `/verification verify member:<user>` gives the role and writes a mod-log line naming you; running it again says already verified. `/verification unverify member:<user>` removes the role and logs it; on a bot it is refused; on someone with a role at or above yours it is refused. Both are refused while verification is not set up (state none).
 
 ### Status and removal
 
 - [ ] `/verification status` lists enabled, mode, role, verify channel, state, the public and skip counts, and the undo record count.
 - [ ] Stop the bot during the grant and start it again: the rollout carries on and finishes (a job that was running reruns only after the scheduler claim window, so wait up to 5 minutes; status shows progress; if it says it is stuck, or the state is failed, recover with `/verification remove` and then `/verification setup` again).
-- [ ] Where the bot cannot edit a channel (for example it lacks Manage Permissions there), the rollout or a list change reports the failure (state failed with the number of channels, or an error reply) instead of ignoring it. A failed rollout is retried with `/verification remove` and then `/verification setup` again.
+- [ ] Where the bot cannot edit a channel (for example it lacks Manage Permissions there), the rollout or a list change reports the failure (state failed with the number of channels and, in `/verification status`, up to 10 of those channels by name, or an error reply) instead of ignoring it. While failed, new channels are still gated and a bot that joins still gets Verified. A failed rollout is retried with `/verification remove` and then `/verification setup` again.
 - [ ] `/verification remove` restores every channel to the permissions it had before setup (compare with the earlier notes: the @everyone and Verified overwrites, and the bot overwrite in the verify channel, are back or gone as they were), deletes the Verify message and turns the feature off. The Verified role and the verify channel are left in place.
-- [ ] If a channel cannot be restored (remove the bot's permission in one channel first), remove lists those channels, keeps verification on and keeps their records; fix the permission and run remove again.
+- [ ] If a channel cannot be restored (remove the bot's permission in one channel first), remove lists those channels, keeps verification on (a rollout that was still running shows as failed) and keeps their records; fix the permission and run remove again.
+- [ ] Run `/verification remove` while the rollout is still gating channels (status says gating): every channel ends restored, none is left hidden, and the state is not set up.
 - [ ] After remove, run setup again: it works from a clean start. A channel deleted while gated just loses its record.
 
 ### Discord Onboarding
