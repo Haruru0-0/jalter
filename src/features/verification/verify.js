@@ -5,6 +5,7 @@ import { botCanGive } from '../../core/role-safety.js';
 import { ephemeral } from '../../core/replies.js';
 import { readConfig } from './config.js';
 import { logVerification } from './log.js';
+import { handleSetupButton } from './commands.js';
 
 export const VERIFY_BUTTON_ID = 'verification:go';
 
@@ -101,8 +102,9 @@ export async function handleVerifyButton(interaction, ctx, deps) {
 
 /** Entry for the `verification` component prefix; later tasks add branches on the second segment. */
 export async function handle(interaction, ctx) {
-  const [, action] = interaction.customId.split(':');
+  const [, action, step] = interaction.customId.split(':');
   if (action === 'go') return handleVerifyButton(interaction, ctx);
+  if (action === 'setup' && (step === 'ok' || step === 'no')) return handleSetupButton(interaction, ctx);
   const lang = interaction.guildId ? await getLang(ctx.db, interaction.guildId) : 'en';
   return interaction.reply(ephemeral(t(lang, 'verification.msg.unavailable')));
 }
