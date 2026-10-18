@@ -168,13 +168,13 @@ async function changeList(interaction, ctx, { lang, guild, sub, listName, key, l
   // Saved first: gateChannel classifies from the config it is given.
   await setFeature(ctx.db, guild.id, FEATURE, { config: { [key]: nextList } });
 
-  // Active or failed (no job will come back): always re-apply. Rolling out after the grant: the
-  // gate job may already be past this channel, so apply now (a later pass is a no-op). Before
-  // the grant is done nothing may be gated early: the gate job reads the new lists when it runs
-  // (a channel that already has a record is re-applied, it is gated either way).
+  // Active: always re-apply. Rolling out or failed once the grant is done: the gate job may be
+  // past this channel (or will not come back), so apply now (a later pass is a no-op). Before the
+  // grant is done nothing may be gated early: a running gate job reads the new lists itself. A
+  // channel that already has a record is gated either way, so it is always re-applied.
   const { config: rawNow } = await getFeature(ctx.db, guild.id, FEATURE);
-  let needsApply = prev.state === 'active' || prev.state === 'failed';
-  if (prev.state === 'rolling_out') {
+  let needsApply = prev.state === 'active';
+  if (prev.state === 'rolling_out' || prev.state === 'failed') {
     needsApply = rawNow?.grantDone === true || (await getRecord(ctx.db, guild.id, channelId)) != null;
   }
   if (needsApply && channel) {

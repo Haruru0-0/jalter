@@ -418,15 +418,18 @@ test('skip remove gates the channel at once once the gate job may have passed it
   assert.ok(b.permissionOverwrites.cache.get(G).deny.bitfield & P.ViewChannel);
 });
 
-test('skip remove before the grant is done only saves the list (the job gates it later)', async () => {
-  await setFeature(db, G, 'verification', {
-    enabled: true, config: { state: 'rolling_out', roleId: VR, grantDone: false, skippedChannels: ['a'] },
-  });
-  const chan = fakeChannel('a');
-  await run(makeGuild({ channels: [chan] }), { group: 'skip', sub: 'remove', options: { channel: 'a' } });
-  assert.deepEqual((await cfgNow()).skippedChannels, []);
-  assert.equal(chan.calls.length, 0);
-  assert.equal((await listRecords(db, G)).length, 0);
+test('skip remove before the grant is done only saves the list (nothing is gated early)', async () => {
+  // rolling_out: the gate job reads the new lists later; failed in the grant: nothing is gated.
+  for (const state of ['rolling_out', 'failed']) {
+    await setFeature(db, G, 'verification', {
+      enabled: true, config: { state, roleId: VR, grantDone: false, skippedChannels: ['a'] },
+    });
+    const chan = fakeChannel('a');
+    await run(makeGuild({ channels: [chan] }), { group: 'skip', sub: 'remove', options: { channel: 'a' } });
+    assert.deepEqual((await cfgNow()).skippedChannels, [], state);
+    assert.equal(chan.calls.length, 0, state);
+    assert.equal((await listRecords(db, G)).length, 0, state);
+  }
 });
 
 test('an unexpected error still gives a private reply', async () => {
