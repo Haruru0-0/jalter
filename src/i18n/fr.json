@@ -519,6 +519,7 @@
   "verification.log.detail": "Détails",
   "verification.log.setup": "Vérification configurée",
   "verification.log.rollout": "Déploiement de la vérification terminé",
+  "verification.log.rollout_failed": "Échec du déploiement de la vérification",
   "verification.log.verified": "Membre vérifié",
   "verification.log.manual_verify": "Membre vérifié manuellement",
   "verification.log.manual_unverify": "Vérification du membre retirée manuellement",

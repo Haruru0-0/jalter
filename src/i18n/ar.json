@@ -519,6 +519,7 @@
   "verification.log.detail": "التفاصيل",
   "verification.log.setup": "تم إعداد التحقق",
   "verification.log.rollout": "اكتمل تطبيق التحقق",
+  "verification.log.rollout_failed": "فشل تطبيق التحقق",
   "verification.log.verified": "تم التحقق من العضو",
   "verification.log.manual_verify": "تم التحقق من العضو يدوياً",
   "verification.log.manual_unverify": "تم إلغاء التحقق من العضو يدوياً",

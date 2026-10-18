@@ -519,6 +519,7 @@
   "verification.log.detail": "Details",
   "verification.log.setup": "Verification set up",
   "verification.log.rollout": "Verification rollout finished",
+  "verification.log.rollout_failed": "Verification rollout failed",
   "verification.log.verified": "Member verified",
   "verification.log.manual_verify": "Member verified manually",
   "verification.log.manual_unverify": "Member unverified manually",
