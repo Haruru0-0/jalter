@@ -510,5 +510,8 @@
   "automod.native.removed": "لم تعد قاعدة أوتو مود ديسكورد {id} متابعة. إذا أصبحت القائمة فارغة فستُحتسب كل قواعد أوتو مود ديسكورد.",
   "automod.native.exists": "هذه القاعدة موجودة في القائمة بالفعل.",
   "automod.native.missing": "هذه القاعدة غير موجودة في القائمة.",
-  "automod.native.full": "القائمة ممتلئة (حتى {max} قاعدة). أزل قاعدة أولاً."
+  "automod.native.full": "القائمة ممتلئة (حتى {max} قاعدة). أزل قاعدة أولاً.",
+  "verification.cmd.root": "إعدادات التحقق",
+  "verification.cmd.enable": "تفعيل التحقق",
+  "verification.cmd.disable": "إيقاف التحقق"
 }

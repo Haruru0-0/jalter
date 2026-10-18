@@ -510,5 +510,8 @@
   "automod.native.removed": "No longer following Discord AutoMod rule {id}. With no rules left in the list, every Discord AutoMod rule counts.",
   "automod.native.exists": "That rule is already in the list.",
   "automod.native.missing": "That rule is not in the list.",
-  "automod.native.full": "The list is full (up to {max} rules). Remove one first."
+  "automod.native.full": "The list is full (up to {max} rules). Remove one first.",
+  "verification.cmd.root": "Verification settings",
+  "verification.cmd.enable": "Turn verification on",
+  "verification.cmd.disable": "Turn verification off"
 }

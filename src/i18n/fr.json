@@ -510,5 +510,8 @@
   "automod.native.removed": "La règle AutoMod de Discord {id} n'est plus suivie. Si la liste est vide, toutes les règles AutoMod de Discord comptent.",
   "automod.native.exists": "Cette règle est déjà dans la liste.",
   "automod.native.missing": "Cette règle n'est pas dans la liste.",
-  "automod.native.full": "La liste est pleine (jusqu'à {max} règles). Retirez-en une d'abord."
+  "automod.native.full": "La liste est pleine (jusqu'à {max} règles). Retirez-en une d'abord.",
+  "verification.cmd.root": "Paramètres de vérification",
+  "verification.cmd.enable": "Activer la vérification",
+  "verification.cmd.disable": "Désactiver la vérification"
 }

@@ -10,5 +10,6 @@ import * as logging from './features/logging/index.js';
 import * as info from './features/info/index.js';
 import * as moderation from './features/moderation/index.js';
 import * as automod from './features/automod/index.js';
+import * as verification from './features/verification/index.js';
 
-export const modules = [panel, help, language, media, embeds, post, greet, autorole, logging, info, moderation, automod];
+export const modules = [panel, help, language, media, embeds, post, greet, autorole, logging, info, moderation, automod, verification];
