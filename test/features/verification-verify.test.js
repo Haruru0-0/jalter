@@ -22,15 +22,19 @@ async function setup(config = {}, enabled = true) {
 
 function makeGuild({ role = { id: 'rv', position: 1, managed: false }, botTop = 5 } = {}) {
   const members = new Map();
+  const calls = [];
   return {
     id: G,
+    fetchCalls: calls,
     roles: {
       cache: new Map(role ? [[role.id, role]] : []),
       fetch: async (id) => (role && role.id === id ? role : null),
     },
     members: {
       me: { roles: { highest: { position: botTop } } },
-      fetch: async (id) => {
+      fetch: async (arg) => {
+        const id = typeof arg === 'string' ? arg : arg.user;
+        calls.push(arg);
         const m = members.get(id);
         if (!m) throw new Error('Unknown Member');
         return m;
@@ -59,8 +63,10 @@ function makeMember(id = 'u1', roles = [], { failAdd = false } = {}) {
 
 function makeInteraction(guild, member) {
   const replies = [];
+  const deferred = [];
   return {
     replies,
+    deferred,
     customId: 'verification:go',
     guildId: G,
     guild,
@@ -69,6 +75,8 @@ function makeInteraction(guild, member) {
     inGuild: () => true,
     isButton: () => true,
     reply: async (p) => { replies.push(p); },
+    deferReply: async (p) => { deferred.push(p); },
+    editReply: async (p) => { replies.push(p); },
   };
 }
 
@@ -86,8 +94,11 @@ test('button mode grants the role and answers privately', async () => {
   const i = makeInteraction(guild, member);
   await handleVerifyButton(i, { db }, log.deps);
   assert.deepEqual(member.added, ['rv']);
+  assert.equal(i.deferred.length, 1);
+  assert.equal(i.deferred[0].flags & EPH, EPH);
   assert.equal(i.replies.length, 1);
-  assert.equal(i.replies[0].flags & EPH, EPH);
+  assert.ok(i.replies[0].content && !i.replies[0].content.startsWith('verification.'));
+  assert.equal(guild.fetchCalls[0].force, true);
   assert.equal(log.calls.length, 1);
   assert.equal(log.calls[0][3].kind, 'verified');
 });
@@ -102,7 +113,7 @@ test('an already verified member is told so and nothing changes', async () => {
   await handleVerifyButton(i, { db }, log.deps);
   assert.deepEqual(member.added, []);
   assert.equal(log.calls.length, 0);
-  assert.equal(i.replies[0].flags & EPH, EPH);
+  assert.equal(i.deferred[0].flags & EPH, EPH);
   assert.ok(!i.replies[0].content.startsWith('verification.'));
 });
 
@@ -116,6 +127,7 @@ test('a disabled feature answers off and does nothing', async () => {
   await handleVerifyButton(i, { db }, log.deps);
   assert.deepEqual(member.added, []);
   assert.equal(log.calls.length, 0);
+  assert.equal(i.deferred.length, 0);
   assert.equal(i.replies.length, 1);
   assert.equal(i.replies[0].flags & EPH, EPH);
 });
@@ -141,7 +153,7 @@ test('a member who left (fetch error) is handled', async () => {
   assert.deepEqual(member.added, []);
   assert.equal(log.calls.length, 0);
   assert.equal(i.replies.length, 1);
-  assert.equal(i.replies[0].flags & EPH, EPH);
+  assert.equal(i.deferred[0].flags & EPH, EPH);
   const r = await verifyMember({ db }, guild, null, { method: 'button' }, log.deps);
   assert.deepEqual(r, { ok: false, reason: 'discord_error' });
 });
@@ -219,8 +231,9 @@ test('captcha mode answers not available for now', async () => {
   const i = makeInteraction(guild, member);
   await handleVerifyButton(i, { db }, logger().deps);
   assert.deepEqual(member.added, []);
+  assert.equal(i.deferred[0].flags & EPH, EPH);
   assert.equal(i.replies.length, 1);
-  assert.equal(i.replies[0].flags & EPH, EPH);
+  assert.ok(!i.replies[0].content.startsWith('verification.'));
 });
 
 test('postPanel posts one button message with the verify customId', async () => {
@@ -241,4 +254,15 @@ test('the command module registers the verification component prefix', () => {
   assert.equal(c.components.prefix, 'verification');
   assert.equal(typeof c.components.handle, 'function');
   assert.ok(feature.commands.some((x) => x.components?.prefix === 'verification'));
+});
+
+test('an unknown customId action answers privately', async () => {
+  const guild = makeGuild();
+  const member = makeMember();
+  const i = makeInteraction(guild, member);
+  i.customId = 'verification:zzz';
+  await feature.commands[0].components.handle(i, { db });
+  assert.equal(i.replies.length, 1);
+  assert.equal(i.replies[0].flags & EPH, EPH);
+  assert.ok(!i.replies[0].content.startsWith('verification.'));
 });

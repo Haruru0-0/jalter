@@ -533,5 +533,6 @@
   "verification.msg.not_available": "Cette méthode de vérification n'est pas encore disponible.",
   "verification.button.verify": "Vérifier",
   "verification.panel.title": "Vérification",
-  "verification.panel.description": "Appuyez sur le bouton ci-dessous pour vous vérifier et débloquer le serveur."
+  "verification.panel.description": "Appuyez sur le bouton ci-dessous pour vous vérifier et débloquer le serveur.",
+  "verification.msg.unavailable": "Ce bouton n'est plus disponible."
 }

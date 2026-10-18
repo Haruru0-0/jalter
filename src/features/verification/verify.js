@@ -76,16 +76,20 @@ const REASON_KEY = {
 export async function handleVerifyButton(interaction, ctx, deps) {
   const guildId = interaction.guildId;
   const lang = guildId ? await getLang(ctx.db, guildId) : 'en';
-  const say = (key) => interaction.reply(ephemeral(t(lang, key)));
-  if (!interaction.guild) return say('common.guildOnly');
+  const reply = (key) => interaction.reply(ephemeral(t(lang, key)));
+  if (!interaction.guild) return reply('common.guildOnly');
   const { enabled, config } = await getFeature(ctx.db, guildId, 'verification');
   const cfg = readConfig(config);
-  if (!enabled || cfg.state === 'none') return say('verification.msg.off');
+  if (!enabled || cfg.state === 'none') return reply('verification.msg.off');
+
+  // Everything after this can be slow (role add, mod log): acknowledge first, answer with editReply.
+  await interaction.deferReply(ephemeral({}));
+  const say = (key) => interaction.editReply({ content: t(lang, key) });
   if (cfg.mode === 'captcha') return say('verification.msg.not_available');
 
   let member;
   try {
-    member = await interaction.guild.members.fetch(interaction.user.id);
+    member = await interaction.guild.members.fetch({ user: interaction.user.id, force: true });
   } catch {
     return say('verification.msg.error');
   }
@@ -99,4 +103,6 @@ export async function handleVerifyButton(interaction, ctx, deps) {
 export async function handle(interaction, ctx) {
   const [, action] = interaction.customId.split(':');
   if (action === 'go') return handleVerifyButton(interaction, ctx);
+  const lang = interaction.guildId ? await getLang(ctx.db, interaction.guildId) : 'en';
+  return interaction.reply(ephemeral(t(lang, 'verification.msg.unavailable')));
 }

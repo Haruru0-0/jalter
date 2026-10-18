@@ -533,5 +533,6 @@
   "verification.msg.not_available": "طريقة التحقق هذه غير متاحة بعد.",
   "verification.button.verify": "تحقّق",
   "verification.panel.title": "التحقق",
-  "verification.panel.description": "اضغط على الزر أدناه للتحقق وفتح الخادم."
+  "verification.panel.description": "اضغط على الزر أدناه للتحقق وفتح الخادم.",
+  "verification.msg.unavailable": "هذا الزر لم يعد متاحاً."
 }
