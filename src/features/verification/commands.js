@@ -1,5 +1,6 @@
 import { SlashCommandBuilder } from 'discord.js';
 import { handleToggle, toggleSubcommands } from '../../core/toggle.js';
+import { handle } from './verify.js';
 
 export function createVerificationCommand() {
   const data = toggleSubcommands(
@@ -11,5 +12,5 @@ export function createVerificationCommand() {
     if (sub === 'enable' || sub === 'disable') return handleToggle(interaction, ctx, 'verification');
   }
 
-  return { data, execute };
+  return { data, execute, components: { prefix: 'verification', handle } };
 }

@@ -523,5 +523,15 @@
   "verification.log.manual_verify": "Membre vérifié manuellement",
   "verification.log.manual_unverify": "Vérification du membre retirée manuellement",
   "verification.log.undo": "Vérification annulée",
-  "verification.log.gate_failed": "Impossible de protéger un nouveau salon"
+  "verification.log.gate_failed": "Impossible de protéger un nouveau salon",
+  "verification.msg.off": "La vérification n'est pas active sur ce serveur.",
+  "verification.msg.already": "Vous êtes déjà vérifié.",
+  "verification.msg.verified": "Vous êtes vérifié. Bienvenue !",
+  "verification.msg.no_role": "Le rôle Vérifié n'existe plus. Prévenez un modérateur.",
+  "verification.msg.role_too_high": "Je ne peux pas donner le rôle Vérifié car il est au-dessus de mon rôle le plus élevé. Prévenez un modérateur.",
+  "verification.msg.error": "Une erreur est survenue pendant la vérification. Réessayez ou prévenez un modérateur.",
+  "verification.msg.not_available": "Cette méthode de vérification n'est pas encore disponible.",
+  "verification.button.verify": "Vérifier",
+  "verification.panel.title": "Vérification",
+  "verification.panel.description": "Appuyez sur le bouton ci-dessous pour vous vérifier et débloquer le serveur."
 }

@@ -523,5 +523,15 @@
   "verification.log.manual_verify": "تم التحقق من العضو يدوياً",
   "verification.log.manual_unverify": "تم إلغاء التحقق من العضو يدوياً",
   "verification.log.undo": "تم التراجع عن التحقق",
-  "verification.log.gate_failed": "تعذر تقييد قناة جديدة"
+  "verification.log.gate_failed": "تعذر تقييد قناة جديدة",
+  "verification.msg.off": "التحقق غير مفعّل على هذا الخادم.",
+  "verification.msg.already": "تم التحقق منك بالفعل.",
+  "verification.msg.verified": "تم التحقق منك. أهلاً بك!",
+  "verification.msg.no_role": "رتبة التحقق لم تعد موجودة. يرجى إبلاغ أحد المشرفين.",
+  "verification.msg.role_too_high": "لا يمكنني منح رتبة التحقق لأنها أعلى من أعلى رتبة لدي. يرجى إبلاغ أحد المشرفين.",
+  "verification.msg.error": "حدث خطأ أثناء التحقق منك. حاول مرة أخرى أو أبلغ أحد المشرفين.",
+  "verification.msg.not_available": "طريقة التحقق هذه غير متاحة بعد.",
+  "verification.button.verify": "تحقّق",
+  "verification.panel.title": "التحقق",
+  "verification.panel.description": "اضغط على الزر أدناه للتحقق وفتح الخادم."
 }

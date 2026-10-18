@@ -523,5 +523,15 @@
   "verification.log.manual_verify": "Member verified manually",
   "verification.log.manual_unverify": "Member unverified manually",
   "verification.log.undo": "Verification undone",
-  "verification.log.gate_failed": "Could not gate a new channel"
+  "verification.log.gate_failed": "Could not gate a new channel",
+  "verification.msg.off": "Verification is not active on this server.",
+  "verification.msg.already": "You are already verified.",
+  "verification.msg.verified": "You are verified. Welcome!",
+  "verification.msg.no_role": "The Verified role no longer exists. Please tell a moderator.",
+  "verification.msg.role_too_high": "I can't give the Verified role because it is above my highest role. Please tell a moderator.",
+  "verification.msg.error": "Something went wrong while verifying you. Please try again or tell a moderator.",
+  "verification.msg.not_available": "This verification method is not available yet.",
+  "verification.button.verify": "Verify",
+  "verification.panel.title": "Verification",
+  "verification.panel.description": "Press the button below to verify and unlock the server."
 }
