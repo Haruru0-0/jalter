@@ -409,13 +409,13 @@ Needs two accounts: your admin account and a test account that joins fresh (an a
 - [ ] Switch back with `/verification mode mode:button`: the Verify button gives the role at once again.
 - [ ] A bot invited after setup gets the Verified role by itself and sees the channels (no mod-log line for it).
 - [ ] Create a new text channel as an admin: it is gated like the others (hidden from the unverified account, visible to Verified). Create one inside a category that is already gated and it follows the category. A private new channel is left alone.
-- [ ] `/verification verify member:<user>` gives the role and writes a mod-log line naming you; running it again says already verified. `/verification unverify member:<user>` removes the role and logs it; on a bot it is refused; on someone with a role at or above yours it is refused.
+- [ ] `/verification verify member:<user>` gives the role and writes a mod-log line naming you; running it again says already verified. `/verification unverify member:<user>` removes the role and logs it; on a bot it is refused; on someone with a role at or above yours it is refused. Both are refused while verification is not set up (state none).
 
 ### Status and removal
 
 - [ ] `/verification status` lists enabled, mode, role, verify channel, state, the public and skip counts, and the undo record count.
-- [ ] Stop the bot during the grant and start it again: the rollout carries on and finishes (status shows progress; if it ever says it is stuck, the jobs are gone).
-- [ ] Where the bot cannot edit a channel (for example it lacks Manage Permissions there), the rollout or a list change reports the failure (state failed with the number of channels, or an error reply) instead of ignoring it.
+- [ ] Stop the bot during the grant and start it again: the rollout carries on and finishes (a job that was running reruns only after the scheduler claim window, so wait up to 5 minutes; status shows progress; if it says it is stuck, or the state is failed, recover with `/verification remove` and then `/verification setup` again).
+- [ ] Where the bot cannot edit a channel (for example it lacks Manage Permissions there), the rollout or a list change reports the failure (state failed with the number of channels, or an error reply) instead of ignoring it. A failed rollout is retried with `/verification remove` and then `/verification setup` again.
 - [ ] `/verification remove` restores every channel to the permissions it had before setup (compare with the earlier notes: the @everyone and Verified overwrites, and the bot overwrite in the verify channel, are back or gone as they were), deletes the Verify message and turns the feature off. The Verified role and the verify channel are left in place.
 - [ ] If a channel cannot be restored (remove the bot's permission in one channel first), remove lists those channels, keeps verification on and keeps their records; fix the permission and run remove again.
 - [ ] After remove, run setup again: it works from a clean start. A channel deleted while gated just loses its record.
