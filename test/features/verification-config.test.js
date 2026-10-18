@@ -57,5 +57,5 @@ test('verification is listed as a real command in the registry', () => {
   const mod = modules.find((m) => m.commands?.some((c) => c.data.name === 'verification'));
   assert.ok(mod);
   const data = mod.commands[0].data.toJSON();
-  assert.deepEqual(data.options.map((o) => o.name), ['enable', 'disable', 'setup', 'status', 'remove']);
+  assert.deepEqual(data.options.map((o) => o.name), ['enable', 'disable', 'mode', 'public', 'skip', 'verify', 'unverify', 'setup', 'status', 'remove']);
 });

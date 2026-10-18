@@ -16,6 +16,7 @@ import { listRecords, deleteRecord, countRecords } from './store.js';
 import { logVerification } from './log.js';
 import { GRANT_JOB, GATE_JOB, ROLLOUT_KEY, startRollout } from './rollout.js';
 import { handle, postPanel } from './verify.js';
+import { extendWithLists, executeGroup, listHandlers } from './commands-lists.js';
 
 const FEATURE = 'verification';
 const CONFIRM_TTL_MS = 120_000;
@@ -37,9 +38,9 @@ const mentions = (ids) => {
 };
 
 export function createVerificationCommand() {
-  const data = toggleSubcommands(
+  const data = extendWithLists(toggleSubcommands(
     new SlashCommandBuilder().setName('verification').setDescription('Verification settings'),
-  )
+  ))
     .addSubcommand((s) => s.setName('setup').setDescription('Set up the verification gate')
       .addStringOption((o) => o.setName('mode').setDescription('How members verify')
         .addChoices(...MODES.map((m) => ({ name: m, value: m }))))
@@ -49,8 +50,11 @@ export function createVerificationCommand() {
     .addSubcommand((s) => s.setName('status').setDescription('Show the verification status'))
     .addSubcommand((s) => s.setName('remove').setDescription('Undo the gate and turn verification off'));
 
-  async function execute(interaction, ctx) {
+  async function execute(interaction, ctx, deps) {
+    const group = interaction.options.getSubcommandGroup?.(false) ?? null;
+    if (group === 'public' || group === 'skip') return executeGroup(interaction, ctx, group);
     const sub = interaction.options.getSubcommand();
+    if (listHandlers[sub]) return listHandlers[sub](interaction, ctx, deps);
     if (sub === 'enable' || sub === 'disable') return handleToggle(interaction, ctx, FEATURE);
     if (sub === 'setup') return executeSetup(interaction, ctx);
     if (sub === 'status') return executeStatus(interaction, ctx);
