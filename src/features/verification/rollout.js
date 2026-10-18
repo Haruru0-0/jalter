@@ -21,7 +21,7 @@ import { getLang } from '../../i18n/index.js';
 import { scheduleJob, cancelJobs, MAX_ATTEMPTS } from '../../core/scheduler.js';
 import { botCanGive, isDangerousRole } from '../../core/role-safety.js';
 import { readConfig } from './config.js';
-import { gateChannel } from './apply.js';
+import { gateChannel, revertChannel } from './apply.js';
 import { logVerification } from './log.js';
 
 export const GRANT_JOB = 'verification.grant';
@@ -185,6 +185,7 @@ const order = (a, b) => rank(a) - rank(b) || cmpId(a.id, b.id);
 const gateRun = async (ctx, job, deps) => {
   const log = deps.logVerification ?? logVerification;
   const gate = deps.gateChannel ?? gateChannel;
+  const revert = deps.revertChannel ?? revertChannel;
   const budget = deps.budgetMs ?? BUDGET_MS;
   const cur = await load(ctx, job);
   if (!cur) return;
@@ -205,7 +206,17 @@ const gateRun = async (ctx, job, deps) => {
       const { config: latest } = await getFeature(ctx.db, guild.id, FEATURE);
       const fresh = readConfig(latest);
       if (fresh.state !== 'rolling_out') return; // undone or concluded meanwhile
-      if ((await gate(ctx, guild, channel, fresh)) === 'failed') failed += 1;
+      const result = await gate(ctx, guild, channel, fresh);
+      // `/verification remove` sets state none first and may have listed the records before this
+      // gate wrote one: undo this channel ourselves and stop.
+      if (result !== 'skipped') {
+        const { config: after } = await getFeature(ctx.db, guild.id, FEATURE);
+        if (readConfig(after).state === 'none') {
+          await revert(ctx, guild, channel);
+          return;
+        }
+      }
+      if (result === 'failed') failed += 1;
     }
     if (i + GATE_BATCH < todo.length && Date.now() - started >= budget) {
       const last = batch[batch.length - 1];

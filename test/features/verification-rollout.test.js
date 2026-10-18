@@ -431,3 +431,23 @@ test('a list change made between channels is honored by the running gate job', a
   assert.equal((await raw()).state, 'active');
   assert.equal((await raw()).grantDone, true);
 });
+
+test('a channel gated while remove started is reverted by the job, which then stops', async () => {
+  await config({ grantDone: true });
+  const guild = makeGuild({ channels: [chan('1'), chan('2')] });
+  const seen = [];
+  const reverted = [];
+  const gateChannel = async (ctx, g, ch) => {
+    seen.push(ch.id);
+    // remove sets state none (and enabled false) while this channel is being gated
+    await setFeature(db, G, 'verification', { enabled: false, config: { state: 'none' } });
+    return 'changed';
+  };
+  const revertChannel = async (ctx, g, ch) => { reverted.push(ch.id); return 'restored'; };
+  const log = logger();
+  await gateBatch(ctxFor(guild), job(GATE_JOB), { ...log, gateChannel, revertChannel });
+  assert.deepEqual(seen, ['1']);
+  assert.deepEqual(reverted, ['1']);
+  assert.equal((await raw()).state, 'none');
+  assert.equal(log.calls.length, 0);
+});

@@ -330,6 +330,59 @@ test('remove restores every recorded channel and reports failures', async () => 
   assert.deepEqual(verify.deleted, ['m1']);
 });
 
+test('remove turns verification off before restoring, and restores a record an in-flight gate wrote', async () => {
+  const { gated, pub, verify } = await removable();
+  const late = fakeChannel('c3', [ow(G, 0n, P.ViewChannel), ow('rv', P.ViewChannel, 0n)]);
+  const seen = [];
+  const del = gated.permissionOverwrites.delete;
+  gated.permissionOverwrites.delete = async (target) => {
+    const { enabled, config } = await getFeature(db, G, 'verification');
+    seen.push({ enabled, state: config.state });
+    // A gate batch that read rolling_out just before remove finishes this channel now.
+    await recordOriginal(db, G, 'c3', {
+      everyone: { existed: false, allow: '0', deny: '0' }, verified: { existed: false, allow: '0', deny: '0' }, bot: null,
+    });
+    return del(target);
+  };
+  const guild = makeGuild({ channels: [gated, pub, verify, late], roles: [{ id: 'rv', position: 1, managed: false }] });
+  const i = await run(guild, { sub: 'remove' });
+  assert.deepEqual(seen[0], { enabled: false, state: 'none' });
+  assert.equal((await listRecords(db, G)).length, 0);
+  assert.equal(late.permissionOverwrites.cache.has(G), false, 'the late channel is open again');
+  assert.equal(late.permissionOverwrites.cache.has('rv'), false);
+  assert.doesNotMatch(last(i).content, /<#/);
+  const done = await getFeature(db, G, 'verification');
+  assert.equal(done.enabled, false);
+  assert.equal(done.config.state, 'none');
+});
+
+test('a remove that fails part-way during a rollout leaves a retryable failed state', async () => {
+  const { gated, pub, verify } = await removable();
+  await setFeature(db, G, 'verification', { config: { state: 'rolling_out', cutoff: 1, grantDone: true } });
+  const boom = async () => { throw new Error('Missing Permissions'); };
+  const okEdit = pub.permissionOverwrites.edit;
+  const okDelete = pub.permissionOverwrites.delete;
+  pub.permissionOverwrites.edit = boom;
+  pub.permissionOverwrites.delete = boom;
+  const guild = makeGuild({ channels: [gated, pub, verify], roles: [{ id: 'rv', position: 1, managed: false }] });
+  const i = await run(guild, { sub: 'remove' });
+  assert.match(last(i).content, /<#c2>/);
+  let { enabled, config } = await getFeature(db, G, 'verification');
+  assert.equal(enabled, true);
+  assert.equal(config.state, 'failed');
+  assert.equal((await db.query('SELECT 1 FROM scheduled_jobs WHERE guild_id = $1', [G])).rowCount, 0);
+  const status = await run(guild, { sub: 'status' });
+  assert.match(last(status).content, /Channels with a saved undo record: 1/);
+
+  pub.permissionOverwrites.edit = okEdit;
+  pub.permissionOverwrites.delete = okDelete;
+  await run(guild, { sub: 'remove' });
+  ({ enabled, config } = await getFeature(db, G, 'verification'));
+  assert.equal(enabled, false);
+  assert.equal(config.state, 'none');
+  assert.equal((await listRecords(db, G)).length, 0);
+});
+
 test('remove leaves the role and verify channel, and stops the rollout jobs', async () => {
   const { gated, pub, verify } = await removable();
   await setFeature(db, G, 'verification', { config: { state: 'rolling_out', cutoff: 1 } });

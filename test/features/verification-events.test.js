@@ -108,8 +108,45 @@ test('a joining human is not', async () => {
   assert.equal(h.verifyCalls.length, 0);
 });
 
-test('nothing happens when state is none, failed or the feature is off', async () => {
-  for (const [cfg, enabled] of [[{ state: 'none' }, true], [{ state: 'failed' }, true], [{ state: 'active' }, false]]) {
+test('a failed rollout still grants bots and gates new channels (once the grant had finished)', async () => {
+  await setup({ state: 'failed', grantDone: true });
+  const h = harness();
+  await h.add(ctx(), member(true));
+  assert.equal(h.verifyCalls.length, 1);
+  const ch = fakeChannel('c1');
+  await h.create(ctx(), ch);
+  assert.ok(ch.permissionOverwrites.cache.get(G).deny.bitfield & P.ViewChannel);
+});
+
+test('before the grant is done a new channel is not gated (the gate job reaches it), bots still are granted', async () => {
+  for (const state of ['rolling_out', 'failed']) {
+    await setup({ state, grantDone: false });
+    const h = harness();
+    const ch = fakeChannel('c1');
+    await h.create(ctx(), ch);
+    assert.equal(ch.calls.length, 0, state);
+    await h.add(ctx(), member(true));
+    assert.equal(h.verifyCalls.length, 1, state);
+  }
+});
+
+test('a channel gated while remove started is reverted again', async () => {
+  await setup();
+  const reverted = [];
+  const events = createEvents({
+    gateChannel: async () => {
+      await setFeature(db, G, 'verification', { enabled: false, config: { state: 'none' } });
+      return 'changed';
+    },
+    revertChannel: async (c, guild, channel) => { reverted.push(channel.id); return 'restored'; },
+    logVerification: async () => {},
+  });
+  await events.find((e) => e.name === Events.ChannelCreate).execute(ctx(), fakeChannel('c1'));
+  assert.deepEqual(reverted, ['c1']);
+});
+
+test('nothing happens when state is none or the feature is off', async () => {
+  for (const [cfg, enabled] of [[{ state: 'none' }, true], [{ state: 'active' }, false]]) {
     await setup(cfg, enabled);
     const h = harness();
     const ch = fakeChannel('c1');
@@ -133,7 +170,7 @@ test('a new channel @everyone can view is gated', async () => {
 });
 
 test('a new channel is gated while rolling out, and a later gate pass is a no-op', async () => {
-  await setup({ state: 'rolling_out' });
+  await setup({ state: 'rolling_out', grantDone: true });
   const h = harness();
   const ch = fakeChannel('c1');
   await h.create(ctx(), ch);

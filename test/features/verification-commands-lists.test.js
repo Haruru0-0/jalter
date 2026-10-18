@@ -400,6 +400,35 @@ test('lists are re-applied when a rollout failed and the channel has a record', 
   assert.equal((await listRecords(db, G)).length, 0);
 });
 
+test('skip remove gates the channel at once once the gate job may have passed it', async () => {
+  // rolling_out with grantDone: the gate job may already be past this channel.
+  await setFeature(db, G, 'verification', {
+    enabled: true, config: { state: 'rolling_out', roleId: VR, grantDone: true, skippedChannels: ['a'] },
+  });
+  const chan = fakeChannel('a');
+  await run(makeGuild({ channels: [chan] }), { group: 'skip', sub: 'remove', options: { channel: 'a' } });
+  assert.ok(chan.permissionOverwrites.cache.get(G).deny.bitfield & P.ViewChannel);
+  assert.equal((await listRecords(db, G)).length, 1);
+
+  // failed: no job will come back for it.
+  await db.query('TRUNCATE verification_overwrites');
+  await setFeature(db, G, 'verification', { config: { state: 'failed', skippedChannels: ['b'] } });
+  const b = fakeChannel('b');
+  await run(makeGuild({ channels: [b] }), { group: 'skip', sub: 'remove', options: { channel: 'b' } });
+  assert.ok(b.permissionOverwrites.cache.get(G).deny.bitfield & P.ViewChannel);
+});
+
+test('skip remove before the grant is done only saves the list (the job gates it later)', async () => {
+  await setFeature(db, G, 'verification', {
+    enabled: true, config: { state: 'rolling_out', roleId: VR, grantDone: false, skippedChannels: ['a'] },
+  });
+  const chan = fakeChannel('a');
+  await run(makeGuild({ channels: [chan] }), { group: 'skip', sub: 'remove', options: { channel: 'a' } });
+  assert.deepEqual((await cfgNow()).skippedChannels, []);
+  assert.equal(chan.calls.length, 0);
+  assert.equal((await listRecords(db, G)).length, 0);
+});
+
 test('an unexpected error still gives a private reply', async () => {
   await active();
   const bad = { id: 'a', get permissionOverwrites() { throw new Error('boom'); } };

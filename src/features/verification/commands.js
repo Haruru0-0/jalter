@@ -12,7 +12,7 @@ import { t } from '../../i18n/index.js';
 import { MODES, classify, readConfig } from './config.js';
 import { planChannel, roleViewers, canEveryoneView } from './plan.js';
 import { snapshotOf, revertChannel } from './apply.js';
-import { listRecords, deleteRecord, countRecords } from './store.js';
+import { listRecords, countRecords } from './store.js';
 import { logVerification } from './log.js';
 import { GRANT_JOB, GATE_JOB, ROLLOUT_KEY, startRollout } from './rollout.js';
 import { handle, postPanel } from './verify.js';
@@ -21,6 +21,7 @@ import { extendWithLists, executeGroup, listHandlers } from './commands-lists.js
 const FEATURE = 'verification';
 const CONFIRM_TTL_MS = 120_000;
 const LIST_MAX = 10;
+const REMOVE_PASSES = 5;
 const BOT_PERMS = [
   ['ManageRoles', P.ManageRoles], ['ManageChannels', P.ManageChannels], ['ViewChannel', P.ViewChannel],
   ['SendMessages', P.SendMessages], ['EmbedLinks', P.EmbedLinks], ['AttachFiles', P.AttachFiles],
@@ -321,34 +322,38 @@ async function runRemove(interaction, ctx, lang) {
   const { guild } = interaction;
   const { enabled, config } = await getFeature(ctx.db, guild.id, FEATURE);
   const cfg = readConfig(config);
-  const records = await listRecords(ctx.db, guild.id);
-  if (cfg.state === 'none' && !enabled && records.length === 0) return t(lang, 'verification.remove.nothing');
+  if (cfg.state === 'none' && !enabled && (await countRecords(ctx.db, guild.id)) === 0) {
+    return t(lang, 'verification.remove.nothing');
+  }
 
-  // No rollout job may gate a channel while (or after) it is being restored.
+  // Stop everything that gates BEFORE restoring: a running gate batch checks the state before
+  // each channel (cancelling its job row does not stop a batch already running), new-channel
+  // events need a running state, and both undo a channel they gated after the state became none.
+  await setFeature(ctx.db, guild.id, FEATURE, { enabled: false, config: { state: 'none' } });
   await cancelJobs(ctx.db, { guildId: guild.id, type: GRANT_JOB, key: ROLLOUT_KEY });
   await cancelJobs(ctx.db, { guildId: guild.id, type: GATE_JOB, key: ROLLOUT_KEY });
 
-  const failed = [];
-  for (const rec of records) {
-    let channel = guild.channels.cache.get(rec.channelId) ?? null;
-    if (!channel) {
-      try {
-        channel = await guild.channels.fetch(rec.channelId);
-      } catch (err) {
-        if (err?.code !== 10003) { failed.push(rec.channelId); continue; }
-      }
+  // Re-list until only failures are left: a gate already in flight may add a record meanwhile.
+  const failed = new Set();
+  for (let pass = 0; pass < REMOVE_PASSES; pass += 1) {
+    const todo = (await listRecords(ctx.db, guild.id)).filter((r) => !failed.has(r.channelId));
+    if (todo.length === 0) break;
+    for (const rec of todo) {
+      // revertChannel drops the record of a channel that no longer exists.
+      if ((await revertChannel(ctx, guild, { id: rec.channelId })) === 'failed') failed.add(rec.channelId);
     }
-    // The channel no longer exists: nothing left to restore.
-    if (!channel) { await deleteRecord(ctx.db, guild.id, rec.channelId); continue; }
-    if ((await revertChannel(ctx, guild, channel)) === 'failed') failed.push(rec.channelId);
   }
 
   await logVerification(ctx, guild.id, lang, {
     kind: 'undo', actorId: interaction.user.id,
-    detail: failed.length ? `${failed.length} channel(s) could not be restored` : undefined,
+    detail: failed.size ? `${failed.size} channel(s) could not be restored` : undefined,
   });
-  if (failed.length) {
-    return t(lang, 'verification.remove.partial', { count: failed.length, channels: mentions(failed) });
+  if (failed.size) {
+    // Records are kept; put back a state the admin can retry remove from. A rollout that was
+    // running has lost its jobs, so it becomes failed (which still gates new channels and bots).
+    const state = cfg.state === 'rolling_out' ? 'failed' : cfg.state;
+    await setFeature(ctx.db, guild.id, FEATURE, { enabled, config: { state } });
+    return t(lang, 'verification.remove.partial', { count: failed.size, channels: mentions([...failed]) });
   }
 
   if (cfg.channelId && cfg.messageId) {
