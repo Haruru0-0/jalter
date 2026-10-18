@@ -118,14 +118,14 @@ test('grantBatch reschedules until the last batch then schedules gate', async ()
   const members = Array.from({ length: GRANT_BATCH + 5 }, (_, i) => makeMember(String(100 + i)));
   const guild = makeGuild({ members });
   const ctx = ctxFor(guild);
-  await grantBatch(ctx, job(GRANT_JOB), logger());
+  await grantBatch(ctx, job(GRANT_JOB), { ...logger(), budgetMs: 0 });
   assert.equal(members.filter((m) => m.added.length).length, GRANT_BATCH);
   const next = await pending(GRANT_JOB);
   assert.equal(next.length, 1);
   assert.equal(next[0].payload.after, String(100 + GRANT_BATCH - 1));
   assert.equal((await pending(GATE_JOB)).length, 0);
   assert.equal((await raw()).grantDone, false);
-  await grantBatch(ctx, job(GRANT_JOB, next[0].payload), logger());
+  await grantBatch(ctx, job(GRANT_JOB, next[0].payload), { ...logger(), budgetMs: 0 });
   assert.ok(members.every((m) => m.added.length === 1));
   assert.equal((await raw()).grantDone, true);
   assert.equal((await pending(GATE_JOB)).length, 1);
@@ -185,13 +185,13 @@ test('gateBatch gates categories first, in batches, then sets active and logs on
   const ctx = ctxFor(guild);
   const g = gater();
   const log = logger();
-  await gateBatch(ctx, job(GATE_JOB), { ...log, ...g });
+  await gateBatch(ctx, job(GATE_JOB), { ...log, ...g, budgetMs: 0 });
   assert.equal(g.seen.length, GATE_BATCH);
   assert.equal(g.seen[0], '60'); // the category first
   assert.equal((await raw()).state, 'rolling_out');
   const next = await pending(GATE_JOB);
   assert.equal(next.length, 1);
-  await gateBatch(ctx, job(GATE_JOB, next[0].payload), { ...log, ...g });
+  await gateBatch(ctx, job(GATE_JOB, next[0].payload), { ...log, ...g, budgetMs: 0 });
   assert.equal(g.seen.length, channels.length);
   assert.equal(new Set(g.seen).size, channels.length);
   assert.equal((await raw()).state, 'active');
@@ -232,9 +232,9 @@ test('the failed count carries across batches', async () => {
   const guild = makeGuild({ channels });
   const g = gater({ 100: 'failed', [100 + GATE_BATCH]: 'failed' });
   const log = logger();
-  await gateBatch(ctxFor(guild), job(GATE_JOB), { ...log, ...g });
+  await gateBatch(ctxFor(guild), job(GATE_JOB), { ...log, ...g, budgetMs: 0 });
   const next = await pending(GATE_JOB);
-  await gateBatch(ctxFor(guild), job(GATE_JOB, next[0].payload), { ...log, ...g });
+  await gateBatch(ctxFor(guild), job(GATE_JOB, next[0].payload), { ...log, ...g, budgetMs: 0 });
   assert.equal((await raw()).failedChannels, 2);
   assert.equal((await raw()).state, 'failed');
 });
@@ -242,4 +242,162 @@ test('the failed count carries across batches', async () => {
 test('the feature exports both jobs for the loader', () => {
   assert.equal(feature.jobs[GRANT_JOB], jobs[GRANT_JOB]);
   assert.equal(typeof feature.jobs[GATE_JOB], 'function');
+});
+
+// ---- fix round 1 ----
+const FINAL = 5; // the scheduler drops a job whose attempts reached MAX_ATTEMPTS
+const jobAt = (type, attempts, payload = {}) => ({ ...job(type, payload), attempts });
+
+test('a grant error on the final attempt concludes failed and logs; earlier attempts only retry', async () => {
+  const bad = makeMember('1', { addError: new Error('boom') });
+  const guild = makeGuild({ members: [bad] });
+  const log = logger();
+  await assert.rejects(grantBatch(ctxFor(guild), jobAt(GRANT_JOB, FINAL - 1), log), /boom/);
+  assert.equal((await raw()).state, 'rolling_out');
+  assert.equal(log.calls.length, 0);
+  await grantBatch(ctxFor(guild), jobAt(GRANT_JOB, FINAL), log);
+  assert.equal((await raw()).state, 'failed');
+  assert.equal(log.calls.length, 1);
+  assert.equal(log.calls[0][3].kind, 'rollout_failed');
+  assert.match(log.calls[0][3].detail, /boom/);
+});
+
+test('a gate error on the final attempt concludes failed and logs', async () => {
+  await config({ grantDone: true });
+  const guild = makeGuild();
+  guild.channels.fetch = async () => { throw new Error('net down'); };
+  const log = logger();
+  await assert.rejects(gateBatch(ctxFor(guild), jobAt(GATE_JOB, 1), { ...log, ...gater() }), /net down/);
+  assert.equal((await raw()).state, 'rolling_out');
+  await gateBatch(ctxFor(guild), jobAt(GATE_JOB, FINAL), { ...log, ...gater() });
+  assert.equal((await raw()).state, 'failed');
+  assert.equal(log.calls.length, 1);
+});
+
+test('a guild missing from the cache retries, then fails on the final attempt', async () => {
+  const ctx = { db, client: { guilds: { cache: new Map() } } };
+  const log = logger();
+  await assert.rejects(grantBatch(ctx, jobAt(GRANT_JOB, 2), log));
+  assert.equal((await raw()).state, 'rolling_out');
+  await grantBatch(ctx, jobAt(GRANT_JOB, FINAL), log);
+  assert.equal((await raw()).state, 'failed');
+  assert.equal(log.calls.length, 1);
+});
+
+async function plain(extra) {
+  await db.query('DELETE FROM scheduled_jobs');
+  await db.query('DELETE FROM guild_settings');
+  await setFeature(db, G, 'verification', { enabled: true, config: { roleId: '900', ...extra } });
+}
+
+test('restarting a rolling_out guild with no jobs keeps cutoff and rolloutBy', async () => {
+  await plain({ state: 'rolling_out', cutoff: 5555, grantDone: false, rolloutBy: 'first' });
+  await startRollout({ db }, { id: G }, 'en', 'second');
+  const c = await raw();
+  assert.equal(c.cutoff, 5555);
+  assert.equal(c.rolloutBy, 'first');
+  assert.equal((await pending(GRANT_JOB)).length, 1);
+});
+
+test('restarting a rolling_out guild whose grant is done schedules only the gate', async () => {
+  await plain({ state: 'rolling_out', cutoff: 5555, grantDone: true, rolloutBy: 'first' });
+  await startRollout({ db }, { id: G }, 'en', 'second');
+  assert.equal((await pending(GRANT_JOB)).length, 0);
+  assert.equal((await pending(GATE_JOB)).length, 1);
+});
+
+test('retrying from failed with grantDone re-runs only the gate and keeps the cutoff', async () => {
+  await plain({ state: 'failed', cutoff: 5555, grantDone: true, failedChannels: 3 });
+  await startRollout({ db }, { id: G }, 'en', 'adm');
+  const c = await raw();
+  assert.equal(c.state, 'rolling_out');
+  assert.equal(c.cutoff, 5555);
+  assert.equal(c.failedChannels, 0);
+  assert.equal(c.grantDone, true);
+  assert.equal((await pending(GRANT_JOB)).length, 0);
+  assert.deepEqual((await pending(GATE_JOB)).map((r) => r.payload), [{}]);
+});
+
+test('retrying from failed without grantDone restarts the grant with the original cutoff', async () => {
+  await plain({ state: 'failed', cutoff: 5555, grantDone: false });
+  await startRollout({ db }, { id: G }, 'en', 'adm');
+  const c = await raw();
+  assert.equal(c.state, 'rolling_out');
+  assert.equal(c.cutoff, 5555);
+  assert.equal((await pending(GRANT_JOB)).length, 1);
+  assert.equal((await pending(GATE_JOB)).length, 0);
+});
+
+test('a fresh start from none or active sets a new cutoff', async () => {
+  for (const state of ['none', 'active']) {
+    await plain({ state, cutoff: 5555, grantDone: true });
+    await startRollout({ db }, { id: G }, 'en', 'adm');
+    const c = await raw();
+    assert.ok(c.cutoff > 5555, state);
+    assert.equal(c.grantDone, false);
+    assert.equal((await pending(GRANT_JOB)).length, 1);
+    assert.equal((await pending(GATE_JOB)).length, 0);
+  }
+});
+
+test('a restart removes a stale gate row so an old cursor cannot resume', async () => {
+  await plain({ state: 'failed', cutoff: 5555, grantDone: false });
+  await db.query(
+    `INSERT INTO scheduled_jobs (guild_id, type, key, payload, due_at) VALUES ($1, $2, 'rollout', '{"after":"7"}', now())`,
+    [G, GATE_JOB],
+  );
+  await startRollout({ db }, { id: G }, 'en', 'adm');
+  assert.equal((await pending(GATE_JOB)).length, 0);
+});
+
+test('a transient role fetch error retries; only Unknown Role (10011) fails the rollout', async () => {
+  const guild = makeGuild({ members: [makeMember('1')], role: null });
+  const log = logger();
+  guild.roles.fetch = async () => { throw Object.assign(new Error('503'), { status: 503 }); };
+  await assert.rejects(grantBatch(ctxFor(guild), job(GRANT_JOB), log), /503/);
+  assert.equal((await raw()).state, 'rolling_out');
+  guild.roles.fetch = async () => { throw Object.assign(new Error('Unknown Role'), { code: 10011 }); };
+  await grantBatch(ctxFor(guild), job(GRANT_JOB), log);
+  assert.equal((await raw()).state, 'failed');
+  assert.match(log.calls[0][3].detail, /role/i);
+});
+
+test('a missing cutoff is reported as a missing cutoff', async () => {
+  await plain({ state: 'rolling_out', grantDone: false });
+  const log = logger();
+  await grantBatch(ctxFor(makeGuild({ members: [makeMember('1')] })), job(GRANT_JOB), log);
+  assert.equal((await raw()).state, 'failed');
+  assert.match(log.calls[0][3].detail, /cutoff/i);
+});
+
+test('a role above the bot is reported as too high', async () => {
+  const guild = makeGuild({ members: [makeMember('1')], role: { id: '900', position: 9, managed: false } });
+  const log = logger();
+  await grantBatch(ctxFor(guild), job(GRANT_JOB), log);
+  assert.match(log.calls[0][3].detail, /above/i);
+});
+
+test('several grant batches run in one handler call within the time budget', async () => {
+  const members = Array.from({ length: GRANT_BATCH * 3 + 1 }, (_, i) => makeMember(String(100 + i)));
+  await grantBatch(ctxFor(makeGuild({ members })), job(GRANT_JOB), logger());
+  assert.ok(members.every((m) => m.added.length === 1));
+  assert.equal((await pending(GRANT_JOB)).length, 0);
+  assert.equal((await raw()).grantDone, true);
+  assert.equal((await pending(GATE_JOB)).length, 1);
+});
+
+test('several gate batches run in one handler call within the time budget', async () => {
+  await config({ grantDone: true });
+  const channels = Array.from({ length: GATE_BATCH * 3 + 1 }, (_, i) => chan(String(100 + i)));
+  const g = gater();
+  await gateBatch(ctxFor(makeGuild({ channels })), job(GATE_JOB), { ...logger(), ...g });
+  assert.equal(g.seen.length, channels.length);
+  assert.equal((await raw()).state, 'active');
+  assert.equal((await pending(GATE_JOB)).length, 0);
+});
+
+test('snowflakes of different length sort numerically', async () => {
+  const members = [makeMember('99'), makeMember('100'), makeMember('9')];
+  await grantBatch(ctxFor(makeGuild({ members })), job(GRANT_JOB, { after: '99' }), logger());
+  assert.deepEqual(members.map((m) => m.added.length), [0, 1, 0]);
 });
