@@ -8,7 +8,7 @@ const FONTS = [
 ];
 let fontsReady = false;
 
-function ensureFonts() {
+export function ensureFonts() {
   if (fontsReady) return;
   for (const [file, family] of FONTS) {
     const path = fileURLToPath(new URL(`../../../assets/fonts/${file}`, import.meta.url));
