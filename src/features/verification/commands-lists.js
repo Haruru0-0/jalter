@@ -80,10 +80,24 @@ async function resolveChannel(guild, id) {
  * 'ok' | 'failed' (old state kept, record kept) | 'broken' (could not put the old gate back).
  */
 async function reapply(ctx, guild, channel, next, prev) {
-  if ((await revertChannel(ctx, guild, channel)) === 'failed') return 'failed';
-  if ((await gateChannel(ctx, guild, channel, next)) !== 'failed') return 'ok';
-  // Reverted, but the new gate failed: put the previous classification back.
+  const reverted = await revertChannel(ctx, guild, channel);
+  if (reverted !== 'failed' && (await gateChannel(ctx, guild, channel, next)) !== 'failed') return 'ok';
+  // A revert that failed may have restored part of the original (channel open), and a failed new
+  // gate leaves it reverted: put the previous classification back either way.
   return (await gateChannel(ctx, guild, channel, prev)) === 'failed' ? 'broken' : 'failed';
+}
+
+// Was the channel visible to @everyone? A channel we gated has @everyone View denied by us, so
+// judge it from the recorded original; without a record, from what it is now.
+async function everyoneCanView(ctx, guild, channel) {
+  const everyoneId = guild.roles.everyone.id;
+  const rec = await getRecord(ctx.db, guild.id, channel.id);
+  if (!rec) return canEveryoneView(snapshotOf(channel, guild), everyoneId);
+  const base = BigInt(guild.roles.everyone.permissions.bitfield);
+  const o = rec.everyone;
+  const overwrites = o?.existed
+    ? [{ id: everyoneId, type: 0, allow: BigInt(o.allow), deny: BigInt(o.deny) }] : [];
+  return canEveryoneView({ everyoneBase: base, overwrites }, everyoneId);
 }
 
 async function executeChannelList(interaction, ctx, listName) {
@@ -109,6 +123,9 @@ async function executeChannelList(interaction, ctx, listName) {
   busy.add(guild.id);
   try {
     return await changeList(interaction, ctx, { lang, guild, sub, listName, key, listLabel, say });
+  } catch (err) {
+    console.warn('verification: list change failed:', err?.message ?? err);
+    return say(t(lang, 'verification.lists.error'));
   } finally {
     busy.delete(guild.id);
   }
@@ -139,7 +156,7 @@ async function changeList(interaction, ctx, { lang, guild, sub, listName, key, l
   if (adding && listName === 'public') {
     if (!channel) return say(t(lang, 'verification.lists.not_found'));
     // Verified must never open a channel @everyone cannot see.
-    if (!canEveryoneView(snapshotOf(channel, guild), guild.roles.everyone.id)) {
+    if (!(await everyoneCanView(ctx, guild, channel))) {
       return say(t(lang, 'verification.lists.private'));
     }
   }
@@ -152,11 +169,18 @@ async function changeList(interaction, ctx, { lang, guild, sub, listName, key, l
   // Active: always re-apply. Rolling out: the gate job reads the config for channels it has not
   // reached yet; a channel it already gated has a record and needs the same revert + gate.
   let needsApply = prev.state === 'active';
-  if (prev.state === 'rolling_out') needsApply = (await getRecord(ctx.db, guild.id, channelId)) != null;
+  if (prev.state === 'rolling_out' || prev.state === 'failed') {
+    needsApply = (await getRecord(ctx.db, guild.id, channelId)) != null;
+  }
   if (needsApply && channel) {
     const outcome = await reapply(ctx, guild, channel, next, prev);
     if (outcome !== 'ok') {
-      await setFeature(ctx.db, guild.id, FEATURE, { config: { [key]: current } });
+      try {
+        await setFeature(ctx.db, guild.id, FEATURE, { config: { [key]: current } });
+      } catch (err) {
+        console.warn('verification: could not roll the list back:', err?.message ?? err);
+        return say(t(lang, 'verification.lists.apply_broken', { channel: channelMention }));
+      }
       return say(t(lang, outcome === 'broken' ? 'verification.lists.apply_broken' : 'verification.lists.apply_failed',
         { channel: channelMention }));
     }
@@ -188,6 +212,17 @@ async function manualContext(interaction, ctx) {
     member = await guild.members.fetch({ user: interaction.options.getUser('member', true).id, force: true });
   } catch {
     await say('verification.manual.not_found');
+    return null;
+  }
+  // Same convention as moderation (rules.js): not the owner, and strictly below the actor unless the actor is the owner.
+  if (member.id === guild.ownerId) {
+    await say('verification.manual.owner');
+    return null;
+  }
+  const actorIsOwner = interaction.user.id === guild.ownerId;
+  const actorTop = interaction.member?.roles?.highest?.position ?? 0;
+  if (!actorIsOwner && (member.roles?.highest?.position ?? 0) >= actorTop) {
+    await say('verification.manual.hierarchy');
     return null;
   }
   return { lang, guild, cfg, member, say };

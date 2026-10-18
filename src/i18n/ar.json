@@ -595,7 +595,7 @@
   "verification.lists.is_verify": "هذه قناة التحقق، لذلك لا يمكن وضعها في قائمة.",
   "verification.lists.private": "لا يستطيع @everyone رؤية هذه القناة، لذلك لا يمكن جعلها قناة عامة.",
   "verification.lists.busy": "هناك تغيير آخر للقوائم قيد التنفيذ. انتظر لحظة.",
-  "verification.lists.apply_failed": "تعذّر عليّ تطبيق هذا التغيير على {channel}، لذلك لم يُحفظ شيء. تحقق من صلاحياتي هناك وحاول مجدداً.",
+  "verification.lists.apply_failed": "تعذّر عليّ تطبيق هذا التغيير على {channel}. بقيت القائمة كما كانت وأُعيد قفل القناة كما كانت.",
   "verification.lists.apply_broken": "تعذّر عليّ تطبيق هذا التغيير على {channel}، وتعذّر أيضاً إعادة القفل عليها. لم يُحفظ شيء، لكن القناة ربما فقدت قفلها. تحقق من صلاحياتها ثم نفّذ /verification status.",
   "verification.lists.title": "قنوات قائمة {list} ({count})",
   "verification.lists.none": "لا توجد قنوات في قائمة القنوات {list}.",
@@ -610,5 +610,8 @@
   "verification.manual.no_role": "رتبة التحقق لم تعد موجودة. نفّذ /verification status لفحص الإعداد.",
   "verification.manual.role_too_high": "لا أستطيع إدارة رتبة التحقق لأنها ليست أدنى من أعلى رتبة لدي.",
   "verification.manual.error": "حدث خطأ ما. حاول مرة أخرى.",
-  "verification.lists.not_found": "لا أستطيع رؤية هذه القناة."
+  "verification.lists.not_found": "لا أستطيع رؤية هذه القناة.",
+  "verification.manual.owner": "لا يمكنك فعل ذلك مع مالك الخادم.",
+  "verification.manual.hierarchy": "أعلى رتبة لهذا العضو مساوية لرتبتك أو أعلى منها، لذلك لا يمكنك فعل ذلك.",
+  "verification.lists.error": "حدث خطأ أثناء تغيير القائمة. نفّذ /verification status وتحقق من القناة ثم حاول مجدداً."
 }

@@ -184,7 +184,7 @@ const gateRun = async (ctx, job, deps) => {
   const budget = deps.budgetMs ?? BUDGET_MS;
   const cur = await load(ctx, job);
   if (!cur) return;
-  const { guild, cfg, raw } = cur;
+  const { guild, raw } = cur;
   if (raw.grantDone !== true) return; // the grant job schedules the gate when it is done
   const p = job.payload ?? {};
   const cursor = p.after ? { id: p.after, type: p.afterCat ? CATEGORY : 0 } : null;
@@ -197,7 +197,11 @@ const gateRun = async (ctx, job, deps) => {
   for (let i = 0; i < todo.length; i += GATE_BATCH) {
     const batch = todo.slice(i, i + GATE_BATCH);
     for (const channel of batch) {
-      if ((await gate(ctx, guild, channel, cfg)) === 'failed') failed += 1;
+      // Re-read the lists for every channel: an admin may change them mid-run.
+      const { config: latest } = await getFeature(ctx.db, guild.id, FEATURE);
+      const fresh = readConfig(latest);
+      if (fresh.state !== 'rolling_out') return; // undone or concluded meanwhile
+      if ((await gate(ctx, guild, channel, fresh)) === 'failed') failed += 1;
     }
     if (i + GATE_BATCH < todo.length && Date.now() - started >= budget) {
       const last = batch[batch.length - 1];

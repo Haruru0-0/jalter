@@ -46,12 +46,13 @@ function fakeChannel(id, overwrites = []) {
   };
 }
 
-function fakeMember(id, { bot = false, roles = [] } = {}) {
+function fakeMember(id, { bot = false, roles = [], top = 1 } = {}) {
   const set = new Set(roles);
   const m = {
     id, user: { bot }, added: [], removed: [],
     roles: {
       cache: { has: (r) => set.has(r) },
+      highest: { position: top },
       add: async (r) => { m.added.push(r); set.add(r); },
       remove: async (r) => { m.removed.push(r); set.delete(r); },
     },
@@ -59,12 +60,12 @@ function fakeMember(id, { bot = false, roles = [] } = {}) {
   return m;
 }
 
-function makeGuild({ channels = [], members = [], roleTop = 3, botTop = 5 } = {}) {
+function makeGuild({ channels = [], members = [], roleTop = 3, botTop = 5, ownerId = 'owner' } = {}) {
   const chans = new Map(channels.map((c) => [c.id, c]));
   const mem = new Map(members.map((m) => [m.id, m]));
   const role = { id: VR, position: roleTop, managed: false };
   return {
-    id: G,
+    id: G, ownerId,
     members: {
       me: { id: 'bot1', permissions: has(0n), roles: { highest: { position: botTop } } },
       cache: mem,
@@ -75,11 +76,11 @@ function makeGuild({ channels = [], members = [], roleTop = 3, botTop = 5 } = {}
   };
 }
 
-function makeInteraction(guild, { group = null, sub, options = {}, manage = true } = {}) {
+function makeInteraction(guild, { group = null, sub, options = {}, manage = true, actorTop = 10, actorId = 'admin' } = {}) {
   const replies = [];
   const i = {
-    replies, guild, guildId: G, user: { id: 'admin' },
-    member: { guild: { id: G }, permissions: { has: () => manage }, roles: { cache: new Map() } },
+    replies, guild, guildId: G, user: { id: actorId },
+    member: { id: actorId, guild: { id: G }, permissions: { has: () => manage }, roles: { cache: new Map(), highest: { position: actorTop } } },
     inGuild: () => true,
     options: {
       getSubcommandGroup: () => group,
@@ -286,4 +287,110 @@ test('both refuse when state is none', async () => {
   assert.deepEqual(m.added, []);
   assert.deepEqual(m.removed, []);
   assert.equal(logs.length, 0);
+});
+
+test('a gated channel can become public (visibility is judged from the recorded original)', async () => {
+  await active();
+  const chan = fakeChannel('a');
+  const g = makeGuild({ channels: [chan] });
+  assert.equal(await gateChannel({ db, client: {} }, g, chan, await cfgNow()), 'changed');
+  assert.ok(chan.permissionOverwrites.cache.get(G).deny.bitfield & P.ViewChannel);
+  const i = await run(g, { group: 'public', sub: 'add', options: { channel: 'a' } });
+  assert.deepEqual((await cfgNow()).publicChannels, ['a']);
+  assert.equal((await listRecords(db, G)).length, 1);
+  assert.doesNotMatch(last(i).content, /cannot see/i);
+  assert.equal((chan.permissionOverwrites.cache.get(G).deny.bitfield & P.ViewChannel), 0n);
+});
+
+test('a recorded channel that was private originally is still refused as public', async () => {
+  await active();
+  await recordOriginal(db, G, 'p', {
+    everyone: { existed: true, allow: '0', deny: String(P.ViewChannel) },
+    verified: { existed: false, allow: '0', deny: '0' },
+    bot: null,
+  });
+  const chan = fakeChannel('p', [ow(G, 0n, P.ViewChannel)]);
+  await run(makeGuild({ channels: [chan] }), { group: 'public', sub: 'add', options: { channel: 'p' } });
+  assert.deepEqual((await cfgNow()).publicChannels, []);
+});
+
+async function gatedWithBreakage(brokenTargets, { everyoneOnce = false } = {}) {
+  await active();
+  const chan = fakeChannel('a');
+  const g = makeGuild({ channels: [chan] });
+  assert.equal(await gateChannel({ db, client: {} }, g, chan, await cfgNow()), 'changed');
+  const edit = chan.permissionOverwrites.edit;
+  const del = chan.permissionOverwrites.delete;
+  let everyoneDone = false;
+  const broken = (target) => brokenTargets.includes(target) || (everyoneOnce && target === G && everyoneDone);
+  chan.permissionOverwrites.edit = async (target, o) => {
+    if (broken(target)) throw new Error('boom');
+    if (target === G) everyoneDone = true;
+    return edit(target, o);
+  };
+  chan.permissionOverwrites.delete = async (target) => {
+    if (broken(target)) throw new Error('boom');
+    if (target === G) everyoneDone = true;
+    return del(target);
+  };
+  return { chan, g };
+}
+
+test('a revert that fails part-way re-closes the channel and rolls the list back', async () => {
+  const { chan, g } = await gatedWithBreakage([VR]);
+  const i = await run(g, { group: 'skip', sub: 'add', options: { channel: 'a' } });
+  assert.deepEqual((await cfgNow()).skippedChannels, []);
+  assert.ok(chan.permissionOverwrites.cache.get(G).deny.bitfield & P.ViewChannel, '@everyone is denied again');
+  assert.equal((await listRecords(db, G)).length, 1);
+  assert.doesNotMatch(last(i).content, /may have lost/i);
+  assert.match(last(i).content, /<#a>/);
+});
+
+test('a revert that fails and cannot re-close the channel says it may be open', async () => {
+  const { g } = await gatedWithBreakage([VR], { everyoneOnce: true });
+  const i = await run(g, { group: 'skip', sub: 'add', options: { channel: 'a' } });
+  assert.deepEqual((await cfgNow()).skippedChannels, []);
+  assert.match(last(i).content, /<#a>/);
+  assert.match(last(i).content, /may have lost/i);
+});
+
+test('lists are re-applied when a rollout failed and the channel has a record', async () => {
+  await setFeature(db, G, 'verification', { enabled: true, config: { state: 'failed', roleId: VR } });
+  const chan = fakeChannel('a');
+  const g = makeGuild({ channels: [chan] });
+  assert.equal(await gateChannel({ db, client: {} }, g, chan, await cfgNow()), 'changed');
+  await run(g, { group: 'skip', sub: 'add', options: { channel: 'a' } });
+  assert.equal((await listRecords(db, G)).length, 0);
+});
+
+test('an unexpected error still gives a private reply', async () => {
+  await active();
+  const bad = { id: 'a', get permissionOverwrites() { throw new Error('boom'); } };
+  const i = await run(makeGuild({ channels: [bad] }), { group: 'public', sub: 'add', options: { channel: 'a' } });
+  assert.equal(i.replies.length, 1);
+  assert.equal(last(i).flags, 64);
+  assert.deepEqual((await cfgNow()).publicChannels, []);
+});
+
+test('verify and unverify respect the actor hierarchy', async () => {
+  await active();
+  const high = fakeMember('u1', { roles: [VR], top: 10 });
+  const owner = fakeMember('owner', { roles: [VR], top: 1 });
+  const low = fakeMember('u3', { roles: [VR], top: 2 });
+  const g = makeGuild({ members: [high, owner, low] });
+  let i = await run(g, { sub: 'unverify', options: { member: 'u1' }, actorTop: 10 });
+  assert.deepEqual(high.removed, []);
+  assert.match(last(i).content, /role|higher|equal/i);
+  i = await run(g, { sub: 'unverify', options: { member: 'owner' } });
+  assert.deepEqual(owner.removed, []);
+  assert.match(last(i).content, /owner/i);
+  const unverified = fakeMember('u4', { top: 10 });
+  await run(makeGuild({ members: [unverified] }), { sub: 'verify', options: { member: 'u4' }, actorTop: 10 });
+  assert.deepEqual(unverified.added, []);
+  assert.equal(logs.length, 0);
+  // The owner may act on anyone but themselves being the target of others.
+  await run(makeGuild({ members: [high], ownerId: 'admin' }), { sub: 'unverify', options: { member: 'u1' }, actorTop: 1 });
+  assert.deepEqual(high.removed, [VR]);
+  await run(g, { sub: 'unverify', options: { member: 'u3' }, actorTop: 10 });
+  assert.deepEqual(low.removed, [VR]);
 });

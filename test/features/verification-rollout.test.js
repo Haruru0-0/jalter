@@ -401,3 +401,20 @@ test('snowflakes of different length sort numerically', async () => {
   await grantBatch(ctxFor(makeGuild({ members })), job(GRANT_JOB, { after: '99' }), logger());
   assert.deepEqual(members.map((m) => m.added.length), [0, 1, 0]);
 });
+
+test('a list change made between channels is honored by the running gate job', async () => {
+  await config({ grantDone: true });
+  const channels = ['2', '3', '4', '5', '6', '7', '8', '9', '11', '12', '13', '14'].map((id) => chan(id));
+  const guild = makeGuild({ channels });
+  const seenSkips = {};
+  const gateChannel = async (ctx, g, ch, cfg) => {
+    seenSkips[ch.id] = [...cfg.skippedChannels];
+    if (ch.id === '2') await setFeature(db, G, 'verification', { config: { skippedChannels: ['14'] } });
+    return 'changed';
+  };
+  await gateBatch(ctxFor(guild), job(GATE_JOB), { ...logger(), gateChannel });
+  assert.deepEqual(seenSkips['14'], ['14']);
+  assert.deepEqual(seenSkips['11'], ['14']);
+  assert.equal((await raw()).state, 'active');
+  assert.equal((await raw()).grantDone, true);
+});

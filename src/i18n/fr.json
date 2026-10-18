@@ -595,7 +595,7 @@
   "verification.lists.is_verify": "C'est le salon de vérification, il ne peut donc pas être dans une liste.",
   "verification.lists.private": "@everyone ne peut pas voir ce salon, il ne peut donc pas être public.",
   "verification.lists.busy": "Un autre changement de liste est en cours. Patientez un instant.",
-  "verification.lists.apply_failed": "Je n'ai pas pu appliquer ce changement à {channel}, rien n'a donc été enregistré. Vérifiez mes permissions là-bas et réessayez.",
+  "verification.lists.apply_failed": "Je n'ai pas pu appliquer ce changement à {channel}. La liste est restée telle quelle et le salon a été reverrouillé comme avant.",
   "verification.lists.apply_broken": "Je n'ai pas pu appliquer ce changement à {channel}, ni y remettre le verrou. Rien n'a été enregistré, mais le salon a peut-être perdu son verrou. Vérifiez ses permissions, puis lancez /verification status.",
   "verification.lists.title": "Salons de la liste {list} ({count})",
   "verification.lists.none": "Aucun salon dans la liste {list}.",
@@ -610,5 +610,8 @@
   "verification.manual.no_role": "Le rôle Vérifié n'existe plus. Lancez /verification status pour contrôler la configuration.",
   "verification.manual.role_too_high": "Je ne peux pas gérer le rôle Vérifié car il n'est pas sous mon rôle le plus élevé.",
   "verification.manual.error": "Une erreur s'est produite. Veuillez réessayer.",
-  "verification.lists.not_found": "Je ne peux pas voir ce salon."
+  "verification.lists.not_found": "Je ne peux pas voir ce salon.",
+  "verification.manual.owner": "Vous ne pouvez pas faire cela au propriétaire du serveur.",
+  "verification.manual.hierarchy": "Le rôle le plus élevé de ce membre est égal ou supérieur au vôtre, vous ne pouvez donc pas faire cela.",
+  "verification.lists.error": "Une erreur s'est produite pendant le changement de la liste. Lancez /verification status, vérifiez le salon, puis réessayez."
 }

@@ -595,7 +595,7 @@
   "verification.lists.is_verify": "That is the verify channel, so it cannot be in a list.",
   "verification.lists.private": "@everyone cannot see that channel, so it cannot be a public channel.",
   "verification.lists.busy": "Another list change is running. Please wait a moment.",
-  "verification.lists.apply_failed": "I could not apply that change to {channel}, so nothing was saved. Check my permissions there and try again.",
+  "verification.lists.apply_failed": "I could not apply that change to {channel}. The list was left as it was and the channel was gated again as before.",
   "verification.lists.apply_broken": "I could not apply that change to {channel}, and I could not put the gate back on it either. Nothing was saved, but the channel may have lost its gate. Check its permissions, then run /verification status.",
   "verification.lists.title": "Channels in the {list} list ({count})",
   "verification.lists.none": "There are no channels in the {list} list.",
@@ -610,5 +610,8 @@
   "verification.manual.no_role": "The Verified role no longer exists. Run /verification status to check the setup.",
   "verification.manual.role_too_high": "I cannot manage the Verified role because it is not below my highest role.",
   "verification.manual.error": "Something went wrong. Please try again.",
-  "verification.lists.not_found": "I cannot see that channel."
+  "verification.lists.not_found": "I cannot see that channel.",
+  "verification.manual.owner": "You cannot do that to the server owner.",
+  "verification.manual.hierarchy": "That member's highest role is equal to or above yours, so you cannot do that.",
+  "verification.lists.error": "Something went wrong while changing the list. Run /verification status and check the channel, then try again."
 }
