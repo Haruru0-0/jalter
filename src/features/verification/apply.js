@@ -72,9 +72,11 @@ export async function gateChannel(ctx, guild, channel, cfg) {
       bot: plan.bot ? toRecord(find(snap, botId)) : null,
     });
 
-    await writeTarget(channel, everyoneId, find(snap, everyoneId), plan.everyone);
-    await writeTarget(channel, cfg.roleId, find(snap, cfg.roleId), plan.verified);
+    // @everyone goes LAST: once it denies View a rerun would call the channel
+    // private and never finish. Until then a rerun still treats it as gate-able.
     if (plan.bot) await writeTarget(channel, botId, find(snap, botId), plan.bot);
+    await writeTarget(channel, cfg.roleId, find(snap, cfg.roleId), plan.verified);
+    await writeTarget(channel, everyoneId, find(snap, everyoneId), plan.everyone);
     return 'changed';
   } catch (err) {
     console.error('verification gateChannel failed', channel?.id, err?.message ?? err);
@@ -111,10 +113,16 @@ export async function revertChannel(ctx, guild, channel) {
     const everyoneId = guild.roles.everyone.id;
     const botId = guild.members?.me?.id ?? ctx.client?.user?.id;
     const snap = snapshotOf(channel, guild);
-    await restoreTarget(channel, everyoneId, find(snap, everyoneId), rec.everyone, ROLE_BITS);
     // The record holds no role id: Verified is whatever the config names now.
-    const { roleId } = readConfig((await getFeature(ctx.db, guild.id, 'verification')).config);
-    if (rec.verified && roleId) {
+    // Without it the Verified overwrite cannot be restored, so keep the record.
+    const feature = await getFeature(ctx.db, guild.id, 'verification');
+    const { roleId } = readConfig(feature?.config);
+    if (rec.verified && !roleId) {
+      console.error('verification revertChannel: no Verified role id in config', channel.id);
+      return 'failed';
+    }
+    await restoreTarget(channel, everyoneId, find(snap, everyoneId), rec.everyone, ROLE_BITS);
+    if (rec.verified) {
       await restoreTarget(channel, roleId, find(snap, roleId), rec.verified, ROLE_BITS);
     }
     if (rec.bot) await restoreTarget(channel, botId, find(snap, botId), rec.bot, BOT_VERIFY_BITS);

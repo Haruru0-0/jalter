@@ -38,10 +38,23 @@ function fakeChannel(id, overwrites = [], extra = {}) {
     permissionOverwrites: {
       cache,
       edit: async (target, options) => {
-        if (extra.fail) throw Object.assign(new Error('Missing Permissions'), { status: 403 });
+        if (extra.fail || extra.failTargets?.includes(target)) {
+          throw Object.assign(new Error('Missing Permissions'), { status: 403 });
+        }
         calls.push({ op: 'edit', target, options });
+        // Apply to the cache like Discord does, so a rerun sees the new state.
+        const cur = cache.get(target) ?? ow(target, 0n, 0n, target === BOT ? 1 : 0);
+        let allow = cur.allow.bitfield;
+        let deny = cur.deny.bitfield;
+        for (const [name, v] of Object.entries(options)) {
+          const bit = P[name];
+          allow &= ~bit; deny &= ~bit;
+          if (v === true) allow |= bit;
+          if (v === false) deny |= bit;
+        }
+        cache.set(target, ow(target, allow, deny, cur.type));
       },
-      delete: async (target) => { calls.push({ op: 'delete', target }); },
+      delete: async (target) => { calls.push({ op: 'delete', target }); cache.delete(target); },
     },
   };
 }
@@ -156,4 +169,91 @@ test('a synced child of a gated category is skipped', async () => {
   assert.equal(await gateChannel(ctx(), guild, child, cfg()), 'skipped');
   assert.equal(child.calls.length, 0);
   assert.equal(await getRecord(db, G, 'kid'), null);
+});
+
+const rawOf = (ch, id) => {
+  const o = ch.permissionOverwrites.cache.get(id);
+  return o ? [o.allow.bitfield, o.deny.bitfield] : null;
+};
+
+test('gated: Verified write succeeds, @everyone write fails; a rerun finishes without re-recording', async () => {
+  const ch = fakeChannel('g1c', [], { failTargets: [EVERYONE] });
+  assert.equal(await gateChannel(ctx(), guild, ch, cfg()), 'failed');
+  assert.deepEqual(ch.calls.map((c) => c.target), [VERIFIED]);
+  const first = await getRecord(db, G, 'g1c');
+  ch.failTargets = undefined;
+  // fakeChannel captured extra by closure; clear the failure list in place
+  const ch2 = fakeChannel('g1c', [...ch.permissionOverwrites.cache.values()]);
+  assert.equal(await gateChannel(ctx(), guild, ch2, cfg()), 'changed');
+  assert.deepEqual(ch2.calls.map((c) => c.target), [EVERYONE]);
+  assert.deepEqual(await getRecord(db, G, 'g1c'), first);
+  assert.equal(rawOf(ch2, EVERYONE)[1] & P.ViewChannel, P.ViewChannel);
+});
+
+test('gated: a failing Verified write leaves the channel untouched and retryable', async () => {
+  const ch = fakeChannel('g2c', [], { failTargets: [VERIFIED] });
+  assert.equal(await gateChannel(ctx(), guild, ch, cfg()), 'failed');
+  assert.equal(ch.calls.length, 0);
+  const ch2 = fakeChannel('g2c', []);
+  assert.equal(await gateChannel(ctx(), guild, ch2, cfg()), 'changed');
+  assert.deepEqual(ch2.calls.map((c) => c.target), [VERIFIED, EVERYONE]);
+});
+
+test('gated: a fully gated channel is idempotent and keeps its record', async () => {
+  const ch = fakeChannel('g3c', []);
+  assert.equal(await gateChannel(ctx(), guild, ch, cfg()), 'changed');
+  const first = await getRecord(db, G, 'g3c');
+  const n = ch.calls.length;
+  assert.equal(await gateChannel(ctx(), guild, ch, cfg()), 'skipped');
+  assert.equal(ch.calls.length, n);
+  assert.deepEqual(await getRecord(db, G, 'g3c'), first);
+});
+
+test('verify kind: bot overwrite is written first and restored on revert', async () => {
+  await setFeature(db, G, 'verification', { enabled: true, config: { roleId: VERIFIED } });
+  const ch = fakeChannel('verify', [ow(BOT, P.AddReactions, 0n, 1)]);
+  assert.equal(await gateChannel(ctx(), guild, ch, cfg()), 'changed');
+  assert.equal(ch.calls[0].target, BOT);
+  assert.equal(ch.calls.at(-1).target, EVERYONE);
+  const rec = await getRecord(db, G, 'verify');
+  assert.deepEqual(rec.bot, { existed: true, allow: String(P.AddReactions), deny: '0' });
+  assert.equal(rawOf(ch, BOT)[0] & P.ManageMessages, P.ManageMessages);
+  assert.equal(await revertChannel(ctx(), guild, ch), 'restored');
+  assert.deepEqual(rawOf(ch, BOT), [P.AddReactions, 0n]);
+  assert.equal(rawOf(ch, EVERYONE), null); // did not exist originally
+});
+
+test('public voice channel: Connect and Speak are denied for @everyone and allowed for Verified', async () => {
+  const vguild = {
+    ...guild,
+    roles: { everyone: { id: EVERYONE, permissions: { bitfield: P.ViewChannel | P.Connect | P.Speak | P.SendMessages } } },
+  };
+  const ch = fakeChannel('vc', [], { type: ChannelType.GuildVoice });
+  assert.equal(await gateChannel(ctx(), vguild, ch, cfg({ publicChannels: ['vc'] })), 'changed');
+  const [, evDeny] = rawOf(ch, EVERYONE);
+  assert.equal(evDeny & (P.Connect | P.Speak), P.Connect | P.Speak);
+  const [vAllow] = rawOf(ch, VERIFIED);
+  assert.equal(vAllow & (P.Connect | P.Speak), P.Connect | P.Speak);
+  assert.equal(evDeny & P.ViewChannel, 0n);
+});
+
+test('revert with no roleId in config fails and keeps the record', async () => {
+  await recordOriginal(db, G, 'r1', {
+    everyone: { existed: false, allow: '0', deny: '0' },
+    verified: { existed: false, allow: '0', deny: '0' },
+    bot: null,
+  });
+  const ch = fakeChannel('r1', [ow(EVERYONE, 0n, P.ViewChannel)]);
+  assert.equal(await revertChannel(ctx(), guild, ch), 'failed'); // no feature row at all
+  assert.equal(ch.calls.length, 0);
+  assert.notEqual(await getRecord(db, G, 'r1'), null);
+});
+
+test('revert with a record that has no Verified part works without a config row', async () => {
+  await recordOriginal(db, G, 'r2', {
+    everyone: { existed: false, allow: '0', deny: '0' }, verified: null, bot: null,
+  });
+  const ch = fakeChannel('r2', [ow(EVERYONE, 0n, P.ViewChannel)]);
+  assert.equal(await revertChannel(ctx(), guild, ch), 'restored');
+  assert.equal(await getRecord(db, G, 'r2'), null);
 });
