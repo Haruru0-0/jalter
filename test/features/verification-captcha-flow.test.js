@@ -57,7 +57,7 @@ function makeInteraction(guild, userId, customId, { code, kind = 'button' } = {}
     isModalSubmit: () => kind === 'modal',
     fields: { getTextInputValue: () => code },
     reply: async (p) => { replies.push(p); },
-    deferReply: async () => { deferred += 1; },
+    deferReply: async (p) => { deferred += 1; assert.equal(p.flags & EPH, EPH); },
     editReply: async (p) => { replies.push(p); },
     showModal: async (m) => { modals.push(m); },
   };
@@ -264,4 +264,102 @@ test('button mode is unchanged', async () => {
   await handle(i, { db }, d);
   assert.deepEqual(member.added, ['rv']);
   assert.ok(!i.replies[0].files);
+});
+
+test('captcha mode in state failed still shows the image and accepts a correct code', async () => {
+  await setup({ state: 'failed' });
+  const guild = makeGuild();
+  const member = makeMember();
+  guild.members._set(member);
+  const d = deps();
+  const go = makeInteraction(guild, 'u1', 'verification:go');
+  await handle(go, { db }, d);
+  assert.equal(go.replies[0].files.length, 1);
+  const en = makeInteraction(guild, 'u1', 'verification:enter:u1');
+  await handle(en, { db }, d);
+  assert.equal(en.modals.length, 1);
+  const ok = makeInteraction(guild, 'u1', 'verification:code:u1', { code: 'AAAAA', kind: 'modal' });
+  await handle(ok, { db }, d);
+  assert.deepEqual(member.added, ['rv']);
+});
+
+test('state none and a disabled feature answer off in captcha mode', async () => {
+  await setup({ state: 'none' });
+  const i = makeInteraction(makeGuild(), 'u1', 'verification:go');
+  await handle(i, { db }, deps());
+  assert.equal(i.replies.length, 1);
+  assert.equal(i.deferred, 0);
+});
+
+for (const lang of ['fr', 'ar']) {
+  test(`off and already replies in the captcha flow are English (${lang})`, async () => {
+    const guild = makeGuild();
+    const verified = makeMember('u1', ['rv']);
+    guild.members._set(verified);
+    const d = deps();
+    d.store.issue(G, 'u1');
+    await setup({}, false, lang);
+    for (const [id, kind] of [['verification:go', 'button'], ['verification:enter:u1', 'button'], ['verification:code:u1', 'modal']]) {
+      const i = makeInteraction(guild, 'u1', id, { code: 'AAAAA', kind });
+      await handle(i, { db }, d);
+      assert.equal(i.replies[0].content, 'Verification is not active on this server.');
+    }
+    await setup({}, true, lang);
+    for (const [id, kind] of [['verification:go', 'button'], ['verification:code:u1', 'modal']]) {
+      const i = makeInteraction(guild, 'u1', id, { code: 'AAAAA', kind });
+      await handle(i, { db }, d);
+      assert.equal(i.replies[0].content, 'You are already verified.');
+    }
+    await setup();
+  });
+}
+
+test('the verifyMember already race is answered in English', async () => {
+  await setup({}, true, 'fr');
+  const guild = makeGuild();
+  const member = makeMember();
+  // the role shows up between the pre-check and verifyMember
+  let reads = 0;
+  const cache = member.roles.cache;
+  member.roles.cache = { has: () => ++reads > 1, get: (k) => cache.get(k) };
+  guild.members._set(member);
+  const d = deps();
+  d.store.issue(G, 'u1');
+  const i = makeInteraction(guild, 'u1', 'verification:code:u1', { code: 'AAAAA', kind: 'modal' });
+  await handle(i, { db }, d);
+  assert.equal(i.replies[0].content, 'You are already verified.');
+  await setup();
+});
+
+test('a stale enter button or modal after a switch to button mode is refused', async () => {
+  await setup({ mode: 'button' });
+  const guild = makeGuild();
+  const member = makeMember();
+  guild.members._set(member);
+  const d = deps();
+  d.store.issue(G, 'u1');
+  const e = makeInteraction(guild, 'u1', 'verification:enter:u1');
+  await handle(e, { db }, d);
+  assert.equal(e.modals.length, 0);
+  assert.equal(e.replies.length, 1);
+  const m = makeInteraction(guild, 'u1', 'verification:code:u1', { code: 'AAAAA', kind: 'modal' });
+  await handle(m, { db }, d);
+  assert.deepEqual(member.added, []);
+  assert.equal(m.replies.length, 1);
+  assert.match(m.replies[0].content, /no longer available/);
+  await setup();
+});
+
+test('tries left uses the right plural', async () => {
+  await setup();
+  const guild = makeGuild();
+  guild.members._set(makeMember());
+  const d = deps();
+  d.store.issue(G, 'u1');
+  const a = makeInteraction(guild, 'u1', 'verification:code:u1', { code: 'BBBBB', kind: 'modal' });
+  await handle(a, { db }, d);
+  assert.match(a.replies[0].content, /2 tries left/);
+  const b = makeInteraction(guild, 'u1', 'verification:code:u1', { code: 'BBBBB', kind: 'modal' });
+  await handle(b, { db }, d);
+  assert.match(b.replies[0].content, /1 try left/);
 });

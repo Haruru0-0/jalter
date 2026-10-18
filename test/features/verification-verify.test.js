@@ -4,6 +4,7 @@ import { testDb } from '../helpers/db.js';
 import { setFeature } from '../../src/db/settings.js';
 import { verifyMember, postPanel, handleVerifyButton } from '../../src/features/verification/verify.js';
 import { createVerificationCommand } from '../../src/features/verification/commands.js';
+import { createChallengeStore } from '../../src/features/verification/captcha.js';
 import * as feature from '../../src/features/verification/index.js';
 
 let db;
@@ -223,16 +224,18 @@ test('manual method logs manual_verify with the actor', async () => {
   assert.equal(log.calls[0][3].actorId, 'mod1');
 });
 
-test('captcha mode answers not available for now', async () => {
+test('captcha mode answers privately with the image and does not grant the role', async () => {
   await setup({ mode: 'captcha' });
   const guild = makeGuild();
   const member = makeMember();
   guild.members._set(member);
   const i = makeInteraction(guild, member);
-  await handleVerifyButton(i, { db }, logger().deps);
+  const store = createChallengeStore();
+  await handleVerifyButton(i, { db }, { ...logger().deps, store, render: async () => Buffer.from('png') });
   assert.deepEqual(member.added, []);
   assert.equal(i.deferred[0].flags & EPH, EPH);
   assert.equal(i.replies.length, 1);
+  assert.equal(i.replies[0].files.length, 1);
   assert.ok(!i.replies[0].content.startsWith('verification.'));
 });
 

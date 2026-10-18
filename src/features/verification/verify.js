@@ -82,7 +82,6 @@ const REASON_KEY = {
 // One store per process: captcha codes live in memory only.
 const challengeStore = createChallengeStore();
 
-const CAPTCHA_LIVE_STATES = ['rolling_out', 'active'];
 const CAPTCHA_FAIL_KEY = {
   no_role: 'verification.captcha.no_role',
   role_too_high: 'verification.captcha.role_too_high',
@@ -98,14 +97,16 @@ function verifyAgainRow() {
   );
 }
 
-/** The feature must be on and past setup; returns the config or null. */
+/** Captcha mode only: returns the config, or an English reason key when the flow cannot run. */
 async function liveCaptchaConfig(ctx, guildId) {
   const { enabled, config } = await getFeature(ctx.db, guildId, 'verification');
   const cfg = readConfig(config);
-  return enabled && CAPTCHA_LIVE_STATES.includes(cfg.state) ? cfg : null;
+  if (cfg.mode !== 'captcha') return { reason: 'verification.captcha.unavailable' };
+  if (!enabled || cfg.state === 'none') return { reason: 'verification.captcha.off' };
+  return { cfg };
 }
 
-async function handleCaptchaStart(interaction, cfg, lang, deps) {
+async function handleCaptchaStart(interaction, cfg, deps) {
   const store = deps?.store ?? challengeStore;
   const render = deps?.render ?? renderCaptcha;
   const say = (payload) => interaction.editReply(payload);
@@ -115,7 +116,7 @@ async function handleCaptchaStart(interaction, cfg, lang, deps) {
   } catch {
     return say({ content: en('verification.captcha.error') });
   }
-  if (cfg.roleId && member.roles.cache.has(cfg.roleId)) return say({ content: t(lang, 'verification.msg.already') });
+  if (cfg.roleId && member.roles.cache.has(cfg.roleId)) return say({ content: en('verification.captcha.already') });
 
   const userId = interaction.user.id;
   const issued = store.issue(interaction.guildId, userId);
@@ -146,10 +147,8 @@ async function handleCaptchaEnter(interaction, ctx, ownerId) {
   if (interaction.user.id !== ownerId) {
     return interaction.reply(ephemeral(en('verification.captcha.not_yours')));
   }
-  const lang = await getLang(ctx.db, interaction.guildId);
-  if (!(await liveCaptchaConfig(ctx, interaction.guildId))) {
-    return interaction.reply(ephemeral(t(lang, 'verification.msg.off')));
-  }
+  const live = await liveCaptchaConfig(ctx, interaction.guildId);
+  if (!live.cfg) return interaction.reply(ephemeral(en(live.reason)));
   const input = new TextInputBuilder().setCustomId('code')
     .setLabel(en('verification.captcha.modal_label')).setStyle(TextInputStyle.Short)
     .setMinLength(CODE_LENGTH).setMaxLength(CODE_LENGTH).setRequired(true);
@@ -166,9 +165,9 @@ async function handleCaptchaCode(interaction, ctx, ownerId, deps) {
   }
   const store = deps?.store ?? challengeStore;
   const guildId = interaction.guildId;
-  const lang = await getLang(ctx.db, guildId);
-  const cfg = await liveCaptchaConfig(ctx, guildId);
-  if (!cfg) return interaction.reply(ephemeral(t(lang, 'verification.msg.off')));
+  const live = await liveCaptchaConfig(ctx, guildId);
+  if (!live.cfg) return interaction.reply(ephemeral(en(live.reason)));
+  const { cfg } = live;
 
   await interaction.deferReply(ephemeral({}));
   const say = (payload) => interaction.editReply(payload);
@@ -178,18 +177,19 @@ async function handleCaptchaCode(interaction, ctx, ownerId, deps) {
   } catch {
     return say({ content: en('verification.captcha.error') });
   }
-  if (cfg.roleId && member.roles.cache.has(cfg.roleId)) return say({ content: t(lang, 'verification.msg.already') });
+  if (cfg.roleId && member.roles.cache.has(cfg.roleId)) return say({ content: en('verification.captcha.already') });
 
   const outcome = store.check(guildId, ownerId, interaction.fields.getTextInputValue('code'));
   if (outcome === 'ok') {
     const result = await verifyMember(ctx, interaction.guild, member, { method: 'captcha' },
       { logVerification: deps?.logVerification ?? logVerification });
     if (result.ok) return say({ content: en('verification.captcha.verified') });
-    if (result.reason === 'already') return say({ content: t(lang, 'verification.msg.already') });
+    if (result.reason === 'already') return say({ content: en('verification.captcha.already') });
     return say({ content: en(CAPTCHA_FAIL_KEY[result.reason] ?? 'verification.captcha.error') });
   }
   if (outcome === 'wrong') {
-    return say({ content: en('verification.captcha.wrong', { left: store.triesLeft(guildId, ownerId) }) });
+    const left = store.triesLeft(guildId, ownerId);
+    return say({ content: en(left === 1 ? 'verification.captcha.wrong_one' : 'verification.captcha.wrong', { left }) });
   }
   if (outcome === 'cooldown') {
     return say({
@@ -207,13 +207,16 @@ export async function handleVerifyButton(interaction, ctx, deps) {
   if (!interaction.guild) return reply('common.guildOnly');
   const { enabled, config } = await getFeature(ctx.db, guildId, 'verification');
   const cfg = readConfig(config);
-  if (!enabled || cfg.state === 'none') return reply('verification.msg.off');
-  if (cfg.mode === 'captcha' && !CAPTCHA_LIVE_STATES.includes(cfg.state)) return reply('verification.msg.off');
+  if (!enabled || cfg.state === 'none') {
+    return cfg.mode === 'captcha'
+      ? interaction.reply(ephemeral(en('verification.captcha.off')))
+      : reply('verification.msg.off');
+  }
 
   // Everything after this can be slow (role add, mod log): acknowledge first, answer with editReply.
   await interaction.deferReply(ephemeral({}));
   const say = (key) => interaction.editReply({ content: t(lang, key) });
-  if (cfg.mode === 'captcha') return handleCaptchaStart(interaction, cfg, lang, deps);
+  if (cfg.mode === 'captcha') return handleCaptchaStart(interaction, cfg, deps);
 
   let member;
   try {
