@@ -36,8 +36,9 @@ export function createEvents(deps = {}) {
     if (!guild || !channel.permissionOverwrites || channel.isThread?.()) return;
     const cfg = await runningConfig(ctx, guild.id);
     if (!cfg) return;
-    // gateChannel only answers 'skipped' for expected cases (list kind skip, private,
-    // synced child, nothing to change); a missing permission surfaces as 'failed'.
+    // gateChannel only answers 'skipped' for expected cases (list kind skip, private, deleted,
+    // nothing to change); a missing permission surfaces as 'failed'. A channel created inside a
+    // gated category copies its gated overwrites: gateChannel records the category's original.
     const result = await gate(ctx, guild, channel, cfg);
     if (result === 'failed') {
       const lang = await getLang(ctx.db, guild.id);

@@ -64,14 +64,16 @@ async function executeMode(interaction, ctx) {
 
 // ---- channel lists -----------------------------------------------------------------------
 
+// Forced fetch: the cache can lag our own last write (see apply.js), and the visibility
+// check below reads the overwrites. A failed fetch falls back to the cache.
 async function resolveChannel(guild, id) {
-  const cached = guild.channels.cache.get(id);
-  if (cached) return cached;
   try {
-    return (await guild.channels.fetch(id)) ?? null;
-  } catch {
-    return null;
+    const live = await guild.channels.fetch(id, { force: true });
+    if (live) return live;
+  } catch (err) {
+    if (err?.code === 10003) return null;
   }
+  return guild.channels.cache.get(id) ?? null;
 }
 
 /**

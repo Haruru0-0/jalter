@@ -1,6 +1,12 @@
 // Applies a planned verification gate to a real channel and reverts it from the
 // undo record. The planner (plan.js) is pure; this file is the Discord/DB edge.
-import { PermissionFlagsBits as P } from 'discord.js';
+//
+// Live overwrites: in discord.js 14, permissionOverwrites.edit/delete only call the API; the
+// cache changes when the CHANNEL_UPDATE event arrives, and edit() merges onto the CACHED
+// overwrite. A revert followed at once by a gate (a list change) would plan from, and write
+// on top of, the pre-revert cache. So gate and revert both start from a forced fetch of the
+// channel: the snapshot and the cache that edit() merges onto are then what Discord has now.
+import { PermissionFlagsBits as P, OverwriteType } from 'discord.js';
 import { getFeature } from '../../db/settings.js';
 import { classify, readConfig } from './config.js';
 import { planChannel, SEND_BITS, VOICE_BITS, BOT_VERIFY_BITS, VIEW_BIT } from './plan.js';
@@ -9,6 +15,7 @@ import { recordOriginal, getRecord, deleteRecord } from './store.js';
 // The bits the gate can change on @everyone/Verified (and, separately, on the
 // bot); revert never touches anything outside them.
 const ROLE_BITS = SEND_BITS | VOICE_BITS | VIEW_BIT;
+const UNKNOWN_CHANNEL = 10003;
 
 const FLAGS = Object.entries(P);
 
@@ -26,6 +33,16 @@ export function snapshotOf(channel, guild) {
   };
 }
 
+/** The channel as Discord has it now (forced fetch), or null when it no longer exists. */
+export async function liveChannel(guild, channelId) {
+  try {
+    return (await guild.channels.fetch(channelId, { force: true })) ?? null;
+  } catch (err) {
+    if (err?.code === UNKNOWN_CHANNEL) return null;
+    throw err;
+  }
+}
+
 const find = (snap, id) => snap.overwrites.find((o) => o.id === id) ?? null;
 
 const toRecord = (o) => ({
@@ -33,6 +50,13 @@ const toRecord = (o) => ({
   allow: String(o?.allow ?? 0n),
   deny: String(o?.deny ?? 0n),
 });
+
+const fromRecord = (id, r) => (r?.existed
+  ? { id, type: OverwriteType.Role, allow: BigInt(r.allow), deny: BigInt(r.deny) }
+  : null);
+
+const sameOverwrite = (a, b) => (a == null && b == null)
+  || (a != null && b != null && a.allow === b.allow && a.deny === b.deny);
 
 // PermissionOverwriteOptions for the bits in `mask`: true = allow, false = deny, null = neutral.
 function optionsFor(mask, allow, deny) {
@@ -44,39 +68,70 @@ function optionsFor(mask, allow, deny) {
   return out;
 }
 
-async function writeTarget(channel, id, current, wanted) {
+async function writeTarget(channel, id, type, current, wanted) {
   const curAllow = current?.allow ?? 0n;
   const curDeny = current?.deny ?? 0n;
   const changed = (wanted.allow ^ curAllow) | (wanted.deny ^ curDeny);
   if (changed === 0n) return;
-  await channel.permissionOverwrites.edit(id, optionsFor(changed, wanted.allow, wanted.deny));
+  await channel.permissionOverwrites.edit(id, optionsFor(changed, wanted.allow, wanted.deny), { type });
+}
+
+/**
+ * A channel created inside (or synced to) a gated category copies the category's gated
+ * overwrites, so it looks private and would be left alone, and `remove` would never open it.
+ * When the channel has no record of its own, its parent has one, and its @everyone and Verified
+ * overwrites equal the parent's current ones, its true original is the parent's original.
+ * Returns { snap, originals } (the snapshot as it was before the gate) or null.
+ */
+async function inheritedOriginal(ctx, guild, channel, snap, everyoneId, verifiedId) {
+  const parentId = channel.parentId ?? channel.parent?.id ?? null;
+  if (!parentId || !verifiedId) return null;
+  if (await getRecord(ctx.db, guild.id, channel.id)) return null;
+  const parentRec = await getRecord(ctx.db, guild.id, parentId);
+  if (!parentRec?.everyone || !parentRec.verified || parentRec.bot) return null;
+  const parent = await liveChannel(guild, parentId);
+  if (!parent) return null;
+  const psnap = snapshotOf(parent, guild);
+  for (const id of [everyoneId, verifiedId]) {
+    if (!sameOverwrite(find(snap, id), find(psnap, id))) return null;
+  }
+  const others = snap.overwrites.filter((o) => o.id !== everyoneId && o.id !== verifiedId);
+  const restored = [fromRecord(everyoneId, parentRec.everyone), fromRecord(verifiedId, parentRec.verified)]
+    .filter(Boolean);
+  return {
+    snap: { ...snap, overwrites: [...others, ...restored] },
+    originals: { everyone: parentRec.everyone, verified: parentRec.verified },
+  };
 }
 
 export async function gateChannel(ctx, guild, channel, cfg) {
   try {
     const kind = classify(channel.id, cfg);
     if (kind === 'skip') return 'skipped';
-    if (channel.permissionsLocked && channel.parent && classify(channel.parent.id, cfg) === kind) {
-      return 'skipped';
-    }
+    const live = await liveChannel(guild, channel.id);
+    if (!live) return 'skipped'; // deleted meanwhile: nothing to gate
     const everyoneId = guild.roles.everyone.id;
     const botId = guild.members?.me?.id ?? ctx.client?.user?.id;
-    const snap = snapshotOf(channel, guild);
-    const plan = planChannel(snap, kind, { everyoneId, verifiedId: cfg.roleId, botId });
+    const current = snapshotOf(live, guild);
+    // A synced child is gated like any other channel: editing a category never changes its
+    // children on Discord (sync is a client-side copy), so skipping it would leave it open.
+    const inherited = await inheritedOriginal(ctx, guild, live, current, everyoneId, cfg.roleId);
+    const before = inherited?.snap ?? current;
+    const plan = planChannel(before, kind, { everyoneId, verifiedId: cfg.roleId, botId });
     if (plan.skip) return 'skipped';
 
     // Record the originals first; the first record per channel wins.
-    await recordOriginal(ctx.db, guild.id, channel.id, {
-      everyone: toRecord(find(snap, everyoneId)),
-      verified: toRecord(find(snap, cfg.roleId)),
-      bot: plan.bot ? toRecord(find(snap, botId)) : null,
+    await recordOriginal(ctx.db, guild.id, live.id, {
+      everyone: inherited?.originals.everyone ?? toRecord(find(before, everyoneId)),
+      verified: inherited?.originals.verified ?? toRecord(find(before, cfg.roleId)),
+      bot: plan.bot ? toRecord(find(before, botId)) : null,
     });
 
     // @everyone goes LAST: once it denies View a rerun would call the channel
     // private and never finish. Until then a rerun still treats it as gate-able.
-    if (plan.bot) await writeTarget(channel, botId, find(snap, botId), plan.bot);
-    await writeTarget(channel, cfg.roleId, find(snap, cfg.roleId), plan.verified);
-    await writeTarget(channel, everyoneId, find(snap, everyoneId), plan.everyone);
+    if (plan.bot) await writeTarget(live, botId, OverwriteType.Member, find(current, botId), plan.bot);
+    await writeTarget(live, cfg.roleId, OverwriteType.Role, find(current, cfg.roleId), plan.verified);
+    await writeTarget(live, everyoneId, OverwriteType.Role, find(current, everyoneId), plan.everyone);
     return 'changed';
   } catch (err) {
     console.error('verification gateChannel failed', channel?.id, err?.message ?? err);
@@ -84,7 +139,7 @@ export async function gateChannel(ctx, guild, channel, cfg) {
   }
 }
 
-async function restoreTarget(channel, id, current, original, gateBits) {
+async function restoreTarget(channel, id, type, current, original, gateBits) {
   if (!original) return;
   const oAllow = BigInt(original.allow);
   const oDeny = BigInt(original.deny);
@@ -98,21 +153,33 @@ async function restoreTarget(channel, id, current, original, gateBits) {
       return;
     }
     const changed = (cAllow | cDeny) & gateBits;
-    if (changed !== 0n) await channel.permissionOverwrites.edit(id, optionsFor(changed, 0n, 0n));
+    if (changed !== 0n) await channel.permissionOverwrites.edit(id, optionsFor(changed, 0n, 0n), { type });
     return;
   }
   const changed = ((oAllow ^ cAllow) | (oDeny ^ cDeny)) & gateBits;
   if (changed === 0n) return;
-  await channel.permissionOverwrites.edit(id, optionsFor(changed, oAllow, oDeny));
+  await channel.permissionOverwrites.edit(id, optionsFor(changed, oAllow, oDeny), { type });
+}
+
+// Discord removes a deleted role's overwrites itself; writing one back would fail forever.
+async function roleGone(guild, roleId) {
+  if (guild.roles.cache?.get?.(roleId)) return false;
+  return (await guild.roles.fetch(roleId)) == null;
 }
 
 export async function revertChannel(ctx, guild, channel) {
   try {
     const rec = await getRecord(ctx.db, guild.id, channel.id);
     if (!rec) return 'missing';
+    const live = await liveChannel(guild, channel.id);
+    if (!live) {
+      // The channel no longer exists: nothing left to restore.
+      await deleteRecord(ctx.db, guild.id, channel.id);
+      return 'restored';
+    }
     const everyoneId = guild.roles.everyone.id;
     const botId = guild.members?.me?.id ?? ctx.client?.user?.id;
-    const snap = snapshotOf(channel, guild);
+    const snap = snapshotOf(live, guild);
     // The record holds no role id: Verified is whatever the config names now.
     // Without it the Verified overwrite cannot be restored, so keep the record.
     const feature = await getFeature(ctx.db, guild.id, 'verification');
@@ -121,11 +188,13 @@ export async function revertChannel(ctx, guild, channel) {
       console.error('verification revertChannel: no Verified role id in config', channel.id);
       return 'failed';
     }
-    await restoreTarget(channel, everyoneId, find(snap, everyoneId), rec.everyone, ROLE_BITS);
-    if (rec.verified) {
-      await restoreTarget(channel, roleId, find(snap, roleId), rec.verified, ROLE_BITS);
+    await restoreTarget(live, everyoneId, OverwriteType.Role, find(snap, everyoneId), rec.everyone, ROLE_BITS);
+    if (rec.verified && !(await roleGone(guild, roleId))) {
+      await restoreTarget(live, roleId, OverwriteType.Role, find(snap, roleId), rec.verified, ROLE_BITS);
     }
-    if (rec.bot) await restoreTarget(channel, botId, find(snap, botId), rec.bot, BOT_VERIFY_BITS);
+    if (rec.bot) {
+      await restoreTarget(live, botId, OverwriteType.Member, find(snap, botId), rec.bot, BOT_VERIFY_BITS);
+    }
     await deleteRecord(ctx.db, guild.id, channel.id);
     return 'restored';
   } catch (err) {

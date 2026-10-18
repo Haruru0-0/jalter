@@ -25,10 +25,13 @@ const ow = (id, allow = 0n, deny = 0n, type = 0) => ({
   id, type, allow: { bitfield: allow }, deny: { bitfield: deny },
 });
 
+// Every fake channel registers here; guild.channels.fetch reads it (the live channel).
+const registry = new Map();
+
 function fakeChannel(id, overwrites = [], extra = {}) {
   const calls = [];
   const cache = new Map(overwrites.map((o) => [o.id, o]));
-  return {
+  const ch = {
     id,
     type: ChannelType.GuildText,
     permissionsLocked: false,
@@ -54,17 +57,76 @@ function fakeChannel(id, overwrites = [], extra = {}) {
         }
         cache.set(target, ow(target, allow, deny, cur.type));
       },
-      delete: async (target) => { calls.push({ op: 'delete', target }); cache.delete(target); },
+      delete: async (target) => {
+        if (extra.fail || extra.failTargets?.includes(target)) {
+          throw Object.assign(new Error('Missing Permissions'), { status: 403 });
+        }
+        calls.push({ op: 'delete', target });
+        cache.delete(target);
+      },
     },
   };
+  registry.set(id, ch);
+  return ch;
 }
 
+// Like discord.js: edit() merges onto the CACHED overwrite and PUTs the result; edit/delete never
+// update the cache. Only a forced fetch (or a channel update event: sync()) refreshes it.
+function staleChannel(id, overwrites = [], extra = {}) {
+  const calls = [];
+  const server = new Map(overwrites.map((o) => [o.id, o]));
+  const cache = new Map(server);
+  const ch = {
+    id, type: ChannelType.GuildText, parent: null, parentId: null, ...extra, calls, server,
+    sync: () => { cache.clear(); for (const [k, v] of server) cache.set(k, v); },
+    permissionOverwrites: {
+      cache,
+      edit: async (target, options) => {
+        calls.push({ op: 'edit', target, options });
+        const cur = cache.get(target) ?? ow(target, 0n, 0n, target === BOT ? 1 : 0);
+        let allow = cur.allow.bitfield;
+        let deny = cur.deny.bitfield;
+        for (const [name, v] of Object.entries(options)) {
+          const bit = P[name];
+          allow &= ~bit; deny &= ~bit;
+          if (v === true) allow |= bit;
+          if (v === false) deny |= bit;
+        }
+        server.set(target, ow(target, allow, deny, cur.type));
+      },
+      delete: async (target) => { calls.push({ op: 'delete', target }); server.delete(target); },
+    },
+  };
+  registry.set(id, ch);
+  return ch;
+}
+
+const liveRoles = new Map([[VERIFIED, { id: VERIFIED }]]);
 const guild = {
   id: G,
-  roles: { everyone: { id: EVERYONE, permissions: { bitfield: P.ViewChannel | P.SendMessages } } },
+  roles: {
+    everyone: { id: EVERYONE, permissions: { bitfield: P.ViewChannel | P.SendMessages } },
+    fetch: async (id) => liveRoles.get(id) ?? null,
+  },
   members: { me: { id: BOT } },
+  channels: {
+    fetch: async (id, { force } = {}) => {
+      const ch = registry.get(id);
+      if (!ch) throw Object.assign(new Error('Unknown Channel'), { code: 10003 });
+      if (force) ch.sync?.();
+      return ch;
+    },
+  },
 };
 const ctx = () => ({ db });
+const rawOf = (ch, id) => {
+  const o = ch.permissionOverwrites.cache.get(id);
+  return o ? [o.allow.bitfield, o.deny.bitfield] : null;
+};
+const serverOf = (ch, id) => {
+  const o = ch.server.get(id);
+  return o ? [o.allow.bitfield, o.deny.bitfield] : null;
+};
 const cfg = (o = {}) => readConfig({ roleId: VERIFIED, channelId: 'verify', ...o });
 
 test('snapshotOf reads bigint overwrites and the @everyone base', () => {
@@ -163,18 +225,14 @@ test('a permanent error returns failed and does not throw', async () => {
   assert.equal(await gateChannel(ctx(), guild, ch, cfg()), 'failed');
 });
 
-test('a synced child of a gated category is skipped', async () => {
+test('a synced child of a gated category is gated on its own, with its own record', async () => {
+  // Editing a category never changes its children on Discord: a synced child must be gated itself.
   const parent = fakeChannel('cat');
   const child = fakeChannel('kid', [], { permissionsLocked: true, parent });
-  assert.equal(await gateChannel(ctx(), guild, child, cfg()), 'skipped');
-  assert.equal(child.calls.length, 0);
-  assert.equal(await getRecord(db, G, 'kid'), null);
+  assert.equal(await gateChannel(ctx(), guild, child, cfg()), 'changed');
+  assert.ok(rawOf(child, EVERYONE)[1] & P.ViewChannel);
+  assert.deepEqual((await getRecord(db, G, 'kid')).everyone, { existed: false, allow: '0', deny: '0' });
 });
-
-const rawOf = (ch, id) => {
-  const o = ch.permissionOverwrites.cache.get(id);
-  return o ? [o.allow.bitfield, o.deny.bitfield] : null;
-};
 
 test('gated: Verified write succeeds, @everyone write fails; a rerun finishes without re-recording', async () => {
   const ch = fakeChannel('g1c', [], { failTargets: [EVERYONE] });
@@ -256,4 +314,108 @@ test('revert with a record that has no Verified part works without a config row'
   const ch = fakeChannel('r2', [ow(EVERYONE, 0n, P.ViewChannel)]);
   assert.equal(await revertChannel(ctx(), guild, ch), 'restored');
   assert.equal(await getRecord(db, G, 'r2'), null);
+});
+
+// ---- live overwrites: discord.js does not update the cache after edit/delete ----------------
+
+test('stale cache: revert right after a gate restores the live overwrites', async () => {
+  await setFeature(db, G, 'verification', { enabled: true, config: { roleId: VERIFIED } });
+  const ch = staleChannel('s1', [ow(EVERYONE, P.AddReactions, 0n)]);
+  assert.equal(await gateChannel(ctx(), guild, ch, cfg()), 'changed');
+  assert.ok(serverOf(ch, EVERYONE)[1] & P.ViewChannel, 'gated on Discord');
+  // No channel update event arrived: the cache still shows the original overwrites.
+  assert.deepEqual(rawOf(ch, EVERYONE), [P.AddReactions, 0n]);
+  assert.equal(await revertChannel(ctx(), guild, ch), 'restored');
+  assert.deepEqual(serverOf(ch, EVERYONE), [P.AddReactions, 0n]);
+  assert.equal(serverOf(ch, VERIFIED), null);
+  assert.equal(await getRecord(db, G, 's1'), null);
+});
+
+test('stale cache: a second gate before the update event changes nothing', async () => {
+  const ch = staleChannel('s2');
+  assert.equal(await gateChannel(ctx(), guild, ch, cfg()), 'changed');
+  ch.permissionOverwrites.cache.clear(); // still the original (no overwrites) in the cache
+  const n = ch.calls.length;
+  assert.equal(await gateChannel(ctx(), guild, ch, cfg()), 'skipped');
+  assert.equal(ch.calls.length, n);
+});
+
+test('stale cache: revert then gate as public writes from the live state and keeps the original', async () => {
+  await setFeature(db, G, 'verification', { enabled: true, config: { roleId: VERIFIED } });
+  const ch = staleChannel('s3');
+  assert.equal(await gateChannel(ctx(), guild, ch, cfg()), 'changed');
+  ch.sync(); // the update event for the gate arrived
+  assert.equal(await revertChannel(ctx(), guild, ch), 'restored');
+  // No event yet for the revert: the gate must not plan from the gated cache.
+  assert.equal(await gateChannel(ctx(), guild, ch, cfg({ publicChannels: ['s3'] })), 'changed');
+  const [evAllow, evDeny] = serverOf(ch, EVERYONE);
+  assert.equal(evDeny & P.ViewChannel, 0n);
+  assert.equal(evDeny & SEND_BITS, SEND_BITS);
+  assert.equal(evAllow, 0n);
+  assert.equal(serverOf(ch, VERIFIED)[0] & P.ViewChannel, 0n);
+  assert.deepEqual((await getRecord(db, G, 's3')).everyone, { existed: false, allow: '0', deny: '0' });
+});
+
+test('a channel deleted before the gate is skipped; before the revert its record is dropped', async () => {
+  const ghost = { id: 'gone', type: ChannelType.GuildText, permissionOverwrites: { cache: new Map() } };
+  assert.equal(await gateChannel(ctx(), guild, ghost, cfg()), 'skipped');
+  await recordOriginal(db, G, 'gone', { everyone: { existed: false, allow: '0', deny: '0' }, verified: null, bot: null });
+  assert.equal(await revertChannel(ctx(), guild, ghost), 'restored');
+  assert.equal(await getRecord(db, G, 'gone'), null);
+});
+
+// ---- channels created inside a gated category --------------------------------------------
+
+test('a new channel that copied a gated category records the category original', async () => {
+  await setFeature(db, G, 'verification', { enabled: true, config: { roleId: VERIFIED } });
+  const cat = fakeChannel('cat2', [ow(EVERYONE, P.AddReactions, 0n)], { type: ChannelType.GuildCategory });
+  assert.equal(await gateChannel(ctx(), guild, cat, cfg()), 'changed');
+  const gatedOws = [...cat.permissionOverwrites.cache.values()];
+  // Discord copies the category's (gated) overwrites into a channel created inside it.
+  const kid = fakeChannel('kid2', [...gatedOws, ow('staff', P.ViewChannel, 0n)], { parentId: 'cat2' });
+  assert.equal(await gateChannel(ctx(), guild, kid, cfg()), 'changed');
+  const rec = await getRecord(db, G, 'kid2');
+  assert.deepEqual(rec.everyone, { existed: true, allow: String(P.AddReactions), deny: '0' });
+  assert.deepEqual(rec.verified, { existed: false, allow: '0', deny: '0' });
+  assert.ok(rawOf(kid, EVERYONE)[1] & P.ViewChannel, 'still gated');
+  // remove: the child opens again like its category was before the gate.
+  assert.equal(await revertChannel(ctx(), guild, kid), 'restored');
+  assert.deepEqual(rawOf(kid, EVERYONE), [P.AddReactions, 0n]);
+  assert.equal(rawOf(kid, VERIFIED), null);
+  assert.deepEqual(rawOf(kid, 'staff'), [P.ViewChannel, 0n]);
+});
+
+test('a new public-kind child of a gated category is gated from the category original', async () => {
+  const cat = fakeChannel('cat3', [], { type: ChannelType.GuildCategory });
+  assert.equal(await gateChannel(ctx(), guild, cat, cfg()), 'changed');
+  const kid = fakeChannel('kid3', [...cat.permissionOverwrites.cache.values()], { parentId: 'cat3' });
+  assert.equal(await gateChannel(ctx(), guild, kid, cfg({ publicChannels: ['kid3'] })), 'changed');
+  const [, evDeny] = rawOf(kid, EVERYONE);
+  assert.equal(evDeny & P.ViewChannel, 0n, 'visible: public, not gated');
+  assert.equal(evDeny & P.SendMessages, P.SendMessages);
+  assert.equal(rawOf(kid, VERIFIED)[0] & P.ViewChannel, 0n);
+});
+
+test('a private channel inside a gated category that differs from it stays private', async () => {
+  const cat = fakeChannel('cat4', [], { type: ChannelType.GuildCategory });
+  await gateChannel(ctx(), guild, cat, cfg());
+  const kid = fakeChannel('kid4', [ow(EVERYONE, 0n, P.ViewChannel)], { parentId: 'cat4' });
+  assert.equal(await gateChannel(ctx(), guild, kid, cfg()), 'skipped');
+  assert.equal(await getRecord(db, G, 'kid4'), null);
+});
+
+// ---- the Verified role was deleted ------------------------------------------------------------
+
+test('revert after the Verified role was deleted restores @everyone and drops the record', async () => {
+  await setFeature(db, G, 'verification', { enabled: true, config: { roleId: 'deleted-role' } });
+  await recordOriginal(db, G, 'dr', {
+    everyone: { existed: false, allow: '0', deny: '0' },
+    verified: { existed: true, allow: String(P.SendMessages), deny: '0' },
+    bot: null,
+  });
+  // Discord drops a deleted role's overwrites; writing one would fail.
+  const ch = fakeChannel('dr', [ow(EVERYONE, 0n, P.ViewChannel)], { failTargets: ['deleted-role'] });
+  assert.equal(await revertChannel(ctx(), guild, ch), 'restored');
+  assert.equal(rawOf(ch, EVERYONE), null);
+  assert.equal(await getRecord(db, G, 'dr'), null);
 });

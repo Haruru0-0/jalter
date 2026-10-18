@@ -66,6 +66,7 @@ function makeGuild({
     roles: {
       everyone: { id: G, permissions: has(everyoneBase) },
       cache: rolesMap,
+      fetch: async (id) => rolesMap.get(id) ?? null,
       create: async (o) => {
         const r = { id: 'newrole', position: o.position, managed: false, opts: o, delete: async () => {} };
         created.roles.push(r);
@@ -178,6 +179,13 @@ test('setup preview counts channels and names a leaking role', async () => {
   assert.equal(guild.created.roles.length, 0, 'nothing is created before Confirm');
 });
 
+test('setup preview counts a synced child of a category as its own channel to gate', async () => {
+  const cat = fakeChannel('cat', [], { type: ChannelType.GuildCategory });
+  const kid = fakeChannel('kid', [], { permissionsLocked: true, parent: cat, parentId: 'cat' });
+  const { i } = await preview(makeGuild({ channels: [cat, kid] }));
+  assert.match(last(i).content, /Channels to gate: 2/);
+});
+
 test('confirm by another admin or after 2 minutes does nothing', async () => {
   const guild = makeGuild();
   const { ok } = await preview(guild);
@@ -271,7 +279,7 @@ test('remove restores every recorded channel and reports failures', async () => 
   const boom = async () => { throw new Error('Missing Permissions'); };
   pub.permissionOverwrites.edit = boom;
   pub.permissionOverwrites.delete = boom;
-  const guild = makeGuild({ channels: [gated, pub, verify] });
+  const guild = makeGuild({ channels: [gated, pub, verify], roles: [{ id: 'rv', position: 1, managed: false }] });
   const i = await run(guild, { sub: 'remove' });
   assert.match(last(i).content, /<#c2>/);
   assert.doesNotMatch(last(i).content, /<#c1>/);

@@ -40,7 +40,7 @@ function fakeChannel(id, overwrites = [], extra = {}) {
   const calls = [];
   const cache = new Map(overwrites.map((o) => [o.id, o]));
   const guild = fakeGuild();
-  return {
+  const ch = {
     id, guild, guildId: G,
     type: ChannelType.GuildText,
     permissionsLocked: false,
@@ -66,6 +66,8 @@ function fakeChannel(id, overwrites = [], extra = {}) {
       delete: async () => {},
     },
   };
+  guild.channels = { fetch: async () => ch };
+  return ch;
 }
 
 function harness() {
@@ -165,12 +167,12 @@ test('a new private channel is left alone, with no log line', async () => {
   assert.equal(h.logs.length, 0);
 });
 
-test('a synced child of a gated category is left alone, with no log line', async () => {
+test('a new synced child is gated itself (a category edit never reaches its children)', async () => {
   await setup();
   const h = harness();
   const ch = fakeChannel('c1', [], { permissionsLocked: true, parent: { id: 'cat' } });
   await h.create(ctx(), ch);
-  assert.equal(ch.calls.length, 0);
+  assert.ok(ch.permissionOverwrites.cache.get(G).deny.bitfield & P.ViewChannel);
   assert.equal(h.logs.length, 0);
 });
 

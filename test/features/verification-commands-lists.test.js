@@ -46,6 +46,35 @@ function fakeChannel(id, overwrites = []) {
   };
 }
 
+// Like discord.js: edit() merges onto the CACHED overwrite and only writes Discord's copy
+// (`server`); the cache changes on a channel update event (sync) or a forced fetch.
+function staleChannel(id, overwrites = []) {
+  const server = new Map(overwrites.map((o) => [o.id, o]));
+  const cache = new Map(server);
+  const calls = [];
+  return {
+    id, type: ChannelType.GuildText, parent: null, isThread: () => false, calls, server,
+    sync: () => { cache.clear(); for (const [k, v] of server) cache.set(k, v); },
+    permissionOverwrites: {
+      cache,
+      edit: async (target, options) => {
+        calls.push({ op: 'edit', target });
+        const cur = cache.get(target) ?? ow(target);
+        let allow = cur.allow.bitfield;
+        let deny = cur.deny.bitfield;
+        for (const [name, v] of Object.entries(options)) {
+          const bit = P[name];
+          allow &= ~bit; deny &= ~bit;
+          if (v === true) allow |= bit;
+          if (v === false) deny |= bit;
+        }
+        server.set(target, ow(target, allow, deny, cur.type));
+      },
+      delete: async (target) => { calls.push({ op: 'delete', target }); server.delete(target); },
+    },
+  };
+}
+
 function fakeMember(id, { bot = false, roles = [], top = 1 } = {}) {
   const set = new Set(roles);
   const m = {
@@ -72,7 +101,15 @@ function makeGuild({ channels = [], members = [], roleTop = 3, botTop = 5, owner
       fetch: async ({ user }) => { const m = mem.get(user); if (!m) throw new Error('Unknown Member'); return m; },
     },
     roles: { everyone: { id: G, permissions: has(P.ViewChannel) }, cache: new Map([[VR, role]]), fetch: async () => role },
-    channels: { cache: chans, fetch: async (id) => (id === undefined ? new Map(chans) : (chans.get(id) ?? null)) },
+    channels: {
+      cache: chans,
+      fetch: async (id, { force } = {}) => {
+        if (id === undefined) return new Map(chans);
+        const c = chans.get(id) ?? null;
+        if (force) c?.sync?.();
+        return c;
+      },
+    },
   };
 }
 
@@ -393,4 +430,45 @@ test('verify and unverify respect the actor hierarchy', async () => {
   assert.deepEqual(high.removed, [VR]);
   await run(g, { sub: 'unverify', options: { member: 'u3' }, actorTop: 10 });
   assert.deepEqual(low.removed, [VR]);
+});
+
+// ---- a list change right after a write: the cache is stale until the update event ----------
+
+const serverOf = (ch, id) => {
+  const o = ch.server.get(id);
+  return o ? [o.allow.bitfield, o.deny.bitfield] : null;
+};
+const SEND = P.SendMessages | P.SendMessagesInThreads | P.CreatePublicThreads | P.CreatePrivateThreads
+  | P.AddReactions | P.UseApplicationCommands;
+
+test('public add on a gated channel (stale cache) ends public, recorded, and says added', async () => {
+  await active();
+  const chan = staleChannel('a');
+  const g = makeGuild({ channels: [chan] });
+  assert.equal(await gateChannel({ db, client: {} }, g, chan, await cfgNow()), 'changed');
+  chan.sync(); // the update event for the gate arrived long ago
+  const i = await run(g, { group: 'public', sub: 'add', options: { channel: 'a' } });
+  assert.deepEqual((await cfgNow()).publicChannels, ['a']);
+  const [, evDeny] = serverOf(chan, G);
+  assert.equal(evDeny & P.ViewChannel, 0n, 'visible again');
+  assert.equal(evDeny & SEND, SEND, 'read-only for @everyone');
+  const recs = await listRecords(db, G);
+  assert.equal(recs.length, 1);
+  assert.deepEqual(recs[0].everyone, { existed: false, allow: '0', deny: '0' });
+  assert.match(last(i).content, /<#a>/);
+});
+
+test('public remove (stale cache) gates from the live state and keeps the first record', async () => {
+  await active({ publicChannels: ['a'] });
+  const chan = staleChannel('a', [ow(G, P.AttachFiles, 0n)]);
+  const g = makeGuild({ channels: [chan] });
+  assert.equal(await gateChannel({ db, client: {} }, g, chan, await cfgNow()), 'changed');
+  chan.sync();
+  await run(g, { group: 'public', sub: 'remove', options: { channel: 'a' } });
+  const recs = await listRecords(db, G);
+  assert.equal(recs.length, 1);
+  assert.deepEqual(recs[0].everyone, { existed: true, allow: String(P.AttachFiles), deny: '0' });
+  assert.deepEqual(recs[0].verified, { existed: false, allow: '0', deny: '0' });
+  assert.deepEqual(serverOf(chan, G), [P.AttachFiles, P.ViewChannel]);
+  assert.deepEqual(serverOf(chan, VR), [P.ViewChannel, 0n]);
 });

@@ -98,8 +98,7 @@ async function previewOf(guild, cfg, role, channel) {
   for (const c of [...fetched.values()].filter((x) => x && !x.isThread?.())) {
     const kind = classify(c.id, view);
     if (kind === 'skip') { out.skipped += 1; continue; }
-    // A channel synced with a category of the same kind is handled by the category.
-    if (c.permissionsLocked && c.parent && classify(c.parent.id, view) === kind) continue;
+    // A synced child is counted on its own: a category edit never changes its children.
     const snap = snapshotOf(c, guild);
     const plan = planChannel(snap, kind, { everyoneId, verifiedId, botId });
     if (plan.skip) { out.private += 1; continue; }
