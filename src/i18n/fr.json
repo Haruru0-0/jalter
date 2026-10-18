@@ -513,5 +513,15 @@
   "automod.native.full": "La liste est pleine (jusqu'à {max} règles). Retirez-en une d'abord.",
   "verification.cmd.root": "Paramètres de vérification",
   "verification.cmd.enable": "Activer la vérification",
-  "verification.cmd.disable": "Désactiver la vérification"
+  "verification.cmd.disable": "Désactiver la vérification",
+  "verification.log.member": "Membre",
+  "verification.log.actor": "Par",
+  "verification.log.detail": "Détails",
+  "verification.log.setup": "Vérification configurée",
+  "verification.log.rollout": "Déploiement de la vérification terminé",
+  "verification.log.verified": "Membre vérifié",
+  "verification.log.manual_verify": "Membre vérifié manuellement",
+  "verification.log.manual_unverify": "Vérification du membre retirée manuellement",
+  "verification.log.undo": "Vérification annulée",
+  "verification.log.gate_failed": "Impossible de protéger un nouveau salon"
 }

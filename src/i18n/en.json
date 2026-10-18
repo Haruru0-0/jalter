@@ -513,5 +513,15 @@
   "automod.native.full": "The list is full (up to {max} rules). Remove one first.",
   "verification.cmd.root": "Verification settings",
   "verification.cmd.enable": "Turn verification on",
-  "verification.cmd.disable": "Turn verification off"
+  "verification.cmd.disable": "Turn verification off",
+  "verification.log.member": "Member",
+  "verification.log.actor": "By",
+  "verification.log.detail": "Details",
+  "verification.log.setup": "Verification set up",
+  "verification.log.rollout": "Verification rollout finished",
+  "verification.log.verified": "Member verified",
+  "verification.log.manual_verify": "Member verified manually",
+  "verification.log.manual_unverify": "Member unverified manually",
+  "verification.log.undo": "Verification undone",
+  "verification.log.gate_failed": "Could not gate a new channel"
 }

@@ -513,5 +513,15 @@
   "automod.native.full": "القائمة ممتلئة (حتى {max} قاعدة). أزل قاعدة أولاً.",
   "verification.cmd.root": "إعدادات التحقق",
   "verification.cmd.enable": "تفعيل التحقق",
-  "verification.cmd.disable": "إيقاف التحقق"
+  "verification.cmd.disable": "إيقاف التحقق",
+  "verification.log.member": "العضو",
+  "verification.log.actor": "بواسطة",
+  "verification.log.detail": "التفاصيل",
+  "verification.log.setup": "تم إعداد التحقق",
+  "verification.log.rollout": "اكتمل تطبيق التحقق",
+  "verification.log.verified": "تم التحقق من العضو",
+  "verification.log.manual_verify": "تم التحقق من العضو يدوياً",
+  "verification.log.manual_unverify": "تم إلغاء التحقق من العضو يدوياً",
+  "verification.log.undo": "تم التراجع عن التحقق",
+  "verification.log.gate_failed": "تعذر تقييد قناة جديدة"
 }
