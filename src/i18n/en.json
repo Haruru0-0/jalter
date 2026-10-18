@@ -590,6 +590,7 @@
   "verification.status.progress.gate": "Progress: gating channels.",
   "verification.status.stuck": "The rollout has no job left and is stuck. Run /verification remove to undo it, then set up again.",
   "verification.status.failed": "The rollout failed. Channels that could not be gated: {count}. Run /verification remove to undo it, then set up again.",
+  "verification.status.failed_list": "Channels that could not be gated: {channels}",
   "verification.status.lists": "Public channels: {public}, skipped channels: {skipped}",
   "verification.status.records": "Channels with a saved undo record: {count}",
   "verification.status.unset": "not set",

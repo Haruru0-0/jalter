@@ -590,6 +590,7 @@
   "verification.status.progress.gate": "التقدم: إقفال القنوات.",
   "verification.status.stuck": "لم تعد هناك مهمة للتطبيق وهو عالق. نفّذ /verification remove للتراجع ثم أعد الإعداد.",
   "verification.status.failed": "فشل التطبيق. قنوات تعذّر إقفالها: {count}. نفّذ /verification remove للتراجع ثم أعد الإعداد.",
+  "verification.status.failed_list": "القنوات التي تعذّر إقفالها: {channels}",
   "verification.status.lists": "القنوات العامة: {public}، القنوات المتجاهلة: {skipped}",
   "verification.status.records": "قنوات لها سجل تراجع محفوظ: {count}",
   "verification.status.unset": "غير محدد",

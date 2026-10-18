@@ -1,21 +1,27 @@
+import { randomInt } from 'node:crypto';
+
 export const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 export const CODE_LENGTH = 5;
 export const CODE_TTL_MS = 300_000;
 export const MAX_WRONG = 3;
 export const COOLDOWN_MS = 30_000;
 
-export function makeCode(random = Math.random) {
+// A character index: crypto.randomInt by default (codes must not be guessable); tests inject
+// a `random` returning [0, 1) to get fixed codes.
+const pick = (random) => (random
+  ? Math.min(CODE_ALPHABET.length - 1, Math.floor(random() * CODE_ALPHABET.length))
+  : randomInt(CODE_ALPHABET.length));
+
+export function makeCode(random) {
   let out = '';
-  for (let i = 0; i < CODE_LENGTH; i++) {
-    out += CODE_ALPHABET[Math.min(CODE_ALPHABET.length - 1, Math.floor(random() * CODE_ALPHABET.length))];
-  }
+  for (let i = 0; i < CODE_LENGTH; i++) out += CODE_ALPHABET[pick(random)];
   return out;
 }
 
 // In-memory, per guild+user. Entry: { code, expiresAt, wrong, cooldownUntil }.
 // code is null while cooling down. check() returns 'cooldown' for the wrong entry
 // that starts the cooldown (triesLeft is then 0), 'wrong' otherwise.
-export function createChallengeStore({ now = Date.now, random = Math.random } = {}) {
+export function createChallengeStore({ now = Date.now, random } = {}) {
   const entries = new Map();
   const key = (g, u) => `${g}:${u}`;
 

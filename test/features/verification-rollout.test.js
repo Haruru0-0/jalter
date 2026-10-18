@@ -222,6 +222,7 @@ test('a channel that fails marks failed with a count and the rest still gate', a
   const c = await raw();
   assert.equal(c.state, 'failed');
   assert.equal(c.failedChannels, 1);
+  assert.deepEqual(c.failedChannelIds, ['2']);
   assert.equal(log.calls.length, 1);
   assert.equal(log.calls[0][3].kind, 'rollout_failed');
   assert.match(log.calls[0][3].detail, /1/);
@@ -249,6 +250,7 @@ test('the failed count carries across batches', async () => {
   const next = await pending(GATE_JOB);
   await gateBatch(ctxFor(guild), job(GATE_JOB, next[0].payload), { ...log, ...g, budgetMs: 0 });
   assert.equal((await raw()).failedChannels, 2);
+  assert.deepEqual((await raw()).failedChannelIds, ['100', String(100 + GATE_BATCH)]);
   assert.equal((await raw()).state, 'failed');
 });
 
@@ -320,12 +322,13 @@ test('restarting a rolling_out guild whose grant is done schedules only the gate
 });
 
 test('retrying from failed with grantDone re-runs only the gate and keeps the cutoff', async () => {
-  await plain({ state: 'failed', cutoff: 5555, grantDone: true, failedChannels: 3 });
+  await plain({ state: 'failed', cutoff: 5555, grantDone: true, failedChannels: 3, failedChannelIds: ['7'] });
   await startRollout({ db }, { id: G }, 'en', 'adm');
   const c = await raw();
   assert.equal(c.state, 'rolling_out');
   assert.equal(c.cutoff, 5555);
   assert.equal(c.failedChannels, 0);
+  assert.deepEqual(c.failedChannelIds, []);
   assert.equal(c.grantDone, true);
   assert.equal((await pending(GRANT_JOB)).length, 0);
   assert.deepEqual((await pending(GATE_JOB)).map((r) => r.payload), [{}]);
@@ -450,4 +453,19 @@ test('a channel gated while remove started is reverted by the job, which then st
   assert.deepEqual(reverted, ['1']);
   assert.equal((await raw()).state, 'none');
   assert.equal(log.calls.length, 0);
+});
+
+test('at most 10 failed channel ids are kept; an active rollout keeps none', async () => {
+  await config({ grantDone: true });
+  const channels = Array.from({ length: 12 }, (_, i) => chan(String(200 + i)));
+  const results = Object.fromEntries(channels.map((c) => [c.id, 'failed']));
+  await gateBatch(ctxFor(makeGuild({ channels })), job(GATE_JOB), { ...logger(), ...gater(results) });
+  const c = await raw();
+  assert.equal(c.failedChannels, 12);
+  assert.deepEqual(c.failedChannelIds, channels.slice(0, 10).map((x) => x.id));
+
+  await config({ grantDone: true, failedChannelIds: ['1'] });
+  await gateBatch(ctxFor(makeGuild({ channels: [chan('1')] })), job(GATE_JOB), { ...logger(), ...gater() });
+  assert.equal((await raw()).state, 'active');
+  assert.deepEqual((await raw()).failedChannelIds, []);
 });

@@ -590,6 +590,7 @@
   "verification.status.progress.gate": "Avancement : verrouillage des salons.",
   "verification.status.stuck": "Le déploiement n'a plus de tâche et est bloqué. Lancez /verification remove pour l'annuler, puis configurez de nouveau.",
   "verification.status.failed": "Le déploiement a échoué. Salons impossibles à verrouiller : {count}. Lancez /verification remove pour l'annuler, puis configurez de nouveau.",
+  "verification.status.failed_list": "Salons impossibles à verrouiller : {channels}",
   "verification.status.lists": "Salons publics : {public}, salons ignorés : {skipped}",
   "verification.status.records": "Salons avec un enregistrement d'annulation : {count}",
   "verification.status.unset": "non défini",

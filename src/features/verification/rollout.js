@@ -30,6 +30,7 @@ export const ROLLOUT_KEY = 'rollout';
 export const GRANT_BATCH = 20;
 export const GATE_BATCH = 10;
 export const BUDGET_MS = 20000;
+export const FAILED_IDS_MAX = 10;
 const UNKNOWN_MEMBER = 10007;
 const UNKNOWN_ROLE = 10011;
 const CATEGORY = 4;
@@ -45,12 +46,14 @@ const schedule = (ctx, guildId, type, payload) =>
  * guild language themselves). One atomic statement:
  * - rolling_out with jobs pending: nothing (a double call keeps the first run).
  * - rolling_out without jobs (lost/dropped), or failed: resume with the ORIGINAL cutoff; if the
- *   grant had finished only the gate is re-run (failedChannels reset), else the grant restarts.
+ *   grant had finished only the gate is re-run (failedChannels and failedChannelIds reset), else
+ *   the grant restarts.
  * - anything else: a fresh rollout with a new cutoff.
  */
 export async function startRollout(ctx, guild, lang, adminId) {
   const fresh = {
-    state: 'rolling_out', cutoff: Date.now(), grantDone: false, failedChannels: 0, rolloutBy: adminId ?? null,
+    state: 'rolling_out', cutoff: Date.now(), grantDone: false, failedChannels: 0, failedChannelIds: [],
+    rolloutBy: adminId ?? null,
   };
   const { rows } = await ctx.db.query(
     `INSERT INTO guild_settings (guild_id, feature, enabled, config)
@@ -61,6 +64,7 @@ export async function startRollout(ctx, guild, lang, adminId) {
             THEN jsonb_build_object(
               'state', 'rolling_out',
               'failedChannels', 0,
+              'failedChannelIds', '[]'::jsonb,
               'grantDone', (guild_settings.config->>'grantDone') = 'true',
               'rolloutBy', CASE WHEN guild_settings.config->>'state' = 'rolling_out'
                                 THEN COALESCE(guild_settings.config->'rolloutBy', 'null'::jsonb)
@@ -194,6 +198,8 @@ const gateRun = async (ctx, job, deps) => {
   const p = job.payload ?? {};
   const cursor = p.after ? { id: p.after, type: p.afterCat ? CATEGORY : 0 } : null;
   let failed = Number(p.failed) || 0;
+  // The first FAILED_IDS_MAX failed channels, for /verification status.
+  const failedIds = Array.isArray(p.failedIds) ? p.failedIds.slice(0, FAILED_IDS_MAX) : [];
 
   const fetched = await guild.channels.fetch();
   const all = [...fetched.values()].filter((c) => c && !c.isThread?.()).sort(order);
@@ -216,15 +222,22 @@ const gateRun = async (ctx, job, deps) => {
           return;
         }
       }
-      if (result === 'failed') failed += 1;
+      if (result === 'failed') {
+        failed += 1;
+        if (failedIds.length < FAILED_IDS_MAX) failedIds.push(channel.id);
+      }
     }
     if (i + GATE_BATCH < todo.length && Date.now() - started >= budget) {
       const last = batch[batch.length - 1];
-      await schedule(ctx, guild.id, GATE_JOB, { after: last.id, afterCat: last.type === CATEGORY, failed });
+      await schedule(ctx, guild.id, GATE_JOB, {
+        after: last.id, afterCat: last.type === CATEGORY, failed, failedIds,
+      });
       return;
     }
   }
-  if (!(await conclude(ctx, guild.id, failed > 0 ? 'failed' : 'active', { failedChannels: failed }))) return;
+  if (!(await conclude(ctx, guild.id, failed > 0 ? 'failed' : 'active', {
+    failedChannels: failed, failedChannelIds: failedIds,
+  }))) return;
   const lang = await getLang(ctx.db, guild.id);
   await log(ctx, guild.id, lang, {
     kind: failed > 0 ? 'rollout_failed' : 'rollout',

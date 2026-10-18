@@ -33,6 +33,19 @@ test('renderCaptcha returns a PNG buffer (signature bytes)', async () => {
   assert.equal(h, 110);
 });
 
+test('codes come from crypto, not Math.random, unless a random is injected', () => {
+  const original = Math.random;
+  Math.random = () => { throw new Error('Math.random used for a code'); };
+  try {
+    const code = makeCode();
+    assert.match(code, /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{5}$/);
+    const issued = createChallengeStore().issue('g', 'u');
+    assert.match(issued.code, /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{5}$/);
+  } finally {
+    Math.random = original;
+  }
+});
+
 test('renderCaptcha is deterministic for a seeded random', async () => {
   const a = await renderCaptcha('AB3K9', seq(0.1, 0.5, 0.9, 0.3));
   const b = await renderCaptcha('AB3K9', seq(0.1, 0.5, 0.9, 0.3));

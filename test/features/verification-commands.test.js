@@ -290,6 +290,16 @@ test('status shows the state, progress and a stuck rollout', async () => {
   assert.equal(last(i).flags, 64);
 });
 
+test('status of a failed rollout names the channels that could not be gated', async () => {
+  await setFeature(db, G, 'verification', {
+    enabled: true, config: { roleId: 'r1', state: 'failed', failedChannels: 12, failedChannelIds: ['111', '222'] },
+  });
+  const i = await run(makeGuild(), { sub: 'status' });
+  assert.match(last(i).content, /could not be gated: 12/);
+  assert.match(last(i).content, /<#111> <#222>/);
+  assert.equal(last(i).flags, 64);
+});
+
 async function removable() {
   const gated = fakeChannel('c1', [ow(G, 0n, P.ViewChannel), ow('rv', P.ViewChannel, 0n)]);
   const pub = fakeChannel('c2', [ow(G, 0n, SEND_BITS), ow('rv', SEND_BITS, 0n)]);

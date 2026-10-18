@@ -287,7 +287,14 @@ async function executeStatus(interaction, ctx) {
     if (jobRows.length === 0) lines.push(t(lang, 'verification.status.stuck'));
     else lines.push(t(lang, `verification.status.progress.${raw.grantDone === true ? 'gate' : 'grant'}`));
   } else if (cfg.state === 'failed') {
-    lines.push(t(lang, 'verification.status.failed', { count: Number(raw.failedChannels) || 0 }));
+    const count = Number(raw.failedChannels) || 0;
+    lines.push(t(lang, 'verification.status.failed', { count }));
+    // The rollout keeps only the first few failed channel ids.
+    const ids = Array.isArray(raw.failedChannelIds) ? raw.failedChannelIds.filter((x) => typeof x === 'string') : [];
+    if (ids.length) {
+      const more = count > ids.length ? ` +${count - ids.length}` : '';
+      lines.push(t(lang, 'verification.status.failed_list', { channels: `${mentions(ids)}${more}` }));
+    }
   }
   lines.push(t(lang, 'verification.status.lists', {
     public: cfg.publicChannels.length, skipped: cfg.skippedChannels.length,
