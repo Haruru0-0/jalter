@@ -185,6 +185,23 @@ test('a role above the bot gives role_too_high', async () => {
   assert.equal(log.calls.length, 0);
 });
 
+test('a Verified role that gained staff permissions is not given', async () => {
+  await setup();
+  const staff = { id: 'rv', position: 1, managed: false, permissions: { has: (p) => p === 'ManageGuild' } };
+  const guild = makeGuild({ role: staff });
+  const member = makeMember();
+  guild.members._set(member);
+  const log = logger();
+  const r = await verifyMember({ db }, guild, member, { method: 'button' }, log.deps);
+  assert.deepEqual(r, { ok: false, reason: 'role_dangerous' });
+  assert.deepEqual(member.added, []);
+  assert.equal(log.calls.length, 0);
+  const i = makeInteraction(guild, member);
+  await handleVerifyButton(i, { db }, log.deps);
+  assert.match(i.replies.at(-1).content, /staff permissions/);
+  assert.deepEqual(member.added, []);
+});
+
 test('a failing role add gives discord_error and no log', async () => {
   await setup();
   const guild = makeGuild();

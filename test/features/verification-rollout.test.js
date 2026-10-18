@@ -160,6 +160,19 @@ test('a missing Verified role fails the rollout and logs once', async () => {
   assert.equal((await pending(GATE_JOB)).length, 0);
 });
 
+test('a Verified role with staff permissions is never granted: the rollout fails and logs once', async () => {
+  const m = makeMember('1');
+  const role = { id: '900', position: 1, managed: false, permissions: { has: (p) => p === 'Administrator' } };
+  const guild = makeGuild({ members: [m], role });
+  const log = logger();
+  await grantBatch(ctxFor(guild), job(GRANT_JOB), log);
+  assert.deepEqual(m.added, []);
+  assert.equal((await raw()).state, 'failed');
+  assert.equal(log.calls.length, 1);
+  assert.match(log.calls[0][3].detail, /staff permissions/);
+  assert.equal((await pending(GATE_JOB)).length, 0);
+});
+
 test('gateBatch never runs gating while the grant job is still pending', async () => {
   const guild = makeGuild({ channels: [chan('10')] });
   const g = gater();

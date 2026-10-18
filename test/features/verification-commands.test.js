@@ -87,13 +87,16 @@ function makeGuild({
   };
 }
 
-function makeInteraction(guild, { sub, customId, options = {}, userId = 'admin', manage = true } = {}) {
+function makeInteraction(guild, { sub, customId, options = {}, userId = 'admin', manage = true, actorTop = 10 } = {}) {
   const replies = [];
   const state = { updated: [] };
   return {
     replies, state, customId, guild, guildId: G,
     user: { id: userId },
-    member: { guild: { id: G }, permissions: { has: () => manage }, roles: { cache: new Map() } },
+    member: {
+      id: userId, guild: { id: G }, permissions: { has: () => manage },
+      roles: { cache: new Map(), highest: { position: actorTop } },
+    },
     inGuild: () => true,
     isButton: () => true,
     options: {
@@ -156,6 +159,33 @@ test('setup refuses when @everyone has Administrator, or the role/channel cannot
   i = await run(makeGuild({ channels: [priv] }), { sub: 'setup', options: { channel: 'c9' } });
   assert.match(last(i).content, /@everyone/);
   assert.equal(last(i).components, undefined);
+});
+
+test('setup refuses a chosen role with staff permissions or not below the caller', async () => {
+  const staff = { id: 'r2', position: 2, managed: false, permissions: { has: (p) => p === 'BanMembers' } };
+  let i = await run(makeGuild({ roles: [staff] }), { sub: 'setup', options: { role: 'r2' } });
+  assert.match(last(i).content, /staff permissions/);
+  assert.equal(last(i).components, undefined);
+
+  const mid = { id: 'r3', position: 3, managed: false };
+  i = await run(makeGuild({ roles: [mid] }), { sub: 'setup', options: { role: 'r3' }, actorTop: 3 });
+  assert.match(last(i).content, /below your highest role/);
+  assert.equal(last(i).components, undefined);
+
+  // Strictly below the caller (or the caller is the owner): the preview is shown.
+  i = await run(makeGuild({ roles: [mid] }), { sub: 'setup', options: { role: 'r3' }, actorTop: 4 });
+  assert.equal(last(i).components.length, 1);
+});
+
+test('confirm re-checks the role: one that gained staff permissions meanwhile is refused', async () => {
+  const perms = new Set();
+  const role = { id: 'r3', position: 3, managed: false, permissions: { has: (p) => perms.has(p) } };
+  const guild = makeGuild({ roles: [role] });
+  const { ok } = await preview(guild, { options: { role: 'r3' } });
+  perms.add('ManageRoles');
+  const i = await press(guild, ok);
+  assert.match(last(i).content, /staff permissions/);
+  assert.equal((await raw()).state ?? 'none', 'none');
 });
 
 test('setup preview counts channels and names a leaking role', async () => {

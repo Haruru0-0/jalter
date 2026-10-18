@@ -4,7 +4,7 @@ import {
 } from 'discord.js';
 import { getFeature } from '../../db/settings.js';
 import { getLang, t } from '../../i18n/index.js';
-import { botCanGive } from '../../core/role-safety.js';
+import { botCanGive, isDangerousRole } from '../../core/role-safety.js';
 import { ephemeral } from '../../core/replies.js';
 import { readConfig } from './config.js';
 import { logVerification } from './log.js';
@@ -31,6 +31,8 @@ export async function verifyMember(ctx, guild, member, { method, actorId } = {},
     if (!role) role = await guild.roles.fetch(cfg.roleId).catch(() => null);
     if (!role) return { ok: false, reason: 'no_role' };
     if (!botCanGive(guild, role)) return { ok: false, reason: 'role_too_high' };
+    // Checked at every grant: the role may have gained staff permissions since setup.
+    if (isDangerousRole(role)) return { ok: false, reason: 'role_dangerous' };
     if (member.roles.cache.has(role.id)) return { ok: false, reason: 'already' };
     try {
       await member.roles.add(role.id, 'Verification');
@@ -75,6 +77,7 @@ export async function postPanel(ctx, guild, channel, lang) {
 const REASON_KEY = {
   no_role: 'verification.msg.no_role',
   role_too_high: 'verification.msg.role_too_high',
+  role_dangerous: 'verification.msg.role_dangerous',
   already: 'verification.msg.already',
   discord_error: 'verification.msg.error',
 };
@@ -85,6 +88,7 @@ const challengeStore = createChallengeStore();
 const CAPTCHA_FAIL_KEY = {
   no_role: 'verification.captcha.no_role',
   role_too_high: 'verification.captcha.role_too_high',
+  role_dangerous: 'verification.captcha.role_dangerous',
   discord_error: 'verification.captcha.error',
 };
 const seconds = (ms) => Math.max(1, Math.ceil(ms / 1000));

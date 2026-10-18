@@ -4,7 +4,7 @@ import {
 import { handleToggle, toggleSubcommands } from '../../core/toggle.js';
 import { guard } from '../../core/guard.js';
 import { ephemeral } from '../../core/replies.js';
-import { botCanGive } from '../../core/role-safety.js';
+import { botCanGive, callerCanGive, isDangerousRole } from '../../core/role-safety.js';
 import { ensureChannel } from '../../core/auto-channel.js';
 import { cancelJobs } from '../../core/scheduler.js';
 import { getFeature, setFeature } from '../../db/settings.js';
@@ -67,8 +67,13 @@ export function createVerificationCommand() {
 
 // ---- setup -------------------------------------------------------------------------------
 
-/** Everything setup needs. Returns { problem, vars } or { role, channel } (null = to be created). */
-function checkSetup(guild, cfg, { roleId, channelId }) {
+/**
+ * Everything setup needs. Returns { problem, vars } or { role, channel } (null = to be created).
+ * `member` is the admin: a role they pick must be strictly below them (owner exempt), like
+ * autorole and automod. A reused role from an earlier setup is not held to that, but no role
+ * the bot will hand out may carry staff permissions.
+ */
+function checkSetup(guild, cfg, { roleId, channelId }, member) {
   if (cfg.state !== 'none') return { problem: 'not_none' };
   const missing = BOT_PERMS.filter(([, bit]) => !guild.members.me?.permissions?.has(bit)).map(([name]) => name);
   if (missing.length) return { problem: 'missing_perms', vars: { perms: missing.join(', ') } };
@@ -77,6 +82,8 @@ function checkSetup(guild, cfg, { roleId, channelId }) {
   const wantedRole = roleId ?? cfg.roleId;
   const role = wantedRole ? (guild.roles.cache.get(wantedRole) ?? null) : null;
   if (role && !botCanGive(guild, role)) return { problem: 'role_unusable' };
+  if (role && isDangerousRole(role)) return { problem: 'role_dangerous' };
+  if (role && roleId && !callerCanGive(guild, member, role)) return { problem: 'role_above_you' };
 
   // The gate skips a channel @everyone cannot view, so the verify channel must be viewable.
   const wantedChannel = channelId ?? cfg.channelId;
@@ -122,7 +129,7 @@ async function executeSetup(interaction, ctx) {
     roleId: interaction.options.getRole('role')?.id ?? null,
     channelId: interaction.options.getChannel('channel')?.id ?? null,
   };
-  const check = checkSetup(guild, cfg, opts);
+  const check = checkSetup(guild, cfg, opts, interaction.member);
   if (check.problem) {
     await interaction.reply(ephemeral(t(lang, `verification.setup.${check.problem}`, check.vars)));
     return;
@@ -208,7 +215,7 @@ async function runSetup(interaction, ctx, lang, opts) {
   const { guild } = interaction;
   const { config } = await getFeature(ctx.db, guild.id, FEATURE);
   const cfg = readConfig(config);
-  const check = checkSetup(guild, cfg, opts);
+  const check = checkSetup(guild, cfg, opts, interaction.member);
   if (check.problem) return t(lang, `verification.setup.${check.problem}`, check.vars);
 
   let { role, channel } = check;

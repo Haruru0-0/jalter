@@ -233,6 +233,7 @@ async function manualContext(interaction, ctx) {
 const REASON_KEY = {
   no_role: 'verification.manual.no_role',
   role_too_high: 'verification.manual.role_too_high',
+  role_dangerous: 'verification.manual.role_dangerous',
   already: 'verification.manual.already',
   discord_error: 'verification.manual.error',
 };

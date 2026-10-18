@@ -19,7 +19,7 @@
 import { getFeature, setFeature } from '../../db/settings.js';
 import { getLang } from '../../i18n/index.js';
 import { scheduleJob, cancelJobs, MAX_ATTEMPTS } from '../../core/scheduler.js';
-import { botCanGive } from '../../core/role-safety.js';
+import { botCanGive, isDangerousRole } from '../../core/role-safety.js';
 import { readConfig } from './config.js';
 import { gateChannel } from './apply.js';
 import { logVerification } from './log.js';
@@ -141,6 +141,10 @@ const grantRun = async (ctx, job, deps) => {
   if (!role) return failRollout(ctx, guild.id, raw, 'The Verified role no longer exists', log);
   if (!botCanGive(guild, role)) {
     return failRollout(ctx, guild.id, raw, 'The Verified role is above my highest role', log);
+  }
+  // Checked at grant time too: the role may have gained staff permissions since setup.
+  if (isDangerousRole(role)) {
+    return failRollout(ctx, guild.id, raw, 'The Verified role has staff permissions', log);
   }
   if (guild.members.cache.size < (guild.memberCount ?? 0)) await guild.members.fetch();
   const after = job.payload?.after ?? null;
