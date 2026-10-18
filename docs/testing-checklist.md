@@ -373,7 +373,58 @@ Needs the Manage Server permission for the bot (the AutoMod execution events and
 - [ ] Strikes are kept in memory: restart the bot and every member's strikes are zero again (history is kept).
 - [ ] After deploying Phase 2 run `npm run deploy` so `/automod patterns`, `age`, `role`, `honeypot` and `native` appear.
 
-## 13. Permissions and robustness
+## 13. Verification
+
+Needs two accounts: your admin account and a test account that joins fresh (an alt or a friend). The bot needs Manage Roles, Manage Channels, View Channel, Send Messages, Embed Links and Attach Files, and its top role must sit above the Verified role. Make the test server have a private staff channel (@everyone cannot see it), a public-looking channel such as #rules, and a few ordinary channels.
+
+### Setup
+
+- [ ] Run `npm run deploy` first so `/verification` appears. As a normal member it is refused; as an admin `/verification status` works while the feature is off.
+- [ ] `/verification setup` replies (only you see it) with a preview: channels to gate, public, skipped, already private (the staff channel), and members to grant, with Confirm and Cancel buttons. Nothing has changed yet: check that channels and roles are untouched.
+- [ ] Cancel says nothing was changed. Run setup again and wait over 2 minutes before Confirm: it says the confirmation expired. Another admin pressing Confirm is told only the admin who ran the command can use it.
+- [ ] If an ordinary channel has an extra role with its own View Channel allow, the preview lists it as a channel where that role keeps seeing it (informational only).
+- [ ] Confirm creates a "Verified" role just below the bot, a `verify` channel with a Verify embed and button, then the rollout starts. `/verification status` shows state rolling out (granting, then gating) and finally active, with the number of undo records.
+- [ ] Setup refuses (with a clear message) when: the bot lacks a permission, the chosen verify channel is hidden from @everyone, @everyone has Administrator, the chosen role is above the bot or managed, or verification is already set up.
+- [ ] `/verification setup` also takes `mode` (button or captcha), `role` and `channel`: your own role and channel are used instead of creating new ones.
+
+### Existing members and the gate
+
+- [ ] Grandfathered: every member who was already in the server (and every bot) has the Verified role and still sees and writes everywhere they could before.
+- [ ] The private staff channel is untouched (still hidden from @everyone, Verified does not see it).
+- [ ] A new account joining after setup sees only the verify channel and the public channels. Ordinary channels are hidden.
+- [ ] The new account cannot send in the verify channel. After `/verification public add channel:#rules`, the new account can read #rules but sending, reacting, creating threads and using slash commands there are refused; verified members can still write there if they could before.
+- [ ] A public channel where @everyone could never send (announcements) stays read-only for verified members too: Verified is never given more than @everyone had.
+- [ ] `/verification public add` on a channel @everyone cannot see is refused. A channel cannot be on both lists, and the verify channel cannot be added to either.
+- [ ] `/verification skip add channel:#x`: the channel's permissions are left exactly as they were (check before and after). `skip remove` gates it again.
+- [ ] `/verification public list` and `skip list` show the channels, or say the list is empty. `public remove` / `skip remove` on a channel that is not listed says so.
+- [ ] A voice channel in the public list: unverified members can see it but not Connect or Speak.
+
+### Verifying
+
+- [ ] Button mode: the new account presses Verify, gets "You are verified", and now sees the gated channels. Pressing it again says already verified. Only the clicker sees replies.
+- [ ] `/verification mode mode:captcha`, then the new account (use `/verification unverify` first) presses Verify: an image with 5 characters appears with an Enter code button. The message is in English whatever the server language.
+- [ ] Entering the right code (case does not matter) verifies the account. Another user pressing Enter code on someone else's captcha is refused.
+- [ ] Entering a wrong code says how many tries are left; the third wrong code starts a 30 second cooldown, and pressing Verify during the cooldown shows the seconds left instead of a new image. After the cooldown a new image is issued.
+- [ ] A code older than 5 minutes is expired, with a Verify button to get a new one. Restart the bot: any open captcha stops working (codes are only kept in memory) and a new one can be requested.
+- [ ] Switch back with `/verification mode mode:button`: the Verify button gives the role at once again.
+- [ ] A bot invited after setup gets the Verified role by itself and sees the channels (no mod-log line for it).
+- [ ] Create a new text channel as an admin: it is gated like the others (hidden from the unverified account, visible to Verified). Create one inside a category that is already gated and it follows the category. A private new channel is left alone.
+- [ ] `/verification verify member:<user>` gives the role and writes a mod-log line naming you; running it again says already verified. `/verification unverify member:<user>` removes the role and logs it; on a bot it is refused; on someone with a role at or above yours it is refused.
+
+### Status and removal
+
+- [ ] `/verification status` lists enabled, mode, role, verify channel, state, the public and skip counts, and the undo record count.
+- [ ] Stop the bot during the grant and start it again: the rollout carries on and finishes (status shows progress; if it ever says it is stuck, the jobs are gone).
+- [ ] Where the bot cannot edit a channel (for example it lacks Manage Permissions there), the rollout or a list change reports the failure (state failed with the number of channels, or an error reply) instead of ignoring it.
+- [ ] `/verification remove` restores every channel to the permissions it had before setup (compare with the earlier notes: the @everyone and Verified overwrites, and the bot overwrite in the verify channel, are back or gone as they were), deletes the Verify message and turns the feature off. The Verified role and the verify channel are left in place.
+- [ ] If a channel cannot be restored (remove the bot's permission in one channel first), remove lists those channels, keeps verification on and keeps their records; fix the permission and run remove again.
+- [ ] After remove, run setup again: it works from a clean start. A channel deleted while gated just loses its record.
+
+### Discord Onboarding
+
+- [ ] In Server Settings, Onboarding, choose default channels that are on the public list. The new account sees them and the onboarding questions before verifying, and the gate does not block finishing Onboarding.
+
+## 14. Permissions and robustness
 
 - [ ] Every setup reply is ephemeral (only you see it).
 - [ ] A normal member cannot run `/logging`, `/autorole`, `/set`, `/media` or `/moderation` setup commands.
