@@ -8,7 +8,7 @@ Jalter is a Discord bot with a modular design. Most features are off by default 
 - Help: `/help` lists every feature with its commands and whether it is on; `/help feature:<name>` shows all commands of one feature (always on, anyone can use it).
 - Language: English, French and Arabic, set per server (always on).
 - Media: store images for the server with `/media add` and use them by name. Uploading a file straight into the storage channel does not register it; only `/media add` does.
-- Embeds (always available): save named embeds with `/embed create`, edit them with buttons or `/embed edit`, and post one with `/embed show` (in the channel you pick, default the current one). Use one in a message with `{embed:name}`.
+- Embeds (always available): save named embeds with `/embed create`, edit them with the part menu (Basic info, Author, Footer, Images, Add field) or `/embed edit`, and post one with `/embed show` (in the channel you pick, default the current one). Use one in a message with `{embed:name}`.
 - Post (always available): send text (`/post text`) or text with a link button (`/post buttons`) as the bot, with mentions blocked. You can only post in channels where you can see and send messages yourself.
 - Greet, leave and boost messages, set with `/set greet|leave|boost ...` (channel, message, card, background, and DM for greet and boost) and tried out with `/test`. A message can hold `{embed:name}` and an optional card image.
 - Auto role: give new members one or more roles, for humans, for bots, or both. The bot's highest role must sit above any role it gives, or Discord refuses.
@@ -80,7 +80,7 @@ Run these on a test server with the bot invited and started. Confirm each item.
 2. As a normal member (no Manage Server), every setup command is refused with the permission message.
 3. `/language set` to French changes `/panel overview` to French; Arabic shows Arabic.
 4. `/media setup`, `/media add logo`, `/media list`.
-5. `/embed create name:rules` works without enabling anything and opens the editor; use the buttons to set the title, description and fields, then `/embed edit title ...` and `/embed show`. An embed with `logo` as its image shows the image.
+5. `/embed create name:rules` works without enabling anything and opens the editor; use the menu to set the title, description and fields, then `/embed edit title ...` and `/embed show`. An embed with `logo` as its image shows the image.
 6. A text over the limits (for example a 300-character title) shows the error and saves nothing.
 7. `/post` works without enabling anything; `@everyone` in the text does not ping.
 8. `/set greet channel`, then `/set greet message` with text, and again without text (it opens the form). Put placeholders such as `{user}` and `{server_name}` in it, add `{embed:rules}`, and run `/test greet`. Then `/set greet message none` turns that one message off (`/test greet` says it is off) while the leave and boost messages keep working.
