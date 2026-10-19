@@ -3,15 +3,11 @@ import { Events } from 'discord.js';
 import { getFeature } from '../../db/settings.js';
 import { getLang } from '../../i18n/index.js';
 import { safe } from '../logging/send-log.js';
-import { readConfig } from './config.js';
+import { readConfig, RUNNING } from './config.js';
 import { gateChannel, revertChannel } from './apply.js';
 import { logVerification } from './log.js';
 import { verifyMember } from './verify.js';
 import { queueUnverifiedJobs, cancelMemberJobs } from './unverified.js';
-
-// `failed` keeps running too: the gate stays on the channels it reached (same ruling as the
-// verify button and the captcha), so new bots and new channels must follow it.
-const RUNNING = new Set(['rolling_out', 'active', 'failed']);
 
 // A bot join is routine: the grant is not worth a mod-log line.
 const silent = { logVerification: async () => {} };

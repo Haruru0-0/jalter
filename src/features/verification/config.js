@@ -1,5 +1,8 @@
 export const MODES = ['button', 'captcha'];
 export const STATES = ['none', 'rolling_out', 'active', 'failed'];
+// States in which verification is running. `failed` keeps running too: the gate stays on the
+// channels it reached (same ruling as the verify button and the captcha).
+export const RUNNING = new Set(['rolling_out', 'active', 'failed']);
 export const MAX_CHANNELS = 200;
 export const UNVERIFIED_POLICIES = ['none', 'kick', 'warn_kick'];
 export const DEFAULT_KICK = 86400;
