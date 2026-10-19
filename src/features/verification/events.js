@@ -27,11 +27,13 @@ export function createEvents(deps = {}) {
   const gate = deps.gateChannel ?? gateChannel;
   const revert = deps.revertChannel ?? revertChannel;
   const log = deps.logVerification ?? logVerification;
+  // The grant line stays silent; a refusal for a staff Verified role still raises the danger alert.
+  const joinDeps = deps.dangerAlert ? { ...silent, dangerAlert: deps.dangerAlert } : silent;
 
   const onMemberAdd = safe('verificationMemberAdd', async (ctx, member) => {
     if (!member?.user?.bot || !member.guild) return;
     if (!(await runningConfig(ctx, member.guild.id))) return;
-    await verify(ctx, member.guild, member, { method: 'join' }, silent);
+    await verify(ctx, member.guild, member, { method: 'join' }, joinDeps);
   });
 
   const onChannelCreate = safe('verificationChannelCreate', async (ctx, channel) => {

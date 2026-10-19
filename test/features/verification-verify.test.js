@@ -2,7 +2,9 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { testDb } from '../helpers/db.js';
 import { setFeature } from '../../src/db/settings.js';
-import { verifyMember, postPanel, handleVerifyButton } from '../../src/features/verification/verify.js';
+import {
+  verifyMember, postPanel, handleVerifyButton, createDangerAlert,
+} from '../../src/features/verification/verify.js';
 import { createVerificationCommand } from '../../src/features/verification/commands.js';
 import { createChallengeStore } from '../../src/features/verification/captcha.js';
 import * as feature from '../../src/features/verification/index.js';
@@ -200,6 +202,51 @@ test('a Verified role that gained staff permissions is not given', async () => {
   await handleVerifyButton(i, { db }, log.deps);
   assert.match(i.replies.at(-1).content, /staff permissions/);
   assert.deepEqual(member.added, []);
+});
+
+test('a staff Verified role writes one mod-log alert per guild per hour, replies unchanged', async () => {
+  await setup();
+  const staff = { id: 'rv', position: 1, managed: false, permissions: { has: (p) => p === 'BanMembers' } };
+  const guild = makeGuild({ role: staff });
+  const member = makeMember();
+  guild.members._set(member);
+  let clock = 1_000_000;
+  const alerts = [];
+  const dangerAlert = createDangerAlert({
+    now: () => clock, log: async (c, guildId, lang, entry) => { alerts.push({ guildId, lang, entry }); },
+  });
+  const log = logger();
+  const deps = { ...log.deps, dangerAlert };
+  for (let n = 0; n < 3; n += 1) {
+    const i = makeInteraction(guild, member);
+    await handleVerifyButton(i, { db }, deps);
+    assert.match(i.replies.at(-1).content, /staff permissions/);
+  }
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0].guildId, G);
+  assert.equal(alerts[0].entry.kind, 'role_dangerous');
+  assert.match(alerts[0].entry.detail, /<@&rv>/);
+  assert.equal(log.calls.length, 0, 'no verified line');
+
+  // A silent logger (bot joins) does not silence the alert; an hour later it fires again.
+  clock += 60 * 60 * 1000 - 1;
+  await verifyMember({ db }, guild, member, { method: 'join' }, { logVerification: async () => {}, dangerAlert });
+  assert.equal(alerts.length, 1);
+  clock += 1;
+  const r = await verifyMember({ db }, guild, member, { method: 'join' }, { logVerification: async () => {}, dangerAlert });
+  assert.deepEqual(r, { ok: false, reason: 'role_dangerous' });
+  assert.equal(alerts.length, 2);
+  assert.deepEqual(member.added, []);
+});
+
+test('a failing danger alert does not change the reply', async () => {
+  await setup();
+  const staff = { id: 'rv', position: 1, managed: false, permissions: { has: (p) => p === 'BanMembers' } };
+  const guild = makeGuild({ role: staff });
+  const member = makeMember();
+  const dangerAlert = async () => { throw new Error('boom'); };
+  const r = await verifyMember({ db }, guild, member, { method: 'button' }, { ...logger().deps, dangerAlert });
+  assert.deepEqual(r, { ok: false, reason: 'role_dangerous' });
 });
 
 test('a failing role add gives discord_error and no log', async () => {

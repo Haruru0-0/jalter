@@ -94,6 +94,24 @@ test('a joining bot is granted Verified', async () => {
   assert.equal(h.logs.length, 0);
 });
 
+test('a joining bot refused for a staff Verified role still raises the danger alert', async () => {
+  await setup();
+  const alerts = [];
+  const events = createEvents({ dangerAlert: async (c, guild, role, userId) => { alerts.push({ role: role.id, userId }); } });
+  const add = events.find((e) => e.name === Events.GuildMemberAdd).execute;
+  const staff = { id: 'rv', position: 1, managed: false, permissions: { has: (p) => p === 'KickMembers' } };
+  const guild = {
+    ...fakeGuild(),
+    roles: { ...fakeGuild().roles, cache: new Map([['rv', staff]]) },
+    members: { me: { id: 'bot1', roles: { highest: { position: 5 } } } },
+  };
+  const added = [];
+  const bot = { id: 'b1', user: { bot: true }, guild, roles: { cache: new Map(), add: async (r) => { added.push(r); } } };
+  await add(ctx(), bot);
+  assert.deepEqual(added, []);
+  assert.deepEqual(alerts, [{ role: 'rv', userId: 'b1' }]);
+});
+
 test('a joining bot is granted Verified while rolling out', async () => {
   await setup({ state: 'rolling_out' });
   const h = harness();

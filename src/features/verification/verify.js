@@ -17,6 +17,31 @@ export const VERIFY_BUTTON_ID = 'verification:go';
 // Clicks being processed right now (guild:user): a concurrent double click is answered "already".
 const inFlight = new Set();
 
+const ALERT_EVERY_MS = 60 * 60 * 1000;
+
+/**
+ * Mod-log alert for a Verified role that has staff permissions: every grant is refused, and the
+ * member only gets a private reply, so the first refusal per guild per hour writes one line.
+ * In memory (a restart may log again). Never throws.
+ */
+export function createDangerAlert({ now = Date.now, log = logVerification, everyMs = ALERT_EVERY_MS } = {}) {
+  const lastAt = new Map();
+  return async (ctx, guild, role, userId) => {
+    const at = now();
+    const prev = lastAt.get(guild.id);
+    if (prev != null && at - prev < everyMs) return;
+    lastAt.set(guild.id, at);
+    try {
+      const lang = await getLang(ctx.db, guild.id);
+      await log(ctx, guild.id, lang, { kind: 'role_dangerous', userId, detail: `<@&${role.id}>` });
+    } catch (err) {
+      console.warn('verification: danger alert failed:', err?.message ?? err);
+    }
+  };
+}
+
+const dangerAlert = createDangerAlert();
+
 /** Gives the Verified role to a member. Never throws; logs once on success. */
 export async function verifyMember(ctx, guild, member, { method, actorId } = {}, deps = { logVerification }) {
   if (!member?.roles) return { ok: false, reason: 'discord_error' };
@@ -31,8 +56,16 @@ export async function verifyMember(ctx, guild, member, { method, actorId } = {},
     if (!role) role = await guild.roles.fetch(cfg.roleId).catch(() => null);
     if (!role) return { ok: false, reason: 'no_role' };
     if (!botCanGive(guild, role)) return { ok: false, reason: 'role_too_high' };
-    // Checked at every grant: the role may have gained staff permissions since setup.
-    if (isDangerousRole(role)) return { ok: false, reason: 'role_dangerous' };
+    // Checked at every grant: the role may have gained staff permissions since setup. The alert
+    // ignores deps.logVerification on purpose: bot joins pass a silent logger.
+    if (isDangerousRole(role)) {
+      try {
+        await (deps.dangerAlert ?? dangerAlert)(ctx, guild, role, member.id);
+      } catch (err) {
+        console.warn('verification: danger alert failed:', err?.message ?? err);
+      }
+      return { ok: false, reason: 'role_dangerous' };
+    }
     if (member.roles.cache.has(role.id)) return { ok: false, reason: 'already' };
     try {
       await member.roles.add(role.id, 'Verification');

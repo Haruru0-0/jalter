@@ -331,6 +331,21 @@ test('status of a failed rollout names the channels that could not be gated', as
   assert.equal(last(i).flags, 64);
 });
 
+test('status warns when the configured Verified role has staff permissions', async () => {
+  await setFeature(db, G, 'verification', { enabled: true, config: { roleId: 'r1', state: 'active' } });
+  const perms = new Set();
+  const role = { id: 'r1', position: 1, managed: false, permissions: { has: (p) => perms.has(p) } };
+  let i = await run(makeGuild({ roles: [role] }), { sub: 'status' });
+  assert.doesNotMatch(last(i).content, /staff permissions/);
+  perms.add('Administrator');
+  i = await run(makeGuild({ roles: [role] }), { sub: 'status' });
+  assert.match(last(i).content, /staff permissions/);
+  assert.equal(last(i).flags, 64);
+  // A role that is gone is not flagged here (status names it as configured).
+  i = await run(makeGuild(), { sub: 'status' });
+  assert.doesNotMatch(last(i).content, /staff permissions/);
+});
+
 async function removable() {
   const gated = fakeChannel('c1', [ow(G, 0n, P.ViewChannel), ow('rv', P.ViewChannel, 0n)]);
   const pub = fakeChannel('c2', [ow(G, 0n, SEND_BITS), ow('rv', SEND_BITS, 0n)]);

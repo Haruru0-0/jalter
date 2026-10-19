@@ -286,6 +286,12 @@ async function executeStatus(interaction, ctx) {
     t(lang, 'verification.status.channel', { value: cfg.channelId ? `<#${cfg.channelId}>` : unset }),
     t(lang, 'verification.status.state', { value: t(lang, `verification.status.state.${cfg.state}`) }),
   ];
+  // Every grant is refused while the Verified role has staff permissions.
+  if (cfg.roleId) {
+    const role = interaction.guild?.roles.cache.get(cfg.roleId)
+      ?? await interaction.guild?.roles.fetch(cfg.roleId).catch(() => null);
+    if (role && isDangerousRole(role)) lines.push(t(lang, 'verification.status.role_dangerous'));
+  }
   if (cfg.state === 'rolling_out') {
     if (jobRows.length === 0) lines.push(t(lang, 'verification.status.stuck'));
     else lines.push(t(lang, `verification.status.progress.${raw.grantDone === true ? 'gate' : 'grant'}`));
