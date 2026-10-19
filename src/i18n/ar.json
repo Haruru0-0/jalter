@@ -555,6 +555,7 @@
   "verification.panel.description": "اضغط على الزر أدناه للتحقق وفتح الخادم.",
   "verification.msg.unavailable": "هذا الزر لم يعد متاحاً.",
   "verification.setup.not_none": "التحقق مُعدّ بالفعل أو قيد التشغيل. نفّذ /verification remove أولاً إذا أردت البدء من جديد.",
+  "verification.setup.removing": "لا تزال عملية إزالة جارية أو تركت قنوات بحاجة إلى الاستعادة. نفّذ /verification remove مرة أخرى أولاً، ثم أعد الإعداد.",
   "verification.setup.missing_perms": "تنقصني صلاحيات: {perms}. امنحني إياها ثم أعد تشغيل الإعداد.",
   "verification.setup.everyone_admin": "الرتبة @everyone تملك صلاحية المدير، لذا لن يفيد الحاجز بشيء. أزلها عن @everyone أولاً.",
   "verification.setup.role_unusable": "لا أستطيع منح هذه الرتبة: إما أنها @everyone أو رتبة تديرها إضافة، أو ليست أدنى من أعلى رتبة لدي.",

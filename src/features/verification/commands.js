@@ -72,10 +72,13 @@ export function createVerificationCommand() {
  * Everything setup needs. Returns { problem, vars } or { role, channel } (null = to be created).
  * `member` is the admin: a role they pick must be strictly below them (owner exempt), like
  * autorole and automod. A reused role from an earlier setup is not held to that, but no role
- * the bot will hand out may carry staff permissions.
+ * the bot will hand out may carry staff permissions. Refused while undo records are left.
  */
-function checkSetup(guild, cfg, { roleId, channelId }, member) {
+async function checkSetup(ctx, guild, cfg, { roleId, channelId }, member) {
   if (cfg.state !== 'none') return { problem: 'not_none' };
+  // remove sets state none before it restores; records left mean a remove is running, or was
+  // interrupted (restart) or failed part-way. A new rollout now would mix with that undo.
+  if ((await countRecords(ctx.db, guild.id)) > 0) return { problem: 'removing' };
   const missing = BOT_PERMS.filter(([, bit]) => !guild.members.me?.permissions?.has(bit)).map(([name]) => name);
   if (missing.length) return { problem: 'missing_perms', vars: { perms: missing.join(', ') } };
   if (guild.roles.everyone.permissions?.has(P.Administrator)) return { problem: 'everyone_admin' };
@@ -130,7 +133,7 @@ async function executeSetup(interaction, ctx) {
     roleId: interaction.options.getRole('role')?.id ?? null,
     channelId: interaction.options.getChannel('channel')?.id ?? null,
   };
-  const check = checkSetup(guild, cfg, opts, interaction.member);
+  const check = await checkSetup(ctx, guild, cfg, opts, interaction.member);
   if (check.problem) {
     await interaction.reply(ephemeral(t(lang, `verification.setup.${check.problem}`, check.vars)));
     return;
@@ -216,7 +219,7 @@ async function runSetup(interaction, ctx, lang, opts) {
   const { guild } = interaction;
   const { config } = await getFeature(ctx.db, guild.id, FEATURE);
   const cfg = readConfig(config);
-  const check = checkSetup(guild, cfg, opts, interaction.member);
+  const check = await checkSetup(ctx, guild, cfg, opts, interaction.member);
   if (check.problem) return t(lang, `verification.setup.${check.problem}`, check.vars);
 
   let { role, channel } = check;

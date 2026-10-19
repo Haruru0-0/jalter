@@ -555,6 +555,7 @@
   "verification.panel.description": "Appuyez sur le bouton ci-dessous pour vous vérifier et débloquer le serveur.",
   "verification.msg.unavailable": "Ce bouton n'est plus disponible.",
   "verification.setup.not_none": "La vérification est déjà configurée ou en cours. Lancez d'abord /verification remove pour recommencer.",
+  "verification.setup.removing": "Une suppression est encore en cours ou a laissé des salons à restaurer. Relancez d'abord /verification remove, puis la configuration.",
   "verification.setup.missing_perms": "Il me manque des permissions : {perms}. Donnez-les-moi, puis relancez la configuration.",
   "verification.setup.everyone_admin": "@everyone a la permission Administrateur, la barrière ne servirait à rien. Retirez-la d'abord à @everyone.",
   "verification.setup.role_unusable": "Je ne peux pas donner ce rôle : c'est @everyone, un rôle géré par une intégration, ou il n'est pas sous mon rôle le plus élevé.",

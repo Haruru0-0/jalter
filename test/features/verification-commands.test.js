@@ -142,6 +142,37 @@ test('setup refuses when state is not none', async () => {
   assert.equal(last(i).flags, 64);
 });
 
+const leftover = () => recordOriginal(db, G, 'c1', {
+  everyone: { existed: false, allow: '0', deny: '0' }, verified: { existed: false, allow: '0', deny: '0' }, bot: null,
+});
+
+test('setup refuses while undo records are left (a remove running or interrupted), and works once they are gone', async () => {
+  // remove sets state none before restoring; a restart mid-remove leaves records behind too.
+  await setFeature(db, G, 'verification', { enabled: false, config: { state: 'none', roleId: 'rv' } });
+  await leftover();
+  const guild = makeGuild();
+  const i = await run(guild, { sub: 'setup' });
+  assert.match(last(i).content, /\/verification remove/);
+  assert.match(last(i).content, /removal/i);
+  assert.equal(last(i).components, undefined);
+  assert.equal(last(i).flags, 64);
+
+  await db.query('TRUNCATE verification_overwrites');
+  const { i: again } = await preview(guild);
+  assert.equal(last(again).components.length, 1);
+});
+
+test('confirm refuses when a remove started between the preview and Confirm', async () => {
+  const guild = makeGuild();
+  const { ok } = await preview(guild);
+  await leftover();
+  const i = await press(guild, ok);
+  assert.match(last(i).content, /\/verification remove/);
+  assert.equal(guild.created.roles.length, 0);
+  assert.equal(guild.created.channels.length, 0);
+  assert.equal((await raw()).state ?? 'none', 'none');
+});
+
 test('setup refuses when the bot lacks Manage Roles', async () => {
   const i = await run(makeGuild({ botPerms: ALL_BOT & ~P.ManageRoles }), { sub: 'setup' });
   assert.match(last(i).content, /ManageRoles/);

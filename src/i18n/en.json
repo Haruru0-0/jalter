@@ -555,6 +555,7 @@
   "verification.panel.description": "Press the button below to verify and unlock the server.",
   "verification.msg.unavailable": "This button is no longer available.",
   "verification.setup.not_none": "Verification is already set up or running. Run /verification remove first if you want to start over.",
+  "verification.setup.removing": "A removal is still in progress or left channels to restore. Run /verification remove again first, then set up.",
   "verification.setup.missing_perms": "I am missing permissions: {perms}. Give them to me, then run setup again.",
   "verification.setup.everyone_admin": "@everyone has the Administrator permission, so the gate would do nothing. Remove it from @everyone first.",
   "verification.setup.role_unusable": "I cannot give that role: it is @everyone, managed by an integration, or not below my highest role.",
