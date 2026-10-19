@@ -424,6 +424,20 @@ Needs two accounts: your admin account and a test account that joins fresh (an a
 - [ ] Run `/verification remove` while the rollout is still gating channels (status says gating): every channel ends restored, none is left hidden, and the state is not set up.
 - [ ] After remove, run setup again: it works from a clean start. A channel deleted while gated just loses its record.
 
+### Unverified members
+
+Needs the bot to have Kick Members. Use short times: the minimum kick time is 10 minutes, so each run takes a while. Have the test account ready to join and leave.
+
+- [ ] `/verification unverified policy:kick kick_after:1h` replies with the saved policy, and `/verification status` shows "kicked after 1 hour". `policy:warn_kick kick_after:1d` shows "warned after 12 hours, then kicked after 1 day" (the warn time defaults to half the kick time). Add `warn_after:6h` and status shows it.
+- [ ] Refusals: `kick_after:5m` is refused (minimum 10 minutes; also refused above 30 days or when the time cannot be read). `policy:warn_kick kick_after:1h warn_after:55m` is refused because the warn must come at least 10 minutes before the kick. Nothing is saved on a refusal: status is unchanged.
+- [ ] `policy:warn_kick kick_after:20m warn_after:10m`: the new account joins and never verifies. At 10 minutes it gets a warning (a DM with the reason and the time left if moderation DMs are on (the default), a case in `/warnings member:<user>` with the bot as moderator, a mod-log line), and at 20 minutes it is kicked (a kick case by the bot, reason "Did not verify within 20 minutes.", mod-log line). The moderation feature does not need to be enabled for this.
+- [ ] `policy:kick kick_after:10m`: a member who never verifies is kicked at 10 minutes with no warning first.
+- [ ] A member who verifies before the deadline is not warned or kicked (check after the deadline passes). A member who leaves and rejoins gets a fresh clock from the new join.
+- [ ] Spared: a bot, the server owner, a member holding the bot manager role or Manage Server, and a member whose top role is at or above the bot's top role are never warned or kicked (give them no Verified role and wait past the deadline).
+- [ ] Changing the policy or the times does not touch members already queued: a member who joined under `kick_after:1h` is still kicked on that schedule after you change to `kick_after:1d`, and new members get the new times.
+- [ ] `policy:none` stops everything: members already queued are not warned or kicked, and status shows nothing happens to them. The same after `/verification remove`.
+- [ ] Take Kick Members from the bot, then let a queued member reach the deadline: no kick, and exactly one mod-log line says the unverified kick failed with the reason. It is not retried. Give the permission back afterwards.
+
 ### Discord Onboarding
 
 - [ ] In Server Settings, Onboarding, choose default channels that are on the public list. The new account sees them and the onboarding questions before verifying, and the gate does not block finishing Onboarding.

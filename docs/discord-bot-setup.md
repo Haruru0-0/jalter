@@ -39,7 +39,7 @@ The other intents Jalter uses (Guilds, Auto Moderation Execution, Guild Messages
    - Manage Nicknames (auto-mod nickname check; optional)
    - Manage Server (auto-mod reading Discord AutoMod rules and receiving their events; optional, only for the `native` rule)
    - Manage Channels (`/purge channel`, `/slowmode`, `/lock`, `/unlock`; also `/logging setup` and the log, welcome, goodbye and boost channels the bot creates when none was chosen)
-   - Verification: Manage Roles (creates and grants the Verified role, which must sit below the bot's top role), Manage Channels (creates the verify channel and edits channel overwrites), View Channel, Send Messages, Embed Links and Attach Files (the verify message and the captcha image). Run `npm run deploy` to register `/verification`.
+   - Verification: Manage Roles (creates and grants the Verified role, which must sit below the bot's top role), Manage Channels (creates the verify channel and edits channel overwrites), View Channel, Send Messages, Embed Links and Attach Files (the verify message and the captcha image), and Kick Members for the optional unverified-member policy (the same permission as moderation; skip it if you never turn that policy on). Run `npm run deploy` to register `/verification`.
 4. Copy the generated URL, open it, choose your server and click **Authorize**.
 
 The bot appears offline until you start it.
