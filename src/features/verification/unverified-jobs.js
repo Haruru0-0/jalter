@@ -1,7 +1,7 @@
 // Unverified-member policy: the warn and kick scheduler jobs.
 //
 // Fire-time checks: both jobs re-read everything when they run (feature on, state running, the
-// saved policy not `none`, member still here, not a bot, without the Verified role, not spared).
+// saved policy not `none`, member still here with the queued joinedAt, not a bot, without the Verified role, not spared).
 // They act on the policy the job was QUEUED with (payload.policy), never on the saved one.
 //
 // Warn is at-most-once: after the checks (which may throw and retry) the job claims itself by
@@ -10,9 +10,11 @@
 // way the member's kick job of the same schedule gets `warned: 'ok' | 'failed'` and a due time at
 // least MIN_GAP_SECONDS away (see rescheduleKick for when the write is skipped).
 //
-// Under warn_kick the kick job kicks only when `warned === 'ok'`. A refused kick logs one line and
+// Under warn_kick the kick job kicks only when `warned === 'ok'`. Without Kick Members it logs one
+// line and never calls runAction (no false kick DM). A refused kick logs one line and
 // is not retried; a thrown error is rethrown so the scheduler retries (a kick is idempotent: a
 // retry finds the member gone).
+import { PermissionFlagsBits } from 'discord.js';
 import { getFeature } from '../../db/settings.js';
 import { getLang, t } from '../../i18n/index.js';
 import { scheduleJob, cancelJobs, MAX_ATTEMPTS } from '../../core/scheduler.js';
@@ -20,12 +22,12 @@ import { canManage } from '../../core/permissions.js';
 import { formatDuration } from '../../core/duration.js';
 import { runAction } from '../moderation/actions.js';
 import { readConfig as readModConfig } from '../moderation/config.js';
-import { readConfig, RUNNING } from './config.js';
+import { readConfig, RUNNING, QUEUED_POLICIES } from './config.js';
 import { logVerification } from './log.js';
 import { WARN_JOB, KICK_JOB, MIN_GAP_SECONDS } from './unverified.js';
 
 const UNKNOWN_MEMBER = 10007;
-const QUEUED_POLICIES = new Set(['kick', 'warn_kick']);
+const QUEUED = new Set(QUEUED_POLICIES);
 const GRACE_MS = MIN_GAP_SECONDS * 1000;
 
 const using = (deps) => ({
@@ -62,6 +64,10 @@ async function load(ctx, job) {
   if (!enabled || !RUNNING.has(cfg.state) || cfg.unverifiedPolicy === 'none') return null;
   const member = await fetchMember(guild, job.key);
   if (!member) return null;
+  // Queued for another membership: the member left and rejoined unseen (bot down, or while
+  // verification was off), so this row's clock is not theirs. Old payloads have no joinedAt.
+  const joinedAt = job.payload?.joinedAt;
+  if (joinedAt != null && member.joinedTimestamp !== joinedAt) return null;
   if (member.user?.bot) return null;
   if (cfg.roleId && member.roles?.cache?.has(cfg.roleId)) return null;
   if (await isSpared(ctx, guild, member)) return null;
@@ -90,15 +96,18 @@ async function rescheduleKick(db, guildId, userId, p, warned, dueAt) {
        AND EXISTS (
          SELECT 1 FROM guild_settings s
          WHERE s.guild_id = $1 AND s.feature = 'verification' AND s.enabled
-           AND s.config->>'state' IN ('rolling_out', 'active', 'failed')
-           AND s.config->>'unverifiedPolicy' IN ('kick', 'warn_kick'))
+           AND s.config->>'state' = ANY($8::text[])
+           AND s.config->>'unverifiedPolicy' = ANY($9::text[]))
      ON CONFLICT (guild_id, type, key) DO UPDATE
        SET payload = EXCLUDED.payload, due_at = EXCLUDED.due_at, attempts = 0, claimed_until = NULL
        WHERE scheduled_jobs.payload @> $6::jsonb`,
     [
       guildId, KICK_JOB, userId,
-      JSON.stringify({ policy: p.policy, kickAt: dueAt, kickAfter: p.kickAfter, warned }),
-      dueAt, JSON.stringify({ kickAt: p.kickAt }), WARN_JOB,
+      JSON.stringify({
+        policy: p.policy, kickAt: dueAt, kickAfter: p.kickAfter,
+        ...(p.joinedAt != null ? { joinedAt: p.joinedAt } : {}), warned,
+      }),
+      dueAt, JSON.stringify({ kickAt: p.kickAt }), WARN_JOB, [...RUNNING], QUEUED_POLICIES,
     ],
   );
 }
@@ -183,7 +192,7 @@ async function warnPending(db, guildId, userId) {
 export async function kickJob(ctx, job, deps = {}) {
   const { run, log } = using(deps);
   const p = job.payload ?? {};
-  if (!QUEUED_POLICIES.has(p.policy)) return;
+  if (!QUEUED.has(p.policy)) return;
   try {
     const cur = await load(ctx, job);
     if (!cur) return;
@@ -199,6 +208,14 @@ export async function kickJob(ctx, job, deps = {}) {
           kind: 'unverified_failed', userId: member.id, detail: 'kick skipped: the warning never ran',
         });
       }
+      return;
+    }
+
+    // Without Kick Members runAction would DM "you were kicked" before the kick fails: check first.
+    if (!guild.members.me?.permissions?.has(PermissionFlagsBits.KickMembers)) {
+      await log(ctx, guild.id, lang, {
+        kind: 'unverified_failed', userId: member.id, detail: 'kick: the bot lacks the Kick Members permission',
+      });
       return;
     }
 

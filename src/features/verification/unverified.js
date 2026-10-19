@@ -29,15 +29,18 @@ export function checkTimes({ policy, kickAfterSeconds, warnAfterSeconds }) {
 
 /**
  * Queues the warn/kick jobs for a joining human. One job per (guild, type, member), so a rejoin
- * replaces them. Due times count from the join, never earlier than now.
+ * replaces them. Due times count from the join, never earlier than now. `joinedAt` (when known)
+ * ties the jobs to this membership: at fire time a member with another join time is left alone.
  */
 export async function queueUnverifiedJobs(ctx, member, cfg, now = Date.now()) {
   if (cfg.unverifiedPolicy === 'none') return;
   const guildId = member.guild.id;
-  const joined = member.joinedTimestamp ?? now;
+  const known = Number.isFinite(member.joinedTimestamp);
+  const joined = known ? member.joinedTimestamp : now;
   const at = (seconds) => Math.max(now, joined + seconds * 1000);
   const kickAt = at(cfg.kickAfterSeconds);
   const base = { policy: cfg.unverifiedPolicy, kickAt, kickAfter: cfg.kickAfterSeconds };
+  if (known) base.joinedAt = member.joinedTimestamp;
   if (cfg.unverifiedPolicy === 'warn_kick') {
     await scheduleJob(ctx.db, {
       guildId, type: WARN_JOB, key: member.id, payload: base, dueAt: at(effectiveWarnSeconds(cfg)),

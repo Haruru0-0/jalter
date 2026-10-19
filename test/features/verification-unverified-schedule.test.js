@@ -42,7 +42,7 @@ test('a joining human is queued for kick under policy kick', async () => {
   await ev(Events.GuildMemberAdd)(ctx(), human());
   assert.deepEqual(await jobs(), [{
     type: KICK_JOB, key: 'u1', due: NOW - 1000 + 7200_000,
-    payload: { policy: 'kick', kickAt: NOW - 1000 + 7200_000, kickAfter: 7200 },
+    payload: { policy: 'kick', kickAt: NOW - 1000 + 7200_000, kickAfter: 7200, joinedAt: NOW - 1000 },
   }]);
 });
 
@@ -50,7 +50,7 @@ test('a joining human gets warn and kick jobs under warn_kick with kickAt in bot
   await setup({ unverifiedPolicy: 'warn_kick', kickAfterSeconds: 7200, warnAfterSeconds: 1800 });
   await ev(Events.GuildMemberAdd)(ctx(), human());
   const kickAt = NOW - 1000 + 7200_000;
-  const payload = { policy: 'warn_kick', kickAt, kickAfter: 7200 };
+  const payload = { policy: 'warn_kick', kickAt, kickAfter: 7200, joinedAt: NOW - 1000 };
   assert.deepEqual(await jobs(), [
     { type: KICK_JOB, key: 'u1', due: kickAt, payload },
     { type: WARN_JOB, key: 'u1', due: NOW - 1000 + 1800_000, payload },
@@ -62,6 +62,8 @@ test('warn defaults to half the kick time and a missing join time counts from no
   await ev(Events.GuildMemberAdd)(ctx(), human('u1', null));
   const rows = await jobs();
   assert.equal(rows.find((r) => r.type === WARN_JOB).due, NOW + 3600_000);
+  // No known join time: no joinedAt, so the fire-time membership check is skipped.
+  assert.ok(rows.every((r) => !('joinedAt' in r.payload)));
 });
 
 test('a due time is never earlier than now', async () => {

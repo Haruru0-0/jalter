@@ -14,7 +14,7 @@ import { snapshotOf, gateChannel, revertChannel } from './apply.js';
 import { getRecord } from './store.js';
 import { logVerification } from './log.js';
 import { verifyMember } from './verify.js';
-import { POLICIES } from './unverified.js';
+import { POLICIES, cancelMemberJobs } from './unverified.js';
 import { executeUnverified } from './unverified-commands.js';
 
 const FEATURE = 'verification';
@@ -273,6 +273,12 @@ async function executeUnverify(interaction, ctx, deps) {
   } catch (err) {
     console.warn('verification: could not remove the role:', err?.message ?? err);
     return c.say('verification.manual.error', vars);
+  }
+  // A leftover kick row (warned: 'ok' after a mid-warn verify) must not fire on the old schedule.
+  try {
+    await cancelMemberJobs(ctx.db, guild.id, member.id);
+  } catch (err) {
+    console.warn('verification: could not cancel the unverified jobs:', err?.message ?? err);
   }
   await (deps?.logVerification ?? logVerification)(ctx, guild.id, lang, {
     kind: 'manual_unverify', userId: member.id, actorId: interaction.user.id,

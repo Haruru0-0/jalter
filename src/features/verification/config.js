@@ -5,6 +5,8 @@ export const STATES = ['none', 'rolling_out', 'active', 'failed'];
 export const RUNNING = new Set(['rolling_out', 'active', 'failed']);
 export const MAX_CHANNELS = 200;
 export const UNVERIFIED_POLICIES = ['none', 'kick', 'warn_kick'];
+// The policies that queue warn/kick jobs.
+export const QUEUED_POLICIES = UNVERIFIED_POLICIES.filter((p) => p !== 'none');
 export const DEFAULT_KICK = 86400;
 
 const seconds = (v) => (Number.isFinite(v) && v > 0 ? v : null);

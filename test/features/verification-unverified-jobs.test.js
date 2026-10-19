@@ -1,5 +1,6 @@
 import { test, before, beforeEach, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { PermissionFlagsBits } from 'discord.js';
 import { testDb } from '../helpers/db.js';
 import { getFeature, setFeature } from '../../src/db/settings.js';
 import { scheduleJob, claimDue, MAX_ATTEMPTS } from '../../src/core/scheduler.js';
@@ -32,9 +33,10 @@ async function setup(config = {}, enabled = true) {
   });
 }
 
-function makeMember(id = 'u1', { bot = false, roles = [], top = 1, manageGuild = false } = {}) {
+function makeMember(id = 'u1', { bot = false, roles = [], top = 1, manageGuild = false, joinedTimestamp } = {}) {
   return {
     id,
+    joinedTimestamp,
     user: { id, bot },
     guild: { id: G },
     permissions: { has: (p) => manageGuild && p === 'ManageGuild' },
@@ -42,13 +44,17 @@ function makeMember(id = 'u1', { bot = false, roles = [], top = 1, manageGuild =
   };
 }
 
-function makeGuild(members = [], { fetchError = null, ownerId = 'owner' } = {}) {
+function makeGuild(members = [], { fetchError = null, ownerId = 'owner', canKick = true } = {}) {
   const map = new Map(members.map((m) => [m.id, m]));
   return {
     id: G,
     ownerId,
     members: {
-      me: { id: 'bot1', roles: { highest: { position: 10 } } },
+      me: {
+        id: 'bot1',
+        roles: { highest: { position: 10 } },
+        permissions: { has: (bit) => canKick && bit === PermissionFlagsBits.KickMembers },
+      },
       fetch: async (id) => {
         if (fetchError) throw fetchError;
         if (!map.has(id)) throw Object.assign(new Error('Unknown Member'), { code: 10007 });
@@ -459,7 +465,7 @@ test('a rejoin during the warn keeps the newer kick row untouched', async () => 
     assert.equal(f.calls.length, 1);
     const newKickAt = NOW + 7200_000;
     assert.deepEqual(await rows(KICK_JOB), [{
-      key: 'u1', attempts: 0, due: newKickAt, payload: { policy, kickAt: newKickAt, kickAfter: 7200 },
+      key: 'u1', attempts: 0, due: newKickAt, payload: { policy, kickAt: newKickAt, kickAfter: 7200, joinedAt: NOW },
     }], policy);
   }
 });
@@ -521,4 +527,96 @@ test('verification turned off during the warn does not re-insert a consumed kick
   await warnJob(ctxFor(makeGuild([makeMember()])), await queued(WARN_JOB), f.deps);
   assert.equal(f.calls.length, 1);
   assert.deepEqual(await rows(KICK_JOB), []);
+});
+
+// ---- membership guard (joinedAt) ------------------------------------------------------------
+
+const JOINED_A = NOW - 7200_000;
+const JOINED_B = NOW - 60_000;
+
+test('jobs queued for an earlier membership do nothing when the member rejoined unseen', async () => {
+  for (const policy of ['warn_kick', 'kick']) {
+    await db.query('DELETE FROM scheduled_jobs');
+    await setup({ unverifiedPolicy: policy });
+    const ctx = ctxFor(makeGuild([makeMember('u1', { joinedTimestamp: JOINED_B })]));
+    const f = fakes();
+    if (policy === 'warn_kick') {
+      await warnJob(ctx, await queued(WARN_JOB, { payload: basePayload(policy, { joinedAt: JOINED_A }) }), f.deps);
+      await kickJob(ctx, await queued(KICK_JOB, {
+        payload: basePayload(policy, { joinedAt: JOINED_A, warned: 'ok' }),
+      }), f.deps);
+      // Not warned, warned undefined and no warn pending: still quiet, no "never ran" line.
+      await db.query('DELETE FROM scheduled_jobs');
+      await kickJob(ctx, await queued(KICK_JOB, { payload: basePayload(policy, { joinedAt: JOINED_A }) }), f.deps);
+    } else {
+      await kickJob(ctx, await queued(KICK_JOB, { payload: basePayload(policy, { joinedAt: JOINED_A }) }), f.deps);
+    }
+    assert.deepEqual(f.calls, [], policy);
+    assert.deepEqual(f.logs, [], policy);
+  }
+});
+
+test('jobs with a matching joinedAt, or an old payload without one, still act', async () => {
+  await setup();
+  const ctx = ctxFor(makeGuild([makeMember('u1', { joinedTimestamp: JOINED_B })]));
+  const f = fakes();
+  await warnJob(ctx, await queued(WARN_JOB, { payload: basePayload('warn_kick', { joinedAt: JOINED_B }) }), f.deps);
+  await db.query('DELETE FROM scheduled_jobs');
+  await warnJob(ctx, await queued(WARN_JOB), f.deps); // no joinedAt
+  await db.query('DELETE FROM scheduled_jobs');
+  await kickJob(ctx, await queued(KICK_JOB, {
+    payload: basePayload('warn_kick', { joinedAt: JOINED_B, warned: 'ok' }),
+  }), f.deps);
+  await db.query('DELETE FROM scheduled_jobs');
+  await kickJob(ctx, await queued(KICK_JOB, { payload: basePayload('warn_kick', { warned: 'ok' }) }), f.deps);
+  assert.deepEqual(f.calls.map((c) => c.type), ['warn', 'warn', 'kick', 'kick']);
+  assert.deepEqual(f.logs, []);
+});
+
+test('the warn carries joinedAt into the kick row it reschedules', async () => {
+  await setup();
+  const payload = basePayload('warn_kick', { joinedAt: JOINED_B });
+  await scheduleJob(db, { guildId: G, type: KICK_JOB, key: 'u1', payload, dueAt: KICK_AT });
+  const f = fakes();
+  await warnJob(ctxFor(makeGuild([makeMember('u1', { joinedTimestamp: JOINED_B })])),
+    await queued(WARN_JOB, { payload }), f.deps);
+  assert.deepEqual(await rows(KICK_JOB), [{
+    key: 'u1', attempts: 0, due: KICK_AT, payload: { ...payload, warned: 'ok' },
+  }]);
+});
+
+test('a leave during the warn, then a rejoin while verification is off: the re-inserted kick never fires', async () => {
+  await setup();
+  const payload = basePayload('warn_kick', { joinedAt: JOINED_A });
+  await scheduleJob(db, { guildId: G, type: KICK_JOB, key: 'u1', payload, dueAt: KICK_AT });
+  const f = fakes(async () => {
+    await cancelMemberJobs(db, G, 'u1'); // the leave
+    return { ok: true, modCase: null, warnings: [] };
+  });
+  await warnJob(ctxFor(makeGuild([makeMember('u1', { joinedTimestamp: JOINED_A })])),
+    await queued(WARN_JOB, { payload }), f.deps);
+  const [row] = await rows(KICK_JOB);
+  assert.equal(row.payload.warned, 'ok');
+  assert.equal(row.payload.joinedAt, JOINED_A);
+
+  // The member rejoined (verification off: nothing queued), verification runs again later.
+  const k = fakes();
+  const [job] = await claimDue(db, KICK_AT, { types: [KICK_JOB] });
+  await kickJob(ctxFor(makeGuild([makeMember('u1', { joinedTimestamp: JOINED_B })])), job, k.deps);
+  assert.deepEqual(k.calls, []);
+  assert.deepEqual(k.logs, []);
+});
+
+// ---- kick permission ------------------------------------------------------------------------
+
+test('a bot without Kick Members logs once and never calls runAction (no false kick DM)', async () => {
+  await setup({ unverifiedPolicy: 'kick' });
+  const f = fakes();
+  const job = await queued(KICK_JOB, { payload: basePayload('kick') });
+  await kickJob(ctxFor(makeGuild([makeMember()], { canKick: false })), job, f.deps); // returns: no retry
+  assert.deepEqual(f.calls, []);
+  assert.equal(f.logs.length, 1);
+  assert.equal(f.logs[0].kind, 'unverified_failed');
+  assert.equal(f.logs[0].userId, 'u1');
+  assert.match(f.logs[0].detail, /Kick Members/);
 });

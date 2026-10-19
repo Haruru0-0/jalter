@@ -7,6 +7,8 @@ import { createVerificationCommand } from '../../src/features/verification/comma
 import { gateChannel } from '../../src/features/verification/apply.js';
 import { readConfig } from '../../src/features/verification/config.js';
 import { listRecords, recordOriginal } from '../../src/features/verification/store.js';
+import { scheduleJob } from '../../src/core/scheduler.js';
+import { KICK_JOB } from '../../src/features/verification/unverified.js';
 
 let db;
 before(async () => { db = await testDb(); });
@@ -295,6 +297,35 @@ test('unverify removes the role and logs', async () => {
   assert.equal(logs.length, 1);
   assert.equal(logs[0].kind, 'manual_unverify');
   assert.equal(logs[0].actorId, 'admin');
+});
+
+test('unverify drops the member queued warn and kick jobs (a leftover warned kick must not fire later)', async () => {
+  await active();
+  await db.query('DELETE FROM scheduled_jobs');
+  const payload = { policy: 'warn_kick', kickAt: 1, kickAfter: 7200, warned: 'ok' };
+  await scheduleJob(db, { guildId: G, type: KICK_JOB, key: 'u1', payload, dueAt: Date.now() + 3600_000 });
+  await scheduleJob(db, { guildId: G, type: KICK_JOB, key: 'u2', payload, dueAt: Date.now() + 3600_000 });
+  const m = fakeMember('u1', { roles: [VR] });
+  const i = await run(makeGuild({ members: [m] }), { sub: 'unverify', options: { member: 'u1' } });
+  assert.match(last(i).content, /<@u1>/);
+  const { rows } = await db.query('SELECT key FROM scheduled_jobs ORDER BY key');
+  assert.deepEqual(rows.map((r) => r.key), ['u2']);
+  await db.query('DELETE FROM scheduled_jobs');
+});
+
+test('a failing job cancel never changes the unverify reply', async () => {
+  await active();
+  const failing = {
+    query: (sql, ...rest) => (/scheduled_jobs/.test(sql) ? Promise.reject(new Error('db down')) : db.query(sql, ...rest)),
+  };
+  const m = fakeMember('u1', { roles: [VR] });
+  const i = makeInteraction(makeGuild({ members: [m] }), { sub: 'unverify', options: { member: 'u1' } });
+  logs.length = 0;
+  await cmd.execute(i, { db: failing, client: { user: { id: 'bot1' } } }, deps);
+  assert.deepEqual(m.removed, [VR]);
+  assert.equal(logs.length, 1);
+  assert.match(last(i).content, /<@u1>/);
+  assert.doesNotMatch(last(i).content, /error|could not/i);
 });
 
 test('unverify refuses a bot, a member without the role, and a role above the bot', async () => {
