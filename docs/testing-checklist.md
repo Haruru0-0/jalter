@@ -435,8 +435,8 @@ Needs the bot to have Kick Members. Use short times: the minimum kick time is 10
 - [ ] A member who verifies before the deadline is not warned or kicked (check after the deadline passes). A member who leaves and rejoins gets a fresh clock from the new join.
 - [ ] Spared: only members who join while the policy is on are queued, so test with fresh joins. With `policy:kick kick_after:10m`, let a fresh test account join, then before the deadline give it the bot manager role (or Manage Server), or a role at or above the bot's top role. At the deadline it is not kicked (and under `warn_kick` not warned). Repeat for each case with a new join. The owner and bot cases are covered by automated tests only: they cannot be exercised by a fresh join.
 - [ ] Changing the policy or the times does not touch members already queued: a member who joined under `kick_after:1h` is still kicked on that schedule after you change to `kick_after:1d`, and new members get the new times.
-- [ ] `policy:none` stops everything: members already queued are not warned or kicked, and status shows nothing happens to them. The same after `/verification remove`.
-- [ ] Take Kick Members from the bot, then let a queued member reach the deadline: no kick, and exactly one mod-log line says the unverified kick failed with the reason. It is not retried. Give the permission back afterwards.
+- [ ] `policy:none` stops everything: members already queued are not warned or kicked, and status shows nothing happens to them. The same after `/verification remove`, even a partial one (some channels not restored): the queued jobs are already gone, so those members are never warned or kicked.
+- [ ] Take Kick Members from the bot, then let a queued member reach the deadline: no kick, no "you were kicked" DM, and exactly one mod-log line says the unverified kick failed because the bot lacks the Kick Members permission. It is not retried. Give the permission back afterwards.
 
 ### Discord Onboarding
 
