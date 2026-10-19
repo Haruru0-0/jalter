@@ -619,6 +619,7 @@
   "verification.unverified.kick_range": "Le délai d’expulsion doit être compris entre {min} et {max}.",
   "verification.unverified.warn_gap": "L’avertissement doit précéder l’expulsion d’au moins {gap} (avertissement à {warn}, expulsion à {kick}). Choisissez un avertissement plus tôt ou une expulsion plus tard.",
   "verification.unverified.warn_reason": "Vous ne vous êtes pas encore vérifié. Vérifiez-vous dans {channel} d’ici {time}, sinon vous serez expulsé du serveur.",
+  "verification.unverified.warn_reason_no_channel": "Vous ne vous êtes pas encore vérifié. Vérifiez-vous d’ici {time}, sinon vous serez expulsé du serveur.",
   "verification.unverified.kick_reason": "Ne s’est pas vérifié dans un délai de {time}.",
   "verification.lists.name_public": "public",
   "verification.lists.name_skip": "ignoré",

@@ -619,6 +619,7 @@
   "verification.unverified.kick_range": "The kick time must be between {min} and {max}.",
   "verification.unverified.warn_gap": "The warning must come at least {gap} before the kick (warning at {warn}, kick at {kick}). Choose an earlier warning or a later kick.",
   "verification.unverified.warn_reason": "You have not verified yet. Verify in {channel} within {time}, or you will be kicked from the server.",
+  "verification.unverified.warn_reason_no_channel": "You have not verified yet. Verify within {time}, or you will be kicked from the server.",
   "verification.unverified.kick_reason": "Did not verify within {time}.",
   "verification.lists.name_public": "public",
   "verification.lists.name_skip": "skip",

@@ -619,6 +619,7 @@
   "verification.unverified.kick_range": "يجب أن تكون مهلة الطرد بين {min} و{max}.",
   "verification.unverified.warn_gap": "يجب أن يسبق التحذير الطرد بما لا يقل عن {gap} (التحذير عند {warn} والطرد عند {kick}). اختر تحذيرا أبكر أو طردا أبعد.",
   "verification.unverified.warn_reason": "لم تقم بالتحقق بعد. تحقق في {channel} خلال {time}، وإلا سيتم طردك من الخادم.",
+  "verification.unverified.warn_reason_no_channel": "لم تقم بالتحقق بعد. تحقق خلال {time}، وإلا سيتم طردك من الخادم.",
   "verification.unverified.kick_reason": "لم يتحقق خلال {time}.",
   "verification.lists.name_public": "العامة",
   "verification.lists.name_skip": "المتجاهلة",

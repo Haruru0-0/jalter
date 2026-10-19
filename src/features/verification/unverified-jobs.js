@@ -7,7 +7,8 @@
 // Warn is at-most-once: after the checks (which may throw and retry) the job claims itself by
 // deleting its own row; zero rows deleted means an earlier run (or a rejoin) owns it, so nothing
 // happens. Only then is runAction called, and anything it throws counts as a failed warn. Either
-// way the member's kick job is rescheduled at the same kickAt with `warned: 'ok' | 'failed'`.
+// way the member's kick job of the same schedule gets `warned: 'ok' | 'failed'` and a due time at
+// least MIN_GAP_SECONDS away (see rescheduleKick for when the write is skipped).
 //
 // Under warn_kick the kick job kicks only when `warned === 'ok'`. A refused kick logs one line and
 // is not retried; a thrown error is rethrown so the scheduler retries (a kick is idempotent: a
@@ -21,10 +22,11 @@ import { runAction } from '../moderation/actions.js';
 import { readConfig as readModConfig } from '../moderation/config.js';
 import { readConfig, RUNNING } from './config.js';
 import { logVerification } from './log.js';
-import { WARN_JOB, KICK_JOB } from './unverified.js';
+import { WARN_JOB, KICK_JOB, MIN_GAP_SECONDS } from './unverified.js';
 
 const UNKNOWN_MEMBER = 10007;
 const QUEUED_POLICIES = new Set(['kick', 'warn_kick']);
+const GRACE_MS = MIN_GAP_SECONDS * 1000;
 
 const using = (deps) => ({
   run: deps.runAction ?? runAction,
@@ -68,12 +70,37 @@ async function load(ctx, job) {
 
 const errorDetail = (err) => `error: ${err?.message ?? err}`;
 
-async function rescheduleKick(ctx, guildId, userId, p, warned) {
-  await scheduleJob(ctx.db, {
-    guildId, type: KICK_JOB, key: userId,
-    payload: { policy: p.policy, kickAt: p.kickAt, kickAfter: p.kickAfter, warned },
-    dueAt: p.kickAt,
-  });
+// The kick after a warn, never sooner than GRACE_MS from now (a warn that fires late, after
+// downtime, still leaves the member time to act).
+const kickAfterWarn = (p, now) => Math.max(p.kickAt, now + GRACE_MS);
+
+// Writes the warn result into the member's kick row of THIS schedule (matched by the warn's own
+// kickAt), in one statement:
+// - the kick row exists with that kickAt: its payload gets `warned` and the (maybe later) kickAt;
+// - the kick row exists with another kickAt (a rejoin queued a newer schedule): left alone;
+// - no kick row (consumed, or cancelled): inserted only if no newer warn row exists for the
+//   member AND verification still runs with a policy (a remove or policy none cancelled it all).
+async function rescheduleKick(db, guildId, userId, p, warned, dueAt) {
+  await db.query(
+    `INSERT INTO scheduled_jobs (guild_id, type, key, payload, due_at)
+     SELECT $1, $2, $3, $4::jsonb, to_timestamp($5::float8 / 1000.0)
+     WHERE NOT EXISTS (
+         SELECT 1 FROM scheduled_jobs w
+         WHERE w.guild_id = $1 AND w.type = $7 AND w.key = $3 AND NOT (w.payload @> $6::jsonb))
+       AND EXISTS (
+         SELECT 1 FROM guild_settings s
+         WHERE s.guild_id = $1 AND s.feature = 'verification' AND s.enabled
+           AND s.config->>'state' IN ('rolling_out', 'active', 'failed')
+           AND s.config->>'unverifiedPolicy' IN ('kick', 'warn_kick'))
+     ON CONFLICT (guild_id, type, key) DO UPDATE
+       SET payload = EXCLUDED.payload, due_at = EXCLUDED.due_at, attempts = 0, claimed_until = NULL
+       WHERE scheduled_jobs.payload @> $6::jsonb`,
+    [
+      guildId, KICK_JOB, userId,
+      JSON.stringify({ policy: p.policy, kickAt: dueAt, kickAfter: p.kickAfter, warned }),
+      dueAt, JSON.stringify({ kickAt: p.kickAt }), WARN_JOB,
+    ],
+  );
 }
 
 /** Scheduler handler for WARN_JOB (queued policy warn_kick only). */
@@ -96,10 +123,12 @@ export async function warnJob(ctx, job, deps = {}) {
     if (removed === 0) return;
     claimed = true;
 
-    const left = Math.max(0, Math.ceil((p.kickAt - now()) / 1000));
-    const reason = t(lang, 'verification.unverified.warn_reason', {
-      channel: `<#${cfg.channelId}>`, time: formatDuration(left),
-    });
+    const at = now();
+    const kickAt = kickAfterWarn(p, at);
+    const time = formatDuration(Math.ceil((kickAt - at) / 1000));
+    const reason = cfg.channelId
+      ? t(lang, 'verification.unverified.warn_reason', { channel: `<#${cfg.channelId}>`, time })
+      : t(lang, 'verification.unverified.warn_reason_no_channel', { time });
     let result;
     try {
       result = await run(ctx, {
@@ -110,7 +139,7 @@ export async function warnJob(ctx, job, deps = {}) {
       result = { ok: false, reason: errorDetail(err) };
     }
     const warned = result?.ok === true ? 'ok' : 'failed';
-    await rescheduleKick(ctx, guild.id, member.id, p, warned);
+    await rescheduleKick(ctx.db, guild.id, member.id, p, warned, kickAt);
     if (warned === 'failed') {
       await log(ctx, guild.id, lang, {
         kind: 'unverified_failed', userId: member.id, detail: `warn: ${result?.reason ?? 'unknown'}`,
@@ -121,7 +150,7 @@ export async function warnJob(ctx, job, deps = {}) {
     // failed (the kick is skipped) and say so once. Not after the claim: the warn ran by then.
     if (!claimed && job.attempts >= MAX_ATTEMPTS) {
       try {
-        await rescheduleKick(ctx, job.guildId, job.key, p, 'failed');
+        await rescheduleKick(ctx.db, job.guildId, job.key, p, 'failed', kickAfterWarn(p, now()));
         const lang = await getLang(ctx.db, job.guildId);
         await log(ctx, job.guildId, lang, {
           kind: 'unverified_failed', userId: job.key, detail: `warn: ${errorDetail(err)}`,

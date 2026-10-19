@@ -1,9 +1,12 @@
 import { test, before, beforeEach, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { testDb } from '../helpers/db.js';
-import { setFeature } from '../../src/db/settings.js';
+import { getFeature, setFeature } from '../../src/db/settings.js';
 import { scheduleJob, claimDue, MAX_ATTEMPTS } from '../../src/core/scheduler.js';
-import { WARN_JOB, KICK_JOB } from '../../src/features/verification/unverified.js';
+import {
+  WARN_JOB, KICK_JOB, queueUnverifiedJobs, cancelMemberJobs, cancelAllUnverifiedJobs,
+} from '../../src/features/verification/unverified.js';
+import { readConfig } from '../../src/features/verification/config.js';
 import { warnJob, kickJob, jobs } from '../../src/features/verification/unverified-jobs.js';
 import * as feature from '../../src/features/verification/index.js';
 
@@ -231,8 +234,10 @@ test('warn and kick claimed in the same tick: the stale kick defers to the resch
   await kickJob(ctx, k, f.deps);
   assert.deepEqual(f.calls.map((c) => c.type), ['warn']);
   assert.deepEqual(f.logs, []);
-  // The next tick runs the rescheduled kick, which now knows the warn succeeded.
-  const [next] = await claimDue(db, NOW + 1, { types: [KICK_JOB] });
+  // The rescheduled kick is not due in the same tick: the member gets the 10 minute grace.
+  assert.deepEqual(await claimDue(db, NOW + 1, { types: [KICK_JOB] }), []);
+  const [next] = await claimDue(db, NOW + 600_000, { types: [KICK_JOB] });
+  assert.equal(next.payload.warned, 'ok');
   await kickJob(ctx, next, f.deps);
   assert.deepEqual(f.calls.map((c) => c.type), ['warn', 'kick']);
 });
@@ -399,4 +404,121 @@ test('a warn that keeps failing before it is claimed is marked failed on the fin
   assert.equal(f.logs.length, 1);
   assert.equal(f.logs[0].kind, 'unverified_failed');
   assert.equal((await rows(KICK_JOB))[0].payload.warned, 'failed');
+});
+
+test('an overdue warn gets a 10 minute grace before the kick', async () => {
+  await setup();
+  const late = basePayload('warn_kick', { kickAt: NOW - 5000 });
+  await scheduleJob(db, { guildId: G, type: KICK_JOB, key: 'u1', payload: late, dueAt: NOW - 5000 });
+  const f = fakes();
+  await warnJob(ctxFor(makeGuild([makeMember()])), await queued(WARN_JOB, { payload: late }), f.deps);
+  assert.match(f.calls[0].reason, /10m/);
+  assert.doesNotMatch(f.calls[0].reason, /0s/);
+  assert.deepEqual(await rows(KICK_JOB), [{
+    key: 'u1', attempts: 0, due: NOW + 600_000,
+    payload: { ...late, kickAt: NOW + 600_000, warned: 'ok' },
+  }]);
+});
+
+test('a warn close to kickAt also leaves at least 10 minutes', async () => {
+  await setup();
+  const close = basePayload('warn_kick', { kickAt: NOW + 60_000 });
+  const f = fakes();
+  await warnJob(ctxFor(makeGuild([makeMember()])), await queued(WARN_JOB, { payload: close }), f.deps);
+  const [kick] = await rows(KICK_JOB);
+  assert.equal(kick.due, NOW + 600_000);
+  assert.equal(kick.payload.kickAt, NOW + 600_000);
+});
+
+test('the warn reason has no channel mention when no verify channel is saved', async () => {
+  await setup({ channelId: null });
+  const f = fakes();
+  await warnJob(ctxFor(makeGuild([makeMember()])), await queued(WARN_JOB), f.deps);
+  assert.equal(f.calls.length, 1);
+  assert.doesNotMatch(f.calls[0].reason, /<#/);
+  assert.doesNotMatch(f.calls[0].reason, /null/);
+  assert.match(f.calls[0].reason, /1h/);
+});
+
+const rejoiner = (policy) => async () => {
+  // The member leaves and rejoins while the engine is still busy with the old warn.
+  await cancelMemberJobs(db, G, 'u1');
+  await setup({ unverifiedPolicy: policy });
+  const { config } = await getFeature(db, G, 'verification');
+  await queueUnverifiedJobs({ db }, { id: 'u1', joinedTimestamp: NOW, guild: { id: G } }, readConfig(config), NOW);
+  return { ok: true, modCase: { number: 1 }, warnings: [] };
+};
+
+test('a rejoin during the warn keeps the newer kick row untouched', async () => {
+  for (const policy of ['warn_kick', 'kick']) {
+    await db.query('DELETE FROM scheduled_jobs');
+    await setup();
+    await scheduleJob(db, { guildId: G, type: KICK_JOB, key: 'u1', payload: basePayload(), dueAt: KICK_AT });
+    const f = fakes(rejoiner(policy));
+    await warnJob(ctxFor(makeGuild([makeMember()])), await queued(WARN_JOB), f.deps);
+    assert.equal(f.calls.length, 1);
+    const newKickAt = NOW + 7200_000;
+    assert.deepEqual(await rows(KICK_JOB), [{
+      key: 'u1', attempts: 0, due: newKickAt, payload: { policy, kickAt: newKickAt, kickAfter: 7200 },
+    }], policy);
+  }
+});
+
+test('a rejoin during the warn whose kick row is gone does not re-insert the old kick', async () => {
+  // No kick row is left for the old schedule, and the rejoin queued a fresh warn: the old kick
+  // must not come back next to the newer schedule.
+  await setup();
+  const f = fakes(async () => {
+    await cancelMemberJobs(db, G, 'u1');
+    await scheduleJob(db, {
+      guildId: G, type: WARN_JOB, key: 'u1', payload: basePayload('warn_kick', { kickAt: NOW + 9999_000 }), dueAt: NOW + 1000,
+    });
+    return { ok: true, modCase: null, warnings: [] };
+  });
+  await warnJob(ctxFor(makeGuild([makeMember()])), await queued(WARN_JOB), f.deps);
+  assert.deepEqual(await rows(KICK_JOB), []);
+  assert.equal((await rows(WARN_JOB))[0].payload.kickAt, NOW + 9999_000);
+});
+
+test('remove or policy none during the warn leaves no kick row behind', async () => {
+  const cancels = {
+    remove: async () => {
+      await setup({ state: 'none' });
+      await cancelAllUnverifiedJobs(db, G);
+    },
+    none: async () => {
+      await setup({ unverifiedPolicy: 'none' });
+      await cancelAllUnverifiedJobs(db, G);
+    },
+  };
+  for (const [name, cancel] of Object.entries(cancels)) {
+    await db.query('DELETE FROM scheduled_jobs');
+    await setup();
+    await scheduleJob(db, { guildId: G, type: KICK_JOB, key: 'u1', payload: basePayload(), dueAt: KICK_AT });
+    const f = fakes(async () => { await cancel(); return { ok: true, modCase: null, warnings: [] }; });
+    await warnJob(ctxFor(makeGuild([makeMember()])), await queued(WARN_JOB), f.deps);
+    assert.equal(f.calls.length, 1, name);
+    assert.deepEqual(await rows(KICK_JOB), [], name);
+    assert.deepEqual(await rows(WARN_JOB), [], name);
+  }
+});
+
+test('a consumed kick row is re-inserted when nothing newer exists', async () => {
+  await setup();
+  const f = fakes();
+  await warnJob(ctxFor(makeGuild([makeMember()])), await queued(WARN_JOB), f.deps);
+  assert.deepEqual(await rows(KICK_JOB), [{
+    key: 'u1', attempts: 0, due: KICK_AT, payload: { ...basePayload(), warned: 'ok' },
+  }]);
+});
+
+test('verification turned off during the warn does not re-insert a consumed kick row', async () => {
+  await setup();
+  const f = fakes(async () => {
+    await setup({}, false);
+    return { ok: true, modCase: null, warnings: [] };
+  });
+  await warnJob(ctxFor(makeGuild([makeMember()])), await queued(WARN_JOB), f.deps);
+  assert.equal(f.calls.length, 1);
+  assert.deepEqual(await rows(KICK_JOB), []);
 });
