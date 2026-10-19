@@ -7,6 +7,7 @@ import { readConfig } from './config.js';
 import { gateChannel, revertChannel } from './apply.js';
 import { logVerification } from './log.js';
 import { verifyMember } from './verify.js';
+import { queueUnverifiedJobs, cancelMemberJobs } from './unverified.js';
 
 // `failed` keeps running too: the gate stays on the channels it reached (same ruling as the
 // verify button and the captcha), so new bots and new channels must follow it.
@@ -27,13 +28,26 @@ export function createEvents(deps = {}) {
   const gate = deps.gateChannel ?? gateChannel;
   const revert = deps.revertChannel ?? revertChannel;
   const log = deps.logVerification ?? logVerification;
+  const now = deps.now ?? Date.now;
   // The grant line stays silent; a refusal for a staff Verified role still raises the danger alert.
   const joinDeps = deps.dangerAlert ? { ...silent, dangerAlert: deps.dangerAlert } : silent;
 
   const onMemberAdd = safe('verificationMemberAdd', async (ctx, member) => {
-    if (!member?.user?.bot || !member.guild) return;
-    if (!(await runningConfig(ctx, member.guild.id))) return;
-    await verify(ctx, member.guild, member, { method: 'join' }, joinDeps);
+    if (!member?.user || !member.guild) return;
+    const running = await runningConfig(ctx, member.guild.id);
+    if (!running) return;
+    if (member.user.bot) {
+      await verify(ctx, member.guild, member, { method: 'join' }, joinDeps);
+      return;
+    }
+    // A human who never verifies is handled by the unverified policy: queue its warn/kick jobs.
+    await queueUnverifiedJobs(ctx, member, running.cfg, now());
+  });
+
+  // A member who left (or was kicked) has nothing left to warn or kick.
+  const onMemberRemove = safe('verificationMemberRemove', async (ctx, member) => {
+    if (!member?.id || !member.guild) return;
+    await cancelMemberJobs(ctx.db, member.guild.id, member.id);
   });
 
   const onChannelCreate = safe('verificationChannelCreate', async (ctx, channel) => {
@@ -63,6 +77,7 @@ export function createEvents(deps = {}) {
 
   return [
     { name: Events.GuildMemberAdd, execute: onMemberAdd },
+    { name: Events.GuildMemberRemove, execute: onMemberRemove },
     { name: Events.ChannelCreate, execute: onChannelCreate },
   ];
 }

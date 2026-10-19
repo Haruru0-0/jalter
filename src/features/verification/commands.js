@@ -17,6 +17,7 @@ import { logVerification } from './log.js';
 import { GRANT_JOB, GATE_JOB, ROLLOUT_KEY, startRollout } from './rollout.js';
 import { handle, postPanel } from './verify.js';
 import { describePolicy } from './unverified-commands.js';
+import { cancelAllUnverifiedJobs } from './unverified.js';
 import { extendWithLists, executeGroup, listHandlers } from './commands-lists.js';
 
 const FEATURE = 'verification';
@@ -350,6 +351,7 @@ async function runRemove(interaction, ctx, lang) {
   await setFeature(ctx.db, guild.id, FEATURE, { enabled: false, config: { state: 'none' } });
   await cancelJobs(ctx.db, { guildId: guild.id, type: GRANT_JOB, key: ROLLOUT_KEY });
   await cancelJobs(ctx.db, { guildId: guild.id, type: GATE_JOB, key: ROLLOUT_KEY });
+  await cancelAllUnverifiedJobs(ctx.db, guild.id);
 
   // Re-list until only failures are left: a gate already in flight may add a record meanwhile.
   const failed = new Set();

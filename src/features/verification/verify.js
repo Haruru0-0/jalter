@@ -11,6 +11,7 @@ import { logVerification } from './log.js';
 import { handleSetupButton } from './commands.js';
 import { CODE_LENGTH, createChallengeStore } from './captcha.js';
 import { renderCaptcha } from './captcha-image.js';
+import { cancelMemberJobs } from './unverified.js';
 
 export const VERIFY_BUTTON_ID = 'verification:go';
 
@@ -80,6 +81,12 @@ export async function verifyMember(ctx, guild, member, { method, actorId } = {},
       actorId,
       detail: method === 'manual' ? undefined : method,
     });
+    // Verified: nothing left to warn or kick. A failure here must not undo a successful grant.
+    try {
+      await cancelMemberJobs(ctx.db, guild.id, member.id);
+    } catch (err) {
+      console.warn('verification: could not cancel unverified jobs:', err?.message ?? err);
+    }
     return { ok: true };
   } catch (err) {
     console.warn('verification: verify failed:', err?.message ?? err);

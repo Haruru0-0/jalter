@@ -1,5 +1,6 @@
-// Unverified-member policy: constants and pure helpers (no I/O).
+// Unverified-member policy: constants, pure helpers and the job queue/cancel helpers.
 import { UNVERIFIED_POLICIES, DEFAULT_KICK } from './config.js';
+import { scheduleJob, cancelJobs } from '../../core/scheduler.js';
 
 export const POLICIES = UNVERIFIED_POLICIES;
 export const DEFAULT_KICK_SECONDS = DEFAULT_KICK;
@@ -24,4 +25,35 @@ export function checkTimes({ policy, kickAfterSeconds, warnAfterSeconds }) {
     if (warn > kickAfterSeconds - MIN_GAP_SECONDS) return { ok: false, reason: 'warn_gap' };
   }
   return { ok: true };
+}
+
+/**
+ * Queues the warn/kick jobs for a joining human. One job per (guild, type, member), so a rejoin
+ * replaces them. Due times count from the join, never earlier than now.
+ */
+export async function queueUnverifiedJobs(ctx, member, cfg, now = Date.now()) {
+  if (cfg.unverifiedPolicy === 'none') return;
+  const guildId = member.guild.id;
+  const joined = member.joinedTimestamp ?? now;
+  const at = (seconds) => Math.max(now, joined + seconds * 1000);
+  const kickAt = at(cfg.kickAfterSeconds);
+  const base = { policy: cfg.unverifiedPolicy, kickAt, kickAfter: cfg.kickAfterSeconds };
+  if (cfg.unverifiedPolicy === 'warn_kick') {
+    await scheduleJob(ctx.db, {
+      guildId, type: WARN_JOB, key: member.id, payload: base, dueAt: at(effectiveWarnSeconds(cfg)),
+    });
+  }
+  await scheduleJob(ctx.db, { guildId, type: KICK_JOB, key: member.id, payload: base, dueAt: kickAt });
+}
+
+/** Drops a member's queued warn and kick jobs. */
+export async function cancelMemberJobs(db, guildId, userId) {
+  await cancelJobs(db, { guildId, type: WARN_JOB, key: userId });
+  await cancelJobs(db, { guildId, type: KICK_JOB, key: userId });
+}
+
+/** Drops every queued warn and kick job of a guild. */
+export async function cancelAllUnverifiedJobs(db, guildId) {
+  await cancelJobs(db, { guildId, type: WARN_JOB });
+  await cancelJobs(db, { guildId, type: KICK_JOB });
 }

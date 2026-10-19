@@ -8,6 +8,7 @@ import { t } from '../../i18n/index.js';
 import { readConfig } from './config.js';
 import {
   POLICIES, KICK_MIN_SECONDS, KICK_MAX_SECONDS, MIN_GAP_SECONDS, effectiveWarnSeconds, checkTimes,
+  cancelAllUnverifiedJobs,
 } from './unverified.js';
 
 const FEATURE = 'verification';
@@ -50,5 +51,6 @@ export async function executeUnverified(interaction, ctx) {
   }
 
   await setFeature(ctx.db, interaction.guildId, FEATURE, { config: { unverifiedPolicy: policy, ...given } });
+  if (policy === 'none') await cancelAllUnverifiedJobs(ctx.db, interaction.guildId);
   return say(t(lang, 'verification.unverified.saved', { value: describePolicy(lang, next) }));
 }
