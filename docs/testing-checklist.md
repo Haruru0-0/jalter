@@ -384,7 +384,7 @@ Needs two accounts: your admin account and a test account that joins fresh (an a
 - [ ] Cancel says nothing was changed. Run setup again and wait over 2 minutes before Confirm: it says the confirmation expired. Another admin pressing Confirm is told only the admin who ran the command can use it.
 - [ ] If an ordinary channel has an extra role with its own View Channel allow, the preview lists it as a channel where that role keeps seeing it (informational only).
 - [ ] Confirm creates a "Verified" role just below the bot, a `verify` channel with a Verify embed and button, then the rollout starts. `/verification status` shows state rolling out (granting, then gating) and finally active, with the number of undo records.
-- [ ] Setup refuses (with a clear message) when: the bot lacks a permission, the chosen verify channel is hidden from @everyone, @everyone has Administrator, the chosen role is above the bot or managed, the chosen role has a staff permission (for example Manage Messages or Ban Members), the chosen role is not below your own highest role (use an admin who is not the owner), or verification is already set up.
+- [ ] Setup refuses (with a clear message) when: the bot lacks a permission, the chosen verify channel is hidden from @everyone, @everyone has Administrator, the chosen role is above the bot or managed, the chosen role has a staff permission (for example Manage Messages or Ban Members), the chosen role is not below your own highest role (use an admin who is not the owner), verification is already set up, or a remove is still running or left channels to restore (run remove again first).
 - [ ] `/verification setup` also takes `mode` (button or captcha), `role` and `channel`: your own role and channel are used instead of creating new ones.
 
 ### Existing members and the gate
@@ -411,7 +411,7 @@ Needs two accounts: your admin account and a test account that joins fresh (an a
 - [ ] Switch back with `/verification mode mode:button`: the Verify button gives the role at once again.
 - [ ] A bot invited after setup gets the Verified role by itself and sees the channels (no mod-log line for it).
 - [ ] Create a new text channel as an admin: it is gated like the others (hidden from the unverified account, visible to Verified). Create one inside a category that is already gated and it follows the category; after `/verification remove` that channel is visible to everyone again (like its category). A private new channel is left alone.
-- [ ] Give the Verified role a staff permission (for example Manage Messages) in Server Settings: Verify, the captcha and `/verification verify` refuse to give it ("staff permissions"), and a bot that joins does not get it. Remove the permission again afterwards.
+- [ ] Give the Verified role a staff permission (for example Manage Messages) in Server Settings: Verify, the captcha and `/verification verify` refuse to give it ("staff permissions"), and a bot that joins does not get it. `/verification status` shows a staff-permissions warning, and the first refusal writes one mod-log line (more refusals within the hour write none). Remove the permission again afterwards.
 - [ ] `/verification verify member:<user>` gives the role and writes a mod-log line naming you; running it again says already verified. `/verification unverify member:<user>` removes the role and logs it; on a bot it is refused; on someone with a role at or above yours it is refused. Both are refused while verification is not set up (state none).
 
 ### Status and removal
