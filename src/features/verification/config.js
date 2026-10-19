@@ -1,7 +1,10 @@
 export const MODES = ['button', 'captcha'];
 export const STATES = ['none', 'rolling_out', 'active', 'failed'];
 export const MAX_CHANNELS = 200;
+export const UNVERIFIED_POLICIES = ['none', 'kick', 'warn_kick'];
+export const DEFAULT_KICK = 86400;
 
+const seconds = (v) => (Number.isFinite(v) && v > 0 ? v : null);
 const id = (v) => (typeof v === 'string' && v !== '' ? v : null);
 const list = (v) => {
   if (!Array.isArray(v)) return [];
@@ -20,6 +23,9 @@ export function readConfig(raw) {
     publicChannels: list(r.publicChannels),
     skippedChannels: list(r.skippedChannels),
     cutoff: Number.isFinite(r.cutoff) && r.cutoff >= 0 ? r.cutoff : null,
+    unverifiedPolicy: UNVERIFIED_POLICIES.includes(r.unverifiedPolicy) ? r.unverifiedPolicy : 'none',
+    kickAfterSeconds: seconds(r.kickAfterSeconds) ?? DEFAULT_KICK,
+    warnAfterSeconds: seconds(r.warnAfterSeconds),
   };
 }
 

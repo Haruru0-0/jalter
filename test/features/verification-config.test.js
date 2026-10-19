@@ -8,6 +8,7 @@ test('readConfig fills defaults', () => {
   assert.deepEqual(readConfig(undefined), {
     mode: 'button', roleId: null, channelId: null, messageId: null, state: 'none',
     publicChannels: [], skippedChannels: [], cutoff: null,
+    unverifiedPolicy: 'none', kickAfterSeconds: 86400, warnAfterSeconds: null,
   });
   assert.deepEqual(readConfig(null), readConfig({}));
 });
@@ -57,5 +58,5 @@ test('verification is listed as a real command in the registry', () => {
   const mod = modules.find((m) => m.commands?.some((c) => c.data.name === 'verification'));
   assert.ok(mod);
   const data = mod.commands[0].data.toJSON();
-  assert.deepEqual(data.options.map((o) => o.name), ['enable', 'disable', 'mode', 'public', 'skip', 'verify', 'unverify', 'setup', 'status', 'remove']);
+  assert.deepEqual(data.options.map((o) => o.name), ['enable', 'disable', 'mode', 'public', 'skip', 'verify', 'unverify', 'unverified', 'setup', 'status', 'remove']);
 });

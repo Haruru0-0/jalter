@@ -1,4 +1,4 @@
-// /verification mode, public|skip add|remove|list, verify and unverify.
+// /verification mode, public|skip add|remove|list, verify, unverify and unverified.
 // Config writes are merge-style through setFeature: the stored config has extra keys
 // (grantDone, cutoff, ...) that readConfig does not expose and that must never be replaced.
 import { ChannelType } from 'discord.js';
@@ -14,6 +14,8 @@ import { snapshotOf, gateChannel, revertChannel } from './apply.js';
 import { getRecord } from './store.js';
 import { logVerification } from './log.js';
 import { verifyMember } from './verify.js';
+import { POLICIES } from './unverified.js';
+import { executeUnverified } from './unverified-commands.js';
 
 const FEATURE = 'verification';
 const LIST_TEXT_MAX = 1500;
@@ -43,7 +45,12 @@ export function extendWithLists(builder) {
     .addSubcommandGroup(group('skip', 'Channels the gate never touches'))
     .addSubcommand((s) => s.setName('verify').setDescription('Verify a member by hand').addUserOption(member))
     .addSubcommand((s) => s.setName('unverify').setDescription('Remove the Verified role from a member')
-      .addUserOption(member));
+      .addUserOption(member))
+    .addSubcommand((s) => s.setName('unverified').setDescription('Choose what happens to members who never verify')
+      .addStringOption((o) => o.setName('policy').setDescription('What to do with unverified members').setRequired(true)
+        .addChoices(...POLICIES.map((p) => ({ name: p, value: p }))))
+      .addStringOption((o) => o.setName('kick_after').setDescription('Kick after this long, like 1d or 12h (10m to 30d)'))
+      .addStringOption((o) => o.setName('warn_after').setDescription('Warn after this long (warn_kick only), like 12h')));
 }
 
 async function loadConfig(ctx, guildId) {
@@ -273,4 +280,4 @@ async function executeUnverify(interaction, ctx, deps) {
   return c.say('verification.manual.unverified', vars);
 }
 
-export const listHandlers = { mode: executeMode, verify: executeVerify, unverify: executeUnverify };
+export const listHandlers = { mode: executeMode, verify: executeVerify, unverify: executeUnverify, unverified: executeUnverified };

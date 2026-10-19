@@ -16,6 +16,7 @@ import { listRecords, countRecords } from './store.js';
 import { logVerification } from './log.js';
 import { GRANT_JOB, GATE_JOB, ROLLOUT_KEY, startRollout } from './rollout.js';
 import { handle, postPanel } from './verify.js';
+import { describePolicy } from './unverified-commands.js';
 import { extendWithLists, executeGroup, listHandlers } from './commands-lists.js';
 
 const FEATURE = 'verification';
@@ -305,6 +306,7 @@ async function executeStatus(interaction, ctx) {
       lines.push(t(lang, 'verification.status.failed_list', { channels: `${mentions(ids)}${more}` }));
     }
   }
+  lines.push(t(lang, 'verification.status.unverified', { value: describePolicy(lang, cfg) }));
   lines.push(t(lang, 'verification.status.lists', {
     public: cfg.publicChannels.length, skipped: cfg.skippedChannels.length,
   }));
