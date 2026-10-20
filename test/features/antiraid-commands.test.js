@@ -135,6 +135,7 @@ test('end refuses while idle', async () => {
 test('end ends the lockdown and lifts our pause', async () => {
   const { guild, incidentCalls } = makeGuild();
   guildRef.guild = guild;
+  guild.incidentsData = { invitesDisabledUntil: new Date(NOW + 1000) };
   await setFeature(db, G, 'antiraid', {
     enabled: true, config: { state: 'locked', lockedUntil: NOW + 1000, invitesPausedByUs: true },
   });
@@ -142,12 +143,13 @@ test('end ends the lockdown and lifts our pause', async () => {
   assert.equal(last(i).content, t('en', 'antiraid.end.done'));
   const config = await cfgOf();
   assert.equal(config.state, 'idle');
-  assert.deepEqual(incidentCalls, [{ invitesDisabledUntil: null }]);
+  assert.deepEqual(incidentCalls, [{ invitesDisabledUntil: null, dmsDisabledUntil: null }]);
 });
 
 test('disable ends an active lockdown first', async () => {
   const { guild, incidentCalls } = makeGuild();
   guildRef.guild = guild;
+  guild.incidentsData = { invitesDisabledUntil: new Date(NOW + 1000) };
   await setFeature(db, G, 'antiraid', {
     enabled: true, config: { state: 'locked', lockedUntil: NOW + 1000, invitesPausedByUs: true },
   });
@@ -156,7 +158,7 @@ test('disable ends an active lockdown first', async () => {
   const { enabled, config } = await getFeature(db, G, 'antiraid');
   assert.equal(enabled, false);
   assert.equal(config.state, 'idle');
-  assert.deepEqual(incidentCalls, [{ invitesDisabledUntil: null }]);
+  assert.deepEqual(incidentCalls, [{ invitesDisabledUntil: null, dmsDisabledUntil: null }]);
 });
 
 test('enable and disable still toggle the feature', async () => {

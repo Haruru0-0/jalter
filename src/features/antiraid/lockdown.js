@@ -7,7 +7,12 @@
 //
 // The state lives in the feature config (merge-written) and the end timer in the shared
 // scheduler, so there is no table of our own and no migration.
-import { getFeature, setFeature } from '../../db/settings.js';
+//
+// A running start must never overwrite or outlive an end: every write it makes after the flip
+// is conditional on the lockdown still being the one it started (config.lockedAt), and the kick
+// loop stops as soon as it is not.
+import { PermissionFlagsBits } from 'discord.js';
+import { getFeature } from '../../db/settings.js';
 import { getLang, t } from '../../i18n/index.js';
 import { formatDuration } from '../../core/duration.js';
 import { scheduleJob, cancelJobs, MAX_ATTEMPTS } from '../../core/scheduler.js';
@@ -34,11 +39,22 @@ const using = (deps) => ({
   fetch: deps.fetchSendable ?? fetchSendable,
   now: deps.now ?? Date.now,
   joins: deps.joins ?? defaultJoins,
+  schedule: deps.scheduleJob ?? scheduleJob,
 });
+
+const IDLE = {
+  state: 'idle',
+  lockedAt: null,
+  lockedUntil: null,
+  startedBy: null,
+  invitesPausedByUs: false,
+  inviteResult: 'none',
+  alertResult: 'none',
+};
 
 const errorText = (err) => err?.message ?? String(err);
 
-// ---- the two conditional state flips ------------------------------------------------------
+// ---- the conditional state writes ----------------------------------------------------------
 
 /**
  * Flips the state to locked in one statement. It only writes when the feature is on and the
@@ -55,16 +71,49 @@ async function flipToLocked(ctx, guildId, patch) {
   return res.rowCount;
 }
 
-/** Flips the state back to idle in one statement. Zero rows means there was no lockdown. */
+/**
+ * Flips the state back to idle in one statement and returns the config as it was just before
+ * the flip (the pause, end time and kick count of the lockdown that ended), or null when there
+ * was no lockdown. The locked row is taken FOR UPDATE, so two ends cannot both get it.
+ */
 async function flipToIdle(ctx, guildId, patch) {
   const res = await ctx.db.query(
-    `UPDATE guild_settings
-        SET config = config || $2::jsonb
-      WHERE guild_id = $1 AND feature = 'antiraid'
-        AND config->>'state' = 'locked'`,
+    `WITH old AS (
+       SELECT config FROM guild_settings
+        WHERE guild_id = $1 AND feature = 'antiraid' AND config->>'state' = 'locked'
+          FOR UPDATE
+     )
+     UPDATE guild_settings g
+        SET config = g.config || $2::jsonb
+       FROM old
+      WHERE g.guild_id = $1 AND g.feature = 'antiraid' AND g.config->>'state' = 'locked'
+  RETURNING old.config AS old_config`,
     [guildId, JSON.stringify(patch)],
   );
-  return res.rowCount;
+  return res.rows[0]?.old_config ?? null;
+}
+
+/** Merges a patch only while the lockdown that started at lockedAt is still the current one. */
+async function patchIfCurrent(ctx, guildId, lockedAt, patch) {
+  const res = await ctx.db.query(
+    `UPDATE guild_settings
+        SET config = config || $3::jsonb
+      WHERE guild_id = $1 AND feature = 'antiraid'
+        AND config->>'state' = 'locked' AND config->>'lockedAt' = $2`,
+    [guildId, String(lockedAt), JSON.stringify(patch)],
+  );
+  return res.rowCount > 0;
+}
+
+/** True while the lockdown that started at lockedAt is still the current one. */
+async function isCurrent(ctx, guildId, lockedAt) {
+  const res = await ctx.db.query(
+    `SELECT 1 FROM guild_settings
+      WHERE guild_id = $1 AND feature = 'antiraid'
+        AND config->>'state' = 'locked' AND config->>'lockedAt' = $2`,
+    [guildId, String(lockedAt)],
+  );
+  return res.rowCount > 0;
 }
 
 /** The end timer of a lockdown that could not be ended the normal way. */
@@ -73,22 +122,34 @@ async function forceIdle(ctx, guildId) {
     `UPDATE guild_settings
         SET config = config || $2::jsonb
       WHERE guild_id = $1 AND feature = 'antiraid'`,
-    [guildId, JSON.stringify({
-      state: 'idle', lockedAt: null, lockedUntil: null, startedBy: null,
-      invitesPausedByUs: false, inviteResult: 'none', alertResult: 'none',
-    })],
+    [guildId, JSON.stringify(IDLE)],
   );
 }
 
-/** Adds one to the count of removed accounts, without reading it first. */
-async function bumpKicked(ctx, guildId) {
+/** Adds one to the count of removed accounts, while that lockdown is still the current one. */
+async function bumpKicked(ctx, guildId, lockedAt) {
   await ctx.db.query(
     `UPDATE guild_settings
         SET config = jsonb_set(config, '{kicked}', to_jsonb(
           (CASE WHEN (config->>'kicked') ~ '^[0-9]+$' THEN (config->>'kicked')::int ELSE 0 END) + 1))
-      WHERE guild_id = $1 AND feature = 'antiraid'`,
-    [guildId],
+      WHERE guild_id = $1 AND feature = 'antiraid'
+        AND config->>'state' = 'locked' AND config->>'lockedAt' = $2`,
+    [guildId, String(lockedAt)],
   );
+}
+
+// ---- discord helpers -----------------------------------------------------------------------
+
+/** The admin's own DM pause, passed back unchanged: setIncidentActions replaces both fields. */
+const keepDms = (guild) => guild.incidentsData?.dmsDisabledUntil ?? null;
+
+const canKick = (guild) => guild.members?.me?.permissions?.has(PermissionFlagsBits.KickMembers) === true;
+
+/** True when the guild's invite pause is the one this lockdown made (same end, to the second). */
+function pauseIsOurs(guild, lockedUntil) {
+  const raw = guild.incidentsData?.invitesDisabledUntil;
+  const ms = raw ? new Date(raw).getTime() : NaN;
+  return Number.isFinite(ms) && Number.isFinite(lockedUntil) && Math.abs(ms - lockedUntil) <= 1000;
 }
 
 // ---- the alert and the log line ------------------------------------------------------------
@@ -148,14 +209,15 @@ function endEmbed(lang, { by, actorId, kicked, lifted }) {
 // ---- the start -----------------------------------------------------------------------------
 
 /**
- * Starts a lockdown: state, end timer, alert, invite pause and the kicks of the young accounts.
+ * Starts a lockdown: state, end timer, invite pause, alert and the kicks of the young accounts.
  * Every step after the state flip is best effort, so a refusal or a thrown Discord error is
- * recorded and the next step still runs.
+ * recorded and the next step still runs. The one exception is the end timer: without it the
+ * lockdown could never end, so a failure there undoes the lock (reason 'schedule_failed').
  */
 export async function startLockdown(ctx, guild, {
   trigger = 'auto', startedBy = null, joinedCount = 0, candidates = [],
 } = {}, deps = {}) {
-  const { run, log, send, fetch, now } = using(deps);
+  const { run, log, send, fetch, now, schedule } = using(deps);
   const guildId = guild.id;
   const at = now();
 
@@ -170,6 +232,7 @@ export async function startLockdown(ctx, guild, {
     lockedUntil,
     startedBy: startedBy ?? null,
     kicked: 0,
+    invitesPausedByUs: false,
     inviteResult: 'none',
     alertResult: 'none',
   });
@@ -181,14 +244,61 @@ export async function startLockdown(ctx, guild, {
 
   // The end timer. It survives a restart, because the state and the job are both in the database.
   try {
-    await scheduleJob(ctx.db, {
+    await schedule(ctx.db, {
       guildId, type: END_JOB, key: END_KEY, payload: { lockedUntil }, dueAt: lockedUntil,
     });
   } catch (err) {
     console.warn(`Could not queue the anti-raid end in ${guildId}: ${errorText(err)}`);
+    try {
+      await flipToIdle(ctx, guildId, IDLE);
+    } catch (inner) {
+      console.warn(`Could not undo the anti-raid lock in ${guildId}: ${errorText(inner)}`);
+    }
+    return { ok: false, reason: 'schedule_failed' };
   }
 
   const lang = await getLang(ctx.db, guildId);
+
+  // The invite pause comes first: it is what stops the raid. A pause that is already there is
+  // somebody else's: leave it alone.
+  let inviteResult = 'none';
+  let invitesPausedByUs = false;
+  const already = guild.incidentsData?.invitesDisabledUntil;
+  const alreadyMs = already ? new Date(already).getTime() : NaN;
+  if (Number.isFinite(alreadyMs) && alreadyMs > at) {
+    inviteResult = 'already';
+  } else {
+    try {
+      await guild.setIncidentActions({
+        invitesDisabledUntil: new Date(lockedUntil),
+        dmsDisabledUntil: keepDms(guild),
+      });
+      inviteResult = 'paused';
+      invitesPausedByUs = true;
+    } catch (err) {
+      console.warn(`Could not pause the invites in ${guildId}: ${errorText(err)}`);
+      inviteResult = 'failed';
+    }
+  }
+  // Written right away: the end must know whether the pause is ours to lift.
+  let stillOurs;
+  try {
+    stillOurs = await patchIfCurrent(ctx, guildId, at, { inviteResult, invitesPausedByUs });
+  } catch (err) {
+    console.warn(`Could not save the anti-raid invite result in ${guildId}: ${errorText(err)}`);
+    stillOurs = true;
+  }
+  if (!stillOurs) {
+    // The lockdown ended while we were starting, so the end could not know about our pause.
+    if (invitesPausedByUs) {
+      try {
+        await guild.setIncidentActions({ invitesDisabledUntil: null, dmsDisabledUntil: keepDms(guild) });
+      } catch (err) {
+        console.warn(`Could not lift the invite pause in ${guildId}: ${errorText(err)}`);
+      }
+    }
+    return { ok: true, kicked: 0 };
+  }
 
   // The alert: a mod-log message, and a ping in the same channel.
   let alertResult = 'none';
@@ -217,41 +327,30 @@ export async function startLockdown(ctx, guild, {
     alertResult = 'failed';
   }
 
-  // The invite pause. A pause that is already there is somebody else's: leave it alone.
-  let inviteResult = 'none';
-  let invitesPausedByUs = false;
-  const already = guild.incidentsData?.invitesDisabledUntil;
-  const alreadyMs = already ? new Date(already).getTime() : NaN;
-  if (Number.isFinite(alreadyMs) && alreadyMs > at) {
-    inviteResult = 'already';
+  // The kicks of the young accounts of the burst. Each one is counted as it happens, and the
+  // loop stops the moment this lockdown is no longer the current one.
+  let kicked = 0;
+  if (!canKick(guild)) {
+    if (candidates.length > 0) console.warn(`The bot cannot kick in ${guildId}: Kick Members is missing`);
   } else {
-    try {
-      await guild.setIncidentActions({ invitesDisabledUntil: new Date(lockedUntil) });
-      inviteResult = 'paused';
-      invitesPausedByUs = true;
-    } catch (err) {
-      console.warn(`Could not pause the invites in ${guildId}: ${errorText(err)}`);
-      inviteResult = 'failed';
+    const modConfig = readModConfig((await getFeature(ctx.db, guildId, 'moderation')).config);
+    const reason = t(lang, 'antiraid.kick_reason');
+    for (const candidate of candidates.slice(0, MAX_KICKS)) {
+      if (!(await isCurrent(ctx, guildId, at))) break;
+      const result = await kickCandidate(ctx, guild, candidate, { run, modConfig, lang, reason, cfg, at });
+      if (result === 'kicked') {
+        kicked += 1;
+        try {
+          await bumpKicked(ctx, guildId, at);
+        } catch (err) {
+          console.warn(`Could not count a kick in ${guildId}: ${errorText(err)}`);
+        }
+      }
     }
   }
-  // Written right away: the end must know whether the pause is ours to lift.
-  try {
-    await setFeature(ctx.db, guildId, FEATURE, { config: { inviteResult, invitesPausedByUs } });
-  } catch (err) {
-    console.warn(`Could not save the anti-raid invite result in ${guildId}: ${errorText(err)}`);
-  }
-
-  // The kicks of the young accounts of the burst.
-  const modConfig = readModConfig((await getFeature(ctx.db, guildId, 'moderation')).config);
-  const reason = t(lang, 'antiraid.kick_reason');
-  let kicked = 0;
-  for (const candidate of candidates.slice(0, MAX_KICKS)) {
-    const result = await kickCandidate(ctx, guild, candidate, { run, modConfig, lang, reason, cfg, at });
-    if (result === 'kicked') kicked += 1;
-  }
 
   try {
-    await setFeature(ctx.db, guildId, FEATURE, { config: { kicked, inviteResult, alertResult } });
+    await patchIfCurrent(ctx, guildId, at, { alertResult });
   } catch (err) {
     console.warn(`Could not save the anti-raid result in ${guildId}: ${errorText(err)}`);
   }
@@ -281,7 +380,8 @@ async function kickCandidate(ctx, guild, candidate, { run, modConfig, lang, reas
       targetId: member.id,
       target: member,
       reason,
-      config: modConfig,
+      // No DM: a raid account is not owed an explanation, and a DM per kick is spam.
+      config: { ...modConfig, dm: false },
       lang,
     });
     return result?.ok === true ? 'kicked' : 'failed';
@@ -296,24 +396,15 @@ async function kickCandidate(ctx, guild, candidate, { run, modConfig, lang, reas
 /**
  * Ends the lockdown: idle again, the end timer cancelled, our invite pause lifted, the join
  * list cleared and one line in the mod log. Ending twice does nothing the second time.
+ * It does not need the feature to be on: /antiraid disable ends the lockdown after turning it off.
  */
 export async function endLockdown(ctx, guild, { by = 'timer', actorId = null } = {}, deps = {}) {
   const { log, joins } = using(deps);
   const guildId = guild.id;
 
-  const { config } = await getFeature(ctx.db, guildId, FEATURE);
-  const cfg = readConfig(config);
-
-  const ended = await flipToIdle(ctx, guildId, {
-    state: 'idle',
-    lockedAt: null,
-    lockedUntil: null,
-    startedBy: null,
-    invitesPausedByUs: false,
-    inviteResult: 'none',
-    alertResult: 'none',
-  });
-  if (ended === 0) return { ok: false, reason: 'not_locked' };
+  const old = await flipToIdle(ctx, guildId, IDLE);
+  if (!old) return { ok: false, reason: 'not_locked' };
+  const was = readConfig(old);
 
   try {
     await cancelJobs(ctx.db, { guildId, type: END_JOB, key: END_KEY });
@@ -321,11 +412,12 @@ export async function endLockdown(ctx, guild, { by = 'timer', actorId = null } =
     console.warn(`Could not cancel the anti-raid end in ${guildId}: ${errorText(err)}`);
   }
 
-  // Only the pause this lockdown made is lifted: an admin's own pause stays.
+  // Only the pause this lockdown made is lifted: an admin's own pause stays, even one that
+  // replaced ours since.
   let lifted = false;
-  if (cfg.invitesPausedByUs) {
+  if (was.invitesPausedByUs && pauseIsOurs(guild, was.lockedUntil)) {
     try {
-      await guild.setIncidentActions({ invitesDisabledUntil: null });
+      await guild.setIncidentActions({ invitesDisabledUntil: null, dmsDisabledUntil: keepDms(guild) });
       lifted = true;
     } catch (err) {
       console.warn(`Could not lift the invite pause in ${guildId}: ${errorText(err)}`);
@@ -336,7 +428,7 @@ export async function endLockdown(ctx, guild, { by = 'timer', actorId = null } =
 
   try {
     const lang = await getLang(ctx.db, guildId);
-    await log(ctx, guildId, 'modAction', endEmbed(lang, { by, actorId, kicked: cfg.kicked, lifted }));
+    await log(ctx, guildId, 'modAction', endEmbed(lang, { by, actorId, kicked: was.kicked, lifted }));
   } catch (err) {
     console.warn(`Could not log the anti-raid end in ${guildId}: ${errorText(err)}`);
   }
@@ -358,6 +450,7 @@ export async function kickYoungJoin(ctx, guild, member, deps = {}) {
   const cfg = readConfig(config);
   const at = now();
 
+  if (!canKick(guild)) return 'failed';
   const createdAt = Number(member?.user?.createdTimestamp);
   if (!Number.isFinite(createdAt)) return 'failed';
   if (at - createdAt >= cfg.accountAgeSeconds * 1000) return 'old';
@@ -374,7 +467,7 @@ export async function kickYoungJoin(ctx, guild, member, deps = {}) {
       targetId: member.id,
       target: member,
       reason,
-      config: modConfig,
+      config: { ...modConfig, dm: false },
       lang,
     });
     if (result?.ok !== true) return 'failed';
@@ -382,32 +475,44 @@ export async function kickYoungJoin(ctx, guild, member, deps = {}) {
     console.warn(`Could not kick ${member?.id} in ${guildId}: ${errorText(err)}`);
     return 'failed';
   }
-  await bumpKicked(ctx, guildId);
+  try {
+    await bumpKicked(ctx, guildId, cfg.lockedAt);
+  } catch (err) {
+    console.warn(`Could not count a kick in ${guildId}: ${errorText(err)}`);
+  }
   return 'kicked';
 }
 
 // ---- the end job ---------------------------------------------------------------------------
 
 /**
- * Scheduler handler for the end of a lockdown. A job for a lockdown that already ended does
- * nothing. A failure is rethrown so the scheduler retries, but on the last attempt the
- * lockdown is concluded anyway: it can never stay stuck.
+ * Scheduler handler for the end of a lockdown. A job for a lockdown that already ended, or for
+ * an older one, does nothing. A failure (including a guild that is not cached) is rethrown so
+ * the scheduler retries, but on the last attempt the lockdown is concluded anyway: it can
+ * never stay stuck.
  */
 export async function endJob(ctx, job, deps = {}) {
-  const guild = ctx.client?.guilds?.cache?.get(job.guildId);
-  if (!guild) return;
+  const guildId = job.guildId;
   try {
+    const { config } = await getFeature(ctx.db, guildId, FEATURE);
+    if (job.payload?.lockedUntil !== readConfig(config).lockedUntil) return;
+    const guild = ctx.client?.guilds?.cache?.get(guildId);
+    if (!guild) throw new Error(`guild ${guildId} is not in the cache`);
     await endLockdown(ctx, guild, { by: 'timer' }, deps);
   } catch (err) {
     if (job.attempts >= MAX_ATTEMPTS) {
       try {
-        const { config } = await getFeature(ctx.db, job.guildId, FEATURE);
-        if (readConfig(config).invitesPausedByUs) {
-          await guild.setIncidentActions({ invitesDisabledUntil: null });
+        const { config } = await getFeature(ctx.db, guildId, FEATURE);
+        const cfg = readConfig(config);
+        if (job.payload?.lockedUntil === cfg.lockedUntil) {
+          const guild = ctx.client?.guilds?.cache?.get(guildId);
+          if (guild && cfg.invitesPausedByUs && pauseIsOurs(guild, cfg.lockedUntil)) {
+            await guild.setIncidentActions({ invitesDisabledUntil: null, dmsDisabledUntil: keepDms(guild) });
+          }
+          await forceIdle(ctx, guildId);
         }
-        await forceIdle(ctx, job.guildId);
       } catch (inner) {
-        console.warn(`Could not conclude the anti-raid lockdown in ${job.guildId}: ${errorText(inner)}`);
+        console.warn(`Could not conclude the anti-raid lockdown in ${guildId}: ${errorText(inner)}`);
       }
     }
     throw err;
