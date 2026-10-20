@@ -87,11 +87,20 @@ test('the sweep prunes on the timer and start is idempotent', (t) => {
   assert.equal(store.size(), 0);
 });
 
-test('the same user joining twice is counted twice', () => {
+test('the same user joining twice is counted once', () => {
   const store = createJoinStore();
-  assert.equal(store.record('g1', entry('u1'), 1000, 60_000), 1);
-  assert.equal(store.record('g1', entry('u1'), 2000, 60_000), 2, 'a rejoin is a join');
-  assert.equal(store.recent('g1', 2000, 60_000).length, 2);
+  assert.equal(store.record('g1', entry('a'), 1000, 60_000), 1);
+  assert.equal(store.record('g1', entry('a'), 2000, 60_000), 1, 'a rejoin is not a new user');
+  const recent = store.recent('g1', 2000, 60_000);
+  assert.equal(recent.length, 1);
+  assert.equal(recent[0].userId, 'a');
+});
+
+test('a rejoin refreshes joinedAt so the user stays live', () => {
+  const store = createJoinStore();
+  store.record('g1', entry('a'), 0, 60_000);
+  store.record('g1', entry('a'), 50_000, 60_000);
+  assert.equal(store.record('g1', entry('b'), 70_000, 60_000), 2);
 });
 
 test('the process singleton is a store of its own', () => {

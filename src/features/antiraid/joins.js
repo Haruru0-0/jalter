@@ -15,9 +15,9 @@ const isLive = (entry, now, windowMs) => now - entry.joinedAt < windowMs;
 export function createJoinStore() {
   const byGuild = new Map();
 
-  /** Adds a join and returns how many joins of this server are inside the window. */
+  /** Adds a join and returns how many distinct users of this server joined inside the window. A rejoin replaces the user's earlier entry. */
   function record(guildId, { userId, createdAt }, now, windowMs) {
-    const list = byGuild.get(guildId) ?? [];
+    const list = (byGuild.get(guildId) ?? []).filter((entry) => entry.userId !== userId);
     list.push({ userId, createdAt, joinedAt: now });
     byGuild.set(guildId, list);
     return list.filter((entry) => isLive(entry, now, windowMs)).length;
