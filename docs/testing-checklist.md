@@ -442,7 +442,38 @@ Needs the bot to have Kick Members. Use short times: the minimum kick time is 10
 
 - [ ] In Server Settings, Onboarding, choose default channels that are on the public list. The new account sees them and the onboarding questions before verifying, and the gate does not block finishing Onboarding.
 
-## 14. Permissions and robustness
+## 14. Anti-raid
+
+Needs the bot to have Kick Members (it removes the young accounts of a burst) and Manage Server (Discord's own invite pause, `PUT /guilds/{id}/incident-actions`). The Server Members intent is needed for the joins. The feature is off until `/antiraid enable`, and the join counter lives in memory, so it is empty after a bot restart. Run `npm run deploy` first so `/antiraid` appears.
+
+### Settings
+
+- [ ] `/antiraid config joins:3 window:30s account_age:1h duration:5m` saves the four numbers, and `/antiraid status` shows them (3 joins in 30s, accounts younger than 1h are kicked, a lockdown lasts 5m).
+- [ ] Refusals, each saving nothing: `joins:2` and `joins:101` (3 to 100), `window:5s` and `window:11m` (10s to 10m), `account_age:30m` and `account_age:91d` (1h to 90d), `duration:1m` and `duration:25h` (5m to 24h, Discord's own limit for the invite pause), a time that cannot be read such as `window:abc`, and @everyone as `ping_role`.
+- [ ] `/antiraid config ping_role:<a role>` saves the ping role, and a later `config` call without `ping_role` keeps it. With no ping role set, the bot manager role (`/panel manager-role`) is pinged instead; with neither, nobody is pinged and `/antiraid status` says so.
+- [ ] `/antiraid status` works while the feature is off and shows Off.
+
+### A burst of joins
+
+- [ ] With `/antiraid config joins:3 window:60s account_age:1h` and the feature on, three test accounts join inside a minute: one lockdown starts. The mod log gets an "Anti-raid lockdown started" message with the numbers, and a second message pings the chosen role (only that role). The invites are paused (an invite does not work while the lockdown is on). The accounts younger than 1h are kicked, each with a real kick case in the mod log and the bot as moderator.
+- [ ] Older accounts and staff are left alone: an account older than the age limit stays, and so does the owner, a member at or above the bot's top role, a bot manager and a member with Manage Server. A member who already has the Verified role is still kicked.
+- [ ] A young account that joins while the lockdown is on is kicked at once and is not counted.
+- [ ] `/antiraid status` shows the lockdown, the end time, how many accounts were removed and that the invite pause worked.
+
+### Ending the lockdown
+
+- [ ] The lockdown ends by itself when the duration is up (the scheduler ticks every 30 seconds): the invites open again and one "Anti-raid lockdown ended" line goes to the mod log.
+- [ ] `/antiraid end` ends it early and the invites open again. `/antiraid end` while no lockdown is on is refused with a clear message.
+- [ ] `/antiraid disable` while a lockdown is on ends it first (the invites open again) and turns the feature off.
+- [ ] An invite pause you set yourself before the burst (Server Settings > Invites, or Discord's own raid protection) is left alone: the bot does not lift it when the lockdown ends, and `/antiraid status` says the pause was already there.
+
+### Partial failures
+
+- [ ] With the logging feature off, the lockdown still starts and the kicks still happen; `/antiraid status` says the alert was skipped.
+- [ ] Take Manage Server from the bot: the lockdown still starts and the kicks still happen; `/antiraid status` says the invite pause was refused.
+- [ ] Stop the bot while a lockdown is on and start it again: the lockdown is still on (the state is in the database) and it still ends by itself at the time it was given.
+
+## 15. Permissions and robustness
 
 - [ ] Every setup reply is ephemeral (only you see it).
 - [ ] A normal member cannot run `/logging`, `/autorole`, `/set`, `/media` or `/moderation` setup commands.

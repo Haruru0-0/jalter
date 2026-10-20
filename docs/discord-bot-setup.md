@@ -37,9 +37,10 @@ The other intents Jalter uses (Guilds, Auto Moderation Execution, Guild Messages
    - View Audit Log (logging "By" field; optional)
    - Manage Messages (`/purge messages`, and auto-mod deleting offending messages)
    - Manage Nicknames (auto-mod nickname check; optional)
-   - Manage Server (auto-mod reading Discord AutoMod rules and receiving their events; optional, only for the `native` rule)
+   - Manage Server (auto-mod reading Discord AutoMod rules and receiving their events, and anti-raid's invite pause; optional for auto-mod, needed for the anti-raid invite pause)
    - Manage Channels (`/purge channel`, `/slowmode`, `/lock`, `/unlock`; also `/logging setup` and the log, welcome, goodbye and boost channels the bot creates when none was chosen)
    - Verification: Manage Roles (creates and grants the Verified role, which must sit below the bot's top role), Manage Channels (creates the verify channel and edits channel overwrites), View Channel, Send Messages, Embed Links and Attach Files (the verify message and the captcha image), and Kick Members for the optional unverified-member policy (the same permission as moderation; skip it if you never turn that policy on). Run `npm run deploy` to register `/verification`.
+   - Anti-raid: Kick Members (it removes the young accounts of a join burst, the same permission as moderation) and Manage Server (Discord's own invite pause, `PUT /guilds/{id}/incident-actions`). Without Manage Server the lockdown still starts and the accounts are still removed, but the invites stay open and `/antiraid status` says the pause was refused. Run `npm run deploy` to register `/antiraid`.
 4. Copy the generated URL, open it, choose your server and click **Authorize**.
 
 The bot appears offline until you start it.
@@ -95,6 +96,8 @@ With `DEV_GUILD_ID` set, slash commands register to that server only and appear 
 | `/purge`, `/slowmode`, `/lock` or `/unlock` says the bot is missing permissions | Give the bot Manage Messages (purge messages) or Manage Channels (the rest), plus Manage Roles for lock, unlock and purge channel, and check the channel overrides (View Channel; Read Message History for purge messages; Manage Threads for slowmode in a thread). Send Messages is not needed for these commands; if it is missing the public notice is skipped and the reply says so. |
 | Auto-mod does nothing | Check in order: `/automod status` shows the feature on and the rule on; the member is not exempt (Manage Server, bot manager role, Moderate Members, a moderation permitted role, `/automod exempt` roles and channels, and bots are never checked); the bot has View Channel, Read Message History and Manage Messages in the channel (to delete), Moderate Members (timeout) and Manage Nicknames (rename); the bot's role is above the member's (otherwise the delete works but warn, timeout and rename are refused). The console prints a warning when Discord refuses an action. |
 | Logs have no "By" field | The bot lacks View Audit Log, or the audit entry was over 10 seconds old. |
+| Anti-raid says the invite pause was refused | The bot lacks Manage Server (Discord's incident-actions endpoint). The lockdown still runs and the accounts are still removed, but the invites stay open. |
+| Anti-raid never starts a lockdown | The feature is off (`/antiraid enable`), the burst was under the threshold (`/antiraid config joins:...`), the joins were more than the window apart, or the bot was restarted in between (the join counter lives in memory). `/antiraid status` shows the current numbers. |
 | Database connection error | Docker Desktop is not running. Start it, then `docker compose up -d`. |
 | Setup commands say you lack permission | You need Manage Server or the bot manager role (`/panel manager-role`). |
 | Token leaked | Bot tab > Reset Token, update `.env`, restart. |
