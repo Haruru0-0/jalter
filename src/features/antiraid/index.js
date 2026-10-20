@@ -1,5 +1,5 @@
 import { createAntiraidCommand } from './commands.js';
 
 export const commands = [createAntiraidCommand()];
-export const events = [];
+export { events } from './events.js';
 export { jobs } from './lockdown.js';

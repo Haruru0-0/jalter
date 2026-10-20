@@ -278,7 +278,7 @@ test('antiraid is a real command in the registry', () => {
   const mod = modules.find((m) => m.commands?.some((c) => c.data.name === 'antiraid'));
   assert.ok(mod);
   const data = mod.commands[0].data.toJSON();
-  assert.deepEqual(data.options.map((o) => o.name), ['enable', 'disable', 'config', 'status']);
+  assert.deepEqual(data.options.map((o) => o.name), ['enable', 'disable', 'config', 'status', 'start', 'end']);
   const config = data.options.find((o) => o.name === 'config');
   assert.deepEqual(config.options.map((o) => o.name), ['joins', 'window', 'account_age', 'duration', 'ping_role']);
 });

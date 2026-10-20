@@ -1,8 +1,8 @@
-// /antiraid: enable, disable, config and status.
+// /antiraid: enable, disable, config, status, start and end.
 //
 // Every reply is ephemeral and needs Manage Server or the bot manager role. The feature is not
 // required to be on for `config` and `status`: an admin must be able to prepare and read the
-// settings before turning the feature on.
+// settings before turning the feature on. `start` and `end` are refused while the feature is off.
 import { SlashCommandBuilder } from 'discord.js';
 import { handleToggle, toggleSubcommands } from '../../core/toggle.js';
 import { guard } from '../../core/guard.js';
@@ -10,9 +10,13 @@ import { ephemeral } from '../../core/replies.js';
 import { parseDuration, formatDuration } from '../../core/duration.js';
 import { getFeature, setFeature } from '../../db/settings.js';
 import { t } from '../../i18n/index.js';
+import { FEATURES, setupCommand } from '../../core/registry.js';
 import { readConfig, checkConfig, resolvePingRole } from './config.js';
+import { joins } from './joins.js';
+import { startLockdown, endLockdown } from './lockdown.js';
 
 const FEATURE = 'antiraid';
+const SETUP = `/${setupCommand(FEATURES.find((f) => f.key === FEATURE) ?? { key: FEATURE })}`;
 
 // The option that carries each time setting, and the config key it is saved under.
 const TIMES = [
@@ -21,7 +25,12 @@ const TIMES = [
   ['duration', 'durationSeconds'],
 ];
 
-export function createAntiraidCommand() {
+export function createAntiraidCommand(deps = {}) {
+  const store = deps.joins ?? joins;
+  const now = deps.now ?? Date.now;
+  const start = deps.startLockdown ?? startLockdown;
+  const end = deps.endLockdown ?? endLockdown;
+
   const data = toggleSubcommands(
     new SlashCommandBuilder().setName('antiraid').setDescription('Anti-raid settings'),
   )
@@ -31,13 +40,19 @@ export function createAntiraidCommand() {
       .addStringOption((o) => o.setName('account_age').setDescription('Kick accounts younger than this, like 7d (1h-90d)'))
       .addStringOption((o) => o.setName('duration').setDescription('How long a lockdown lasts, like 30m (5m-24h)'))
       .addRoleOption((o) => o.setName('ping_role').setDescription('The role to ping when a lockdown starts')))
-    .addSubcommand((s) => s.setName('status').setDescription('Show the anti-raid settings and any lockdown'));
+    .addSubcommand((s) => s.setName('status').setDescription('Show the anti-raid settings and any lockdown'))
+    .addSubcommand((s) => s.setName('start').setDescription('Start a lockdown by hand'))
+    .addSubcommand((s) => s.setName('end').setDescription('End the lockdown'));
 
   async function execute(interaction, ctx) {
     const sub = interaction.options.getSubcommand();
-    if (sub === 'enable' || sub === 'disable') return handleToggle(interaction, ctx, FEATURE);
+    const tools = { store, now, start, end };
+    if (sub === 'enable') return handleToggle(interaction, ctx, FEATURE);
+    if (sub === 'disable') return executeDisable(interaction, ctx, tools, deps);
     if (sub === 'config') return executeConfig(interaction, ctx);
     if (sub === 'status') return executeStatus(interaction, ctx);
+    if (sub === 'start') return executeStart(interaction, ctx, tools, deps);
+    if (sub === 'end') return executeEnd(interaction, ctx, tools, deps);
     return undefined;
   }
 
@@ -51,8 +66,8 @@ async function executeConfig(interaction, ctx) {
   if (!lang) return;
   const patch = {};
 
-  const joins = interaction.options.getInteger('joins');
-  if (joins !== null && joins !== undefined) patch.joins = joins;
+  const joinsOption = interaction.options.getInteger('joins');
+  if (joinsOption !== null && joinsOption !== undefined) patch.joins = joinsOption;
 
   // Parse first: a time that does not make sense is refused before anything else is read.
   for (const [option, key] of TIMES) {
@@ -122,4 +137,76 @@ async function executeStatus(interaction, ctx) {
   }
 
   await interaction.reply(ephemeral(lines.join('\n')));
+}
+
+// ---- start and end --------------------------------------------------------------------------
+
+async function executeStart(interaction, ctx, tools, deps) {
+  const { store, now, start } = tools;
+  const lang = await guard(interaction, ctx, FEATURE, { requireEnabled: false });
+  if (!lang) return;
+  const guild = interaction.guild;
+  const { config } = await getFeature(ctx.db, guild.id, FEATURE);
+  const cfg = readConfig(config);
+  if (cfg.state === 'locked') {
+    await interaction.reply(ephemeral(t(lang, 'antiraid.start.already')));
+    return;
+  }
+
+  // The candidates are the joins of the detection window: a manual start right after a
+  // restart may find none, and then it removes nobody.
+  const windowMs = cfg.windowSeconds * 1000;
+  const at = now();
+  const candidates = store.recent(guild.id, at, windowMs);
+  const res = await start(ctx, guild, {
+    trigger: 'manual', startedBy: interaction.user.id, joinedCount: candidates.length, candidates,
+  }, deps);
+  if (!res.ok) {
+    const key = res.reason === 'disabled' ? 'common.featureOff' : 'antiraid.start.already';
+    const vars = res.reason === 'disabled' ? { command: SETUP } : {};
+    await interaction.reply(ephemeral(t(lang, key, vars)));
+    return;
+  }
+
+  const after = readConfig((await getFeature(ctx.db, guild.id, FEATURE)).config);
+  const until = after.lockedUntil ? `<t:${Math.floor(after.lockedUntil / 1000)}:F>` : '?';
+  await interaction.reply(ephemeral(t(lang, 'antiraid.start.done', {
+    kicked: res.kicked,
+    until,
+    invite: t(lang, `antiraid.status.invite_${after.inviteResult}`),
+    alert: t(lang, `antiraid.status.alert_${after.alertResult}`),
+  })));
+}
+
+async function executeEnd(interaction, ctx, tools, deps) {
+  const { end } = tools;
+  const lang = await guard(interaction, ctx, FEATURE, { requireEnabled: false });
+  if (!lang) return;
+  const { config } = await getFeature(ctx.db, interaction.guildId, FEATURE);
+  if (readConfig(config).state !== 'locked') {
+    await interaction.reply(ephemeral(t(lang, 'antiraid.end.not_locked')));
+    return;
+  }
+  const res = await end(ctx, interaction.guild, { by: 'manual', actorId: interaction.user.id }, deps);
+  if (!res.ok) {
+    await interaction.reply(ephemeral(t(lang, 'antiraid.end.not_locked')));
+    return;
+  }
+  await interaction.reply(ephemeral(t(lang, 'antiraid.end.done')));
+}
+
+// Turning the feature off ends a running lockdown first: a lockdown that outlives its
+// feature would keep kicking young accounts with nothing to turn it off.
+async function executeDisable(interaction, ctx, tools, deps) {
+  const { end } = tools;
+  const lang = await guard(interaction, ctx, FEATURE, { requireEnabled: false });
+  if (!lang) return;
+  const { config } = await getFeature(ctx.db, interaction.guildId, FEATURE);
+  if (readConfig(config).state === 'locked') {
+    await end(ctx, interaction.guild, { by: 'disable', actorId: interaction.user.id }, deps);
+    await setFeature(ctx.db, interaction.guildId, FEATURE, { enabled: false });
+    await interaction.reply(ephemeral(t(lang, 'antiraid.disable.ended')));
+    return;
+  }
+  return handleToggle(interaction, ctx, FEATURE);
 }

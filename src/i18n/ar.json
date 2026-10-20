@@ -711,5 +711,10 @@
   "antiraid.log.kicked": "الحسابات المُطردة",
   "antiraid.log.pause": "إيقاف الدعوات",
   "antiraid.log.pause_lifted": "تم رفعه",
-  "antiraid.log.pause_kept": "تُرك كما هو"
+  "antiraid.log.pause_kept": "تُرك كما هو",
+  "antiraid.start.already": "هناك حصار جارٍ بالفعل. أنهِه أولاً عبر /antiraid end.",
+  "antiraid.start.done": "بدأ الحصار. الحسابات المُطردة: {kicked}. ينتهي {until}. إيقاف الدعوات: {invite}. التنبيه: {alert}.",
+  "antiraid.end.not_locked": "لا يوجد حصار جارٍ الآن.",
+  "antiraid.end.done": "انتهى الحصار. تم إعادة ضبط إيقاف الدعوات وعدّاد الانضمامات.",
+  "antiraid.disable.ended": "انتهى الحصار وأُوقفت الحماية من الغارات الآن."
 }

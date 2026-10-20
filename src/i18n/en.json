@@ -711,5 +711,10 @@
   "antiraid.log.kicked": "Accounts removed",
   "antiraid.log.pause": "Invite pause",
   "antiraid.log.pause_lifted": "lifted",
-  "antiraid.log.pause_kept": "left as it was"
+  "antiraid.log.pause_kept": "left as it was",
+  "antiraid.start.already": "A lockdown is already on. End it with /antiraid end first.",
+  "antiraid.start.done": "Lockdown started. Accounts removed: {kicked}. It ends {until}. Invite pause: {invite}. Alert: {alert}.",
+  "antiraid.end.not_locked": "There is no lockdown on right now.",
+  "antiraid.end.done": "The lockdown is over. The invite pause and the join counter are reset.",
+  "antiraid.disable.ended": "The lockdown is over and anti-raid is now off."
 }

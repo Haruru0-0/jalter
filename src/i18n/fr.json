@@ -711,5 +711,10 @@
   "antiraid.log.kicked": "Comptes retirés",
   "antiraid.log.pause": "Pause des invitations",
   "antiraid.log.pause_lifted": "levée",
-  "antiraid.log.pause_kept": "laissée telle quelle"
+  "antiraid.log.pause_kept": "laissée telle quelle",
+  "antiraid.start.already": "Un confinement est déjà en cours. Terminez-le d'abord avec /antiraid end.",
+  "antiraid.start.done": "Confinement démarré. Comptes retirés : {kicked}. Il se termine {until}. Pause des invitations : {invite}. Alerte : {alert}.",
+  "antiraid.end.not_locked": "Aucun confinement n'est en cours.",
+  "antiraid.end.done": "Le confinement est terminé. La pause des invitations et le compteur de rejoints sont réinitialisés.",
+  "antiraid.disable.ended": "Le confinement est terminé et l'anti-raid est maintenant désactivé."
 }
