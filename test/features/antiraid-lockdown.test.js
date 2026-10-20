@@ -9,7 +9,7 @@ import { readConfig } from '../../src/features/antiraid/config.js';
 import { readConfig as readModConfig } from '../../src/features/moderation/config.js';
 import { createJoinStore } from '../../src/features/antiraid/joins.js';
 import {
-  startLockdown, endLockdown, kickYoungJoin, endJob, resetClaims, END_JOB, END_KEY, MAX_KICKS,
+  startLockdown, endLockdown, kickYoungJoin, endJob, forceIdle, resetClaims, END_JOB, END_KEY, MAX_KICKS,
 } from '../../src/features/antiraid/lockdown.js';
 
 let db;
@@ -452,7 +452,7 @@ test('endJob with an uncached guild forces idle on the last attempt and throws b
   assert.equal((await cfgOf()).state, 'locked', 'the scheduler retries');
   await assert.rejects(() => endJob(ctx, job(5), deps));
   assert.equal((await cfgOf()).state, 'idle', 'a lockdown can never stay stuck');
-  assert.equal(calls.log.length, 0);
+  assert.equal(calls.log.length, 1, 'the forced end is logged once');
 });
 
 test('on the last attempt the end job concludes the lockdown even after a thrown error', async () => {
@@ -1138,4 +1138,88 @@ test('a stale kick that fails does not release the claim of a newer lockdown', a
   assert.equal(await first, 'failed');
   assert.equal(await kickYoungJoin(ctxFor(guild), guild, m1, deps), 'failed', 'still claimed');
   assert.equal(calls.run.length, 1);
+});
+
+// ---- the forced end and the lost invite flag ------------------------------------------------
+
+test('forceIdle leaves an idle or other row alone', async () => {
+  const { deps, calls } = makeDeps();
+  await enable({ state: 'idle', kicked: 3 });
+  assert.equal(await forceIdle({ db }, G, deps), false);
+  assert.equal((await getFeature(db, G, 'antiraid')).config.kicked, 3);
+  assert.equal(calls.log.length, 0);
+  assert.equal(await forceIdle({ db }, 'nobody', deps), false);
+});
+
+test('forceIdle on a locked row resets it, clears the joins and logs once', async () => {
+  const { deps, calls } = makeDeps();
+  await enableLocked({ kicked: 4, invitesPausedByUs: true });
+  deps.joins.record(G, { userId: 'u1', createdAt: NOW }, NOW, 60_000);
+  assert.equal(await forceIdle({ db }, G, deps), true);
+  const cfg = await cfgOf();
+  assert.equal(cfg.state, 'idle');
+  assert.equal(cfg.invitesPausedByUs, false);
+  assert.equal(deps.joins.size(), 0);
+  assert.equal(calls.log.length, 1);
+  assert.equal(calls.log[0].event, 'modAction');
+  const kickedField = calls.log[0].embed.fields.find((f) => f.name === t('en', 'antiraid.log.kicked'));
+  assert.equal(kickedField.value, '4');
+  assert.equal(await forceIdle({ db }, G, deps), false, 'the second call finds nothing');
+  assert.equal(calls.log.length, 1);
+});
+
+test('endJob forces idle on the last attempt and logs', async () => {
+  const { guild } = makeGuild();
+  await enableLocked();
+  const { deps, calls } = makeDeps();
+  const failing = {
+    query: async (sql, params) => {
+      if (/WITH old AS/.test(sql)) throw new Error('end failed');
+      return db.query(sql, params);
+    },
+  };
+  await assert.rejects(
+    () => endJob(ctxFor(guild, failing), { guildId: G, attempts: 5, payload: { lockedUntil: NOW + 1800_000 } }, deps),
+    /end failed/,
+  );
+  assert.equal((await cfgOf()).state, 'idle');
+  assert.equal(calls.log.length, 1);
+});
+
+test('a failed invite-result write is retried once', async (t) => {
+  quiet(t);
+  const { guild } = makeGuild();
+  await enable({ durationSeconds: 1800 });
+  const { deps } = makeDeps();
+  let failed = false;
+  const flaky = {
+    query: async (sql, params) => {
+      if (!failed && /inviteResult|invitesPausedByUs/.test(String(params?.[2] ?? '')) && /^\s*UPDATE/.test(sql)) {
+        failed = true;
+        throw new Error('write failed');
+      }
+      return db.query(sql, params);
+    },
+  };
+  const res = await startLockdown(ctxFor(guild, flaky), guild, { trigger: 'auto', startedBy: 'auto' }, deps);
+  assert.equal(res.ok, true);
+  assert.equal(failed, true);
+  assert.equal((await cfgOf()).invitesPausedByUs, true);
+});
+
+test('end lifts a pause that matches our end time even when the flag was lost', async () => {
+  const { guild, incidentCalls } = makeGuild({ incidents: { invitesDisabledUntil: new Date(NOW + 1800_000) } });
+  await enableLocked({ invitesPausedByUs: false, inviteResult: 'none' });
+  const { deps } = makeDeps();
+  await endLockdown(ctxFor(guild), guild, { by: 'timer' }, deps);
+  assert.equal(incidentCalls.length, 1);
+  assert.equal(incidentCalls[0].invitesDisabledUntil, null);
+});
+
+test('end does not lift a pause that does not match when the flag was lost', async () => {
+  const { guild, incidentCalls } = makeGuild({ incidents: { invitesDisabledUntil: new Date(NOW + 48 * 3600_000) } });
+  await enableLocked({ invitesPausedByUs: false, inviteResult: 'none' });
+  const { deps } = makeDeps();
+  await endLockdown(ctxFor(guild), guild, { by: 'timer' }, deps);
+  assert.equal(incidentCalls.length, 0);
 });

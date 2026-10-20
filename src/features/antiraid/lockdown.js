@@ -130,14 +130,33 @@ async function isCurrent(ctx, guildId, lockedAt) {
   }
 }
 
-/** The end timer of a lockdown that could not be ended the normal way. */
-async function forceIdle(ctx, guildId) {
-  await ctx.db.query(
+/**
+ * Ends a lockdown that could not be ended the normal way: idle again, the join list and the
+ * claims cleared, one best-effort line in the mod log. Only a locked row is touched, so an
+ * idle or other row is left alone. True when a locked row was reset.
+ */
+export async function forceIdle(ctx, guildId, deps = {}) {
+  const { log, joins } = using(deps);
+  const res = await ctx.db.query(
     `UPDATE guild_settings
         SET config = config || $2::jsonb
-      WHERE guild_id = $1 AND feature = 'antiraid'`,
+      WHERE guild_id = $1 AND feature = 'antiraid' AND config->>'state' = 'locked'
+  RETURNING config->>'kicked' AS kicked`,
     [guildId, JSON.stringify(IDLE)],
   );
+  if (res.rowCount === 0) return false;
+  joins.clear(guildId);
+  resetClaims(guildId);
+  try {
+    const lang = await getLang(ctx.db, guildId);
+    const kicked = Number(res.rows[0]?.kicked);
+    await log(ctx, guildId, 'modAction', endEmbed(lang, {
+      by: 'timer', actorId: null, kicked: Number.isFinite(kicked) ? kicked : 0, lifted: false,
+    }));
+  } catch (err) {
+    console.warn(`Could not log the forced anti-raid end in ${guildId}: ${errorText(err)}`);
+  }
+  return true;
 }
 
 /** Adds one to the count of removed accounts, while that lockdown is still the current one. */
@@ -307,7 +326,7 @@ export async function startLockdown(ctx, guild, {
     } catch (inner) {
       console.warn(`Could not undo the anti-raid lock in ${guildId}: ${errorText(inner)}`);
       try {
-        await forceIdle(ctx, guildId);
+        await forceIdle(ctx, guildId, deps);
       } catch (last) {
         console.warn(`Could not force the anti-raid lock off in ${guildId}: ${errorText(last)}`);
       }
@@ -339,13 +358,16 @@ export async function startLockdown(ctx, guild, {
     }
   }
   // Written right away: the end must know whether the pause is ours to lift.
+  // A thrown write is retried once: a lost flag would leave our pause on after the end.
   let stillOurs;
-  try {
-    stillOurs = await patchIfCurrent(ctx, guildId, at, { inviteResult, invitesPausedByUs });
-  } catch (err) {
-    console.warn(`Could not save the anti-raid invite result in ${guildId}: ${errorText(err)}`);
-    stillOurs = true;
+  for (let attempt = 1; attempt <= 2 && stillOurs === undefined; attempt += 1) {
+    try {
+      stillOurs = await patchIfCurrent(ctx, guildId, at, { inviteResult, invitesPausedByUs });
+    } catch (err) {
+      console.warn(`Could not save the anti-raid invite result in ${guildId}: ${errorText(err)}`);
+    }
   }
+  if (stillOurs === undefined) stillOurs = true;
   if (!stillOurs) {
     // The lockdown ended while we were starting, so the end could not know about our pause.
     if (invitesPausedByUs) {
@@ -514,7 +536,10 @@ export async function endLockdown(ctx, guild, {
   // Only the pause this lockdown made is lifted: an admin's own pause stays, even one that
   // replaced ours since.
   let lifted = false;
-  if (was.invitesPausedByUs && pauseIsOurs(guild, was.lockedUntil)) {
+  // The flag can be lost when its write failed: a 'none' result with a pause that ends exactly
+  // when this lockdown does is still ours.
+  const maybeOurs = was.invitesPausedByUs || was.inviteResult === 'none';
+  if (maybeOurs && pauseIsOurs(guild, was.lockedUntil)) {
     try {
       await guild.setIncidentActions({ invitesDisabledUntil: null, dmsDisabledUntil: keepDms(guild, now()) });
       lifted = true;
@@ -615,7 +640,7 @@ export async function endJob(ctx, job, deps = {}) {
           if (guild && cfg.invitesPausedByUs && pauseIsOurs(guild, cfg.lockedUntil)) {
             await guild.setIncidentActions({ invitesDisabledUntil: null, dmsDisabledUntil: keepDms(guild, (deps.now ?? Date.now)()) });
           }
-          await forceIdle(ctx, guildId);
+          await forceIdle(ctx, guildId, deps);
         }
       } catch (inner) {
         console.warn(`Could not conclude the anti-raid lockdown in ${guildId}: ${errorText(inner)}`);
