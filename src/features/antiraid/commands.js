@@ -4,7 +4,7 @@
 // required to be on for `config` and `status`: an admin must be able to prepare and read the
 // settings before turning the feature on. `start` and `end` are refused while the feature is off.
 import { SlashCommandBuilder } from 'discord.js';
-import { handleToggle, toggleSubcommands } from '../../core/toggle.js';
+import { toggleSubcommands } from '../../core/toggle.js';
 import { guard } from '../../core/guard.js';
 import { ephemeral } from '../../core/replies.js';
 import { parseDuration, formatDuration } from '../../core/duration.js';
@@ -47,7 +47,7 @@ export function createAntiraidCommand(deps = {}) {
   async function execute(interaction, ctx) {
     const sub = interaction.options.getSubcommand();
     const tools = { store, now, start, end };
-    if (sub === 'enable') return handleToggle(interaction, ctx, FEATURE);
+    if (sub === 'enable') return executeEnable(interaction, ctx, tools, deps);
     if (sub === 'disable') return executeDisable(interaction, ctx, tools, deps);
     if (sub === 'config') return executeConfig(interaction, ctx);
     if (sub === 'status') return executeStatus(interaction, ctx);
@@ -200,23 +200,57 @@ async function executeEnd(interaction, ctx, tools, deps) {
   await interaction.reply(ephemeral(t(lang, 'antiraid.end.done')));
 }
 
-// Turning the feature off ends a running lockdown first: a lockdown that outlives its
-// feature would keep kicking young accounts with nothing to turn it off.
+// ---- enable and disable ---------------------------------------------------------------------
+
+const toggledText = (lang, on) => t(lang, on ? 'common.enabledMsg' : 'common.disabledMsg', {
+  feature: t(lang, `feature.${FEATURE}`),
+});
+
+// Turning the feature on does not resume a lockdown left over past its end time (a disable
+// whose end failed, and an end job that failed too): it is ended right away. A lockdown that
+// has not reached its end time stays; its end job still ends it.
+async function executeEnable(interaction, ctx, tools, deps) {
+  const { end, now } = tools;
+  const lang = await guard(interaction, ctx, FEATURE, { requireEnabled: false });
+  if (!lang) return;
+  await setFeature(ctx.db, interaction.guildId, FEATURE, { enabled: true });
+  await interaction.reply(ephemeral(toggledText(lang, true)));
+  try {
+    const cfg = readConfig((await getFeature(ctx.db, interaction.guildId, FEATURE)).config);
+    if (cfg.state === 'locked' && cfg.lockedUntil && cfg.lockedUntil <= now()) {
+      await end(ctx, interaction.guild, { by: 'timer' }, deps);
+    }
+  } catch (err) {
+    console.warn(`antiraid: ending a stale lockdown on enable failed in ${interaction.guildId}:`, err);
+  }
+}
+
+// Turning the feature off ends a running lockdown: a lockdown that outlives its feature would
+// keep kicking young accounts with nothing to turn it off.
+//
+// Off first, then always the end, without reading the state in between: a start can only lock
+// while the feature is on, so once it is off no new lockdown can begin, and the end catches one
+// that an auto start locked just before the off write. If the end fails, only the end job is
+// left to finish it: the next-join expiry check in events.js does not run while the feature is
+// off, and enabling the feature again ends the lockdown if its end time has passed.
 async function executeDisable(interaction, ctx, tools, deps) {
   const { end } = tools;
   const lang = await guard(interaction, ctx, FEATURE, { requireEnabled: false });
   if (!lang) return;
-  const { config } = await getFeature(ctx.db, interaction.guildId, FEATURE);
-  if (readConfig(config).state === 'locked') {
-    // Off first: if ending fails, the end job and the next-join expiry check still finish it.
-    await setFeature(ctx.db, interaction.guildId, FEATURE, { enabled: false });
+  const guildId = interaction.guildId;
+  await setFeature(ctx.db, guildId, FEATURE, { enabled: false });
+  let ended = false;
+  try {
+    const res = await end(ctx, interaction.guild, { by: 'disable', actorId: interaction.user.id }, deps);
+    ended = res?.ok === true;
+  } catch (err) {
+    console.warn(`antiraid: ending the lockdown on disable failed in ${guildId}:`, err);
+    // The end failed: say so only when a lockdown was really there.
     try {
-      await end(ctx, interaction.guild, { by: 'disable', actorId: interaction.user.id }, deps);
-    } catch (err) {
-      console.warn(`antiraid: ending the lockdown on disable failed in ${interaction.guildId}:`, err);
+      ended = readConfig((await getFeature(ctx.db, guildId, FEATURE)).config).state === 'locked';
+    } catch {
+      ended = true;
     }
-    await interaction.reply(ephemeral(t(lang, 'antiraid.disable.ended')));
-    return;
   }
-  return handleToggle(interaction, ctx, FEATURE);
+  await interaction.reply(ephemeral(ended ? t(lang, 'antiraid.disable.ended') : toggledText(lang, false)));
 }

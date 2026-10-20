@@ -75,20 +75,25 @@ async function flipToLocked(ctx, guildId, patch) {
  * Flips the state back to idle in one statement and returns the config as it was just before
  * the flip (the pause, end time and kick count of the lockdown that ended), or null when there
  * was no lockdown. The locked row is taken FOR UPDATE, so two ends cannot both get it.
+ * With lockedUntil, only the lockdown that ends at that time is ended: a stale end job can
+ * never end a newer lockdown.
  */
-async function flipToIdle(ctx, guildId, patch) {
+async function flipToIdle(ctx, guildId, patch, lockedUntil = null) {
+  const expected = lockedUntil === null || lockedUntil === undefined ? null : String(lockedUntil);
   const res = await ctx.db.query(
     `WITH old AS (
        SELECT config FROM guild_settings
         WHERE guild_id = $1 AND feature = 'antiraid' AND config->>'state' = 'locked'
+          AND ($3::text IS NULL OR config->>'lockedUntil' = $3::text)
           FOR UPDATE
      )
      UPDATE guild_settings g
         SET config = g.config || $2::jsonb
        FROM old
       WHERE g.guild_id = $1 AND g.feature = 'antiraid' AND g.config->>'state' = 'locked'
+        AND ($3::text IS NULL OR g.config->>'lockedUntil' = $3::text)
   RETURNING old.config AS old_config`,
-    [guildId, JSON.stringify(patch)],
+    [guildId, JSON.stringify(patch), expected],
   );
   return res.rows[0]?.old_config ?? null;
 }
@@ -105,15 +110,24 @@ async function patchIfCurrent(ctx, guildId, lockedAt, patch) {
   return res.rowCount > 0;
 }
 
-/** True while the lockdown that started at lockedAt is still the current one. */
+/**
+ * True while the lockdown that started at lockedAt is still the current one and the feature is
+ * on: turning the feature off stops a running start's kicks even before the end runs. A database
+ * error counts as not current, so the kicks stop rather than run blind.
+ */
 async function isCurrent(ctx, guildId, lockedAt) {
-  const res = await ctx.db.query(
-    `SELECT 1 FROM guild_settings
-      WHERE guild_id = $1 AND feature = 'antiraid'
-        AND config->>'state' = 'locked' AND config->>'lockedAt' = $2`,
-    [guildId, String(lockedAt)],
-  );
-  return res.rowCount > 0;
+  try {
+    const res = await ctx.db.query(
+      `SELECT 1 FROM guild_settings
+        WHERE guild_id = $1 AND feature = 'antiraid' AND enabled
+          AND config->>'state' = 'locked' AND config->>'lockedAt' = $2`,
+      [guildId, String(lockedAt)],
+    );
+    return res.rowCount > 0;
+  } catch (err) {
+    console.warn(`Could not check the anti-raid lockdown in ${guildId}: ${errorText(err)}`);
+    return false;
+  }
 }
 
 /** The end timer of a lockdown that could not be ended the normal way. */
@@ -407,11 +421,14 @@ async function kickCandidate(ctx, guild, candidate, { run, modConfig, lang, reas
  * list cleared and one line in the mod log. Ending twice does nothing the second time.
  * It does not need the feature to be on: /antiraid disable ends the lockdown after turning it off.
  */
-export async function endLockdown(ctx, guild, { by = 'timer', actorId = null } = {}, deps = {}) {
+export async function endLockdown(ctx, guild, {
+  by = 'timer', actorId = null, lockedUntil = null,
+} = {}, deps = {}) {
   const { log, joins, now } = using(deps);
   const guildId = guild.id;
 
-  const old = await flipToIdle(ctx, guildId, IDLE);
+  // lockedUntil (the end job's) limits the end to that one lockdown.
+  const old = await flipToIdle(ctx, guildId, IDLE, lockedUntil);
   if (!old) return { ok: false, reason: 'not_locked' };
   const was = readConfig(old);
   // Right away, before any other I/O: a lockdown that starts next must keep its own joins.
@@ -453,7 +470,7 @@ export async function endLockdown(ctx, guild, { by = 'timer', actorId = null } =
 /**
  * Kicks a young account that joins while the lockdown is on, and counts it.
  * 'old' when the account is not young enough, 'spared' when the member is never kicked,
- * 'failed' when the kick did not happen.
+ * 'failed' when the kick did not happen or the lockdown is already over.
  */
 export async function kickYoungJoin(ctx, guild, member, deps = {}) {
   const { run, now } = using(deps);
@@ -462,6 +479,8 @@ export async function kickYoungJoin(ctx, guild, member, deps = {}) {
   const cfg = readConfig(config);
   const at = now();
 
+  // The lockdown ended between the join and this read: nobody is kicked.
+  if (cfg.state !== 'locked') return 'failed';
   if (!canKick(guild)) return 'failed';
   const createdAt = Number(member?.user?.createdTimestamp);
   if (!Number.isFinite(createdAt)) return 'failed';
@@ -510,7 +529,8 @@ export async function endJob(ctx, job, deps = {}) {
     if (job.payload?.lockedUntil !== readConfig(config).lockedUntil) return;
     const guild = ctx.client?.guilds?.cache?.get(guildId);
     if (!guild) throw new Error(`guild ${guildId} is not in the cache`);
-    await endLockdown(ctx, guild, { by: 'timer' }, deps);
+    // The check above and the end are two steps: the end itself is limited to this lockdown too.
+    await endLockdown(ctx, guild, { by: 'timer', lockedUntil: job.payload.lockedUntil }, deps);
   } catch (err) {
     if (job.attempts >= MAX_ATTEMPTS) {
       try {

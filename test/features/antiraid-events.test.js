@@ -221,3 +221,35 @@ test('the antiraid module registers the member add event and the end job', async
   assert.ok(registry.events.some((e) => e.name === Events.GuildMemberAdd));
   assert.ok(registry.jobs.has('antiraid.end'));
 });
+
+test('an end that throws on an expired lock never throws out of the handler', async (t) => {
+  await setFeature(db, G, 'antiraid', {
+    enabled: true,
+    config: { joins: 3, windowSeconds: 60, state: 'locked', lockedUntil: NOW - 1000 },
+  });
+  const warn = t.mock.method(console, 'warn', () => {});
+  const kicked = [];
+  const { handler, calls } = makeEvents({
+    endLockdown: async () => { throw new Error('boom'); },
+    kickYoungJoin: async (c, guild, member) => { kicked.push(member.id); },
+  });
+  await handler(ctx(), makeMember({ id: 'u1' }));
+  assert.equal(warn.mock.callCount(), 1);
+  assert.deepEqual(kicked, []);
+  assert.equal(calls.starts.length, 0);
+});
+
+for (const reason of ['disabled', 'schedule_failed']) {
+  test(`a start that returns ${reason} kicks nobody`, async () => {
+    await setFeature(db, G, 'antiraid', { enabled: true, config: { joins: 3, windowSeconds: 60 } });
+    const kicked = [];
+    let starts = 0;
+    const { handler } = makeEvents({
+      startLockdown: async () => { starts += 1; return { ok: false, reason }; },
+      kickYoungJoin: async (c, guild, member) => { kicked.push(member.id); },
+    });
+    for (const id of ['u1', 'u2', 'u3']) await handler(ctx(), makeMember({ id }));
+    assert.equal(starts, 1);
+    assert.deepEqual(kicked, []);
+  });
+}

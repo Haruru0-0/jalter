@@ -146,7 +146,7 @@ test('end ends the lockdown and lifts our pause', async () => {
   assert.deepEqual(incidentCalls, [{ invitesDisabledUntil: null, dmsDisabledUntil: null }]);
 });
 
-test('disable ends an active lockdown first', async () => {
+test('disable turns the feature off, then ends the active lockdown', async () => {
   const { guild, incidentCalls } = makeGuild();
   guildRef.guild = guild;
   guild.incidentsData = { invitesDisabledUntil: new Date(NOW + 1000) };
@@ -168,7 +168,8 @@ async function runWith(deps, args) {
   return i;
 }
 
-test('disable turns the feature off even when ending the lockdown throws', async () => {
+test('disable turns the feature off even when ending the lockdown throws', async (tc) => {
+  tc.mock.method(console, 'warn', () => {});
   const { guild } = makeGuild();
   guildRef.guild = guild;
   await setFeature(db, G, 'antiraid', { enabled: true, config: { state: 'locked', lockedUntil: NOW + 1000 } });
@@ -229,4 +230,54 @@ test('only a manager can run start and end', async () => {
 
   i = await run({ sub: 'end', manage: false });
   assert.equal(last(i).content, t('en', 'common.notAllowed'));
+});
+
+test('disable ends a lockdown that an auto start locked just before the off write', async () => {
+  const { guild } = makeGuild();
+  guildRef.guild = guild;
+  await setFeature(db, G, 'antiraid', { enabled: true, config: {} });
+  let raced = false;
+  const racing = {
+    query: async (sql, params) => {
+      if (!raced && /INSERT INTO guild_settings/.test(sql) && params[1] === 'antiraid' && params[2] === false) {
+        raced = true;
+        // The auto start wins its flip right before the feature is turned off.
+        await db.query(
+          `UPDATE guild_settings SET config = config || $2::jsonb WHERE guild_id = $1 AND feature = 'antiraid'`,
+          [G, JSON.stringify({ state: 'locked', lockedAt: NOW, lockedUntil: NOW + 1000 })],
+        );
+      }
+      return db.query(sql, params);
+    },
+  };
+  const i = makeInteraction(guild, { sub: 'disable' });
+  await cmd.execute(i, { ...ctx(), db: racing });
+  assert.equal(raced, true);
+  const { enabled, config } = await getFeature(db, G, 'antiraid');
+  assert.equal(enabled, false);
+  assert.equal(config.state, 'idle', 'no lockdown runs with the feature off');
+  assert.equal(last(i).content, t('en', 'antiraid.disable.ended'));
+});
+
+test('enable ends a lockdown left over past its end time', async () => {
+  const { guild } = makeGuild();
+  guildRef.guild = guild;
+  await setFeature(db, G, 'antiraid', {
+    enabled: false, config: { state: 'locked', lockedAt: NOW - 5000, lockedUntil: NOW - 1000 },
+  });
+  const i = await run({ sub: 'enable' });
+  assert.equal(last(i).content, t('en', 'common.enabledMsg', { feature: t('en', 'feature.antiraid') }));
+  const { enabled, config } = await getFeature(db, G, 'antiraid');
+  assert.equal(enabled, true);
+  assert.equal(config.state, 'idle');
+});
+
+test('enable leaves a lockdown that has not reached its end time alone', async () => {
+  const { guild } = makeGuild();
+  guildRef.guild = guild;
+  await setFeature(db, G, 'antiraid', {
+    enabled: false, config: { state: 'locked', lockedAt: NOW - 5000, lockedUntil: NOW + 60_000 },
+  });
+  await run({ sub: 'enable' });
+  assert.equal((await cfgOf()).state, 'locked');
 });
