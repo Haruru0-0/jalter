@@ -25,7 +25,12 @@ test('each feature line shows the command that sets it up', () => {
 
 test('later-phase features say Coming soon without a command', () => {
   const { description } = buildPanelEmbed(new Map(), 'en');
-  assert.match(description, /Anti-raid\*\*: Coming soon$/m);
+  assert.match(description, /Sticky roles\*\*: Coming soon$/m);
+});
+
+test('anti-raid is a real feature and shows its setup command', () => {
+  const { description } = buildPanelEmbed(new Map(), 'en');
+  assert.match(description, /Anti-raid\*\*: Off \(\/antiraid enable\)/);
 });
 
 test('the text follows the language', () => {

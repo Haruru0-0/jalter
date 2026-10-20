@@ -36,7 +36,7 @@ const using = (deps) => ({
   now: deps.now ?? Date.now,
 });
 
-async function fetchMember(guild, userId) {
+export async function fetchMember(guild, userId) {
   try {
     return (await guild.members.fetch(userId)) ?? null;
   } catch (err) {
@@ -46,7 +46,7 @@ async function fetchMember(guild, userId) {
 }
 
 // Bots, the owner, members at or above the bot's highest role, and managers are left alone.
-async function isSpared(ctx, guild, member) {
+export async function isSpared(ctx, guild, member) {
   if (member.user?.bot) return true;
   if (member.id === guild.ownerId) return true;
   const botTop = guild.members.me?.roles?.highest?.position;

@@ -23,7 +23,7 @@ export const FEATURES = [
     enableCommand: 'moderation enable',
   }),
   f('automod', 2, 'automod', { enableCommand: 'automod enable' }),
-  f('antiraid', 2, null),
+  f('antiraid', 2, 'antiraid', { enableCommand: 'antiraid enable' }),
   f('verification', 2, 'verification', { enableCommand: 'verification enable' }),
   f('stickyroles', 2, null),
   f('autoresponder', 3, null), f('reactionroles', 3, null), f('quote', 3, null),

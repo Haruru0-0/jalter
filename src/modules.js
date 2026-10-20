@@ -11,5 +11,6 @@ import * as info from './features/info/index.js';
 import * as moderation from './features/moderation/index.js';
 import * as automod from './features/automod/index.js';
 import * as verification from './features/verification/index.js';
+import * as antiraid from './features/antiraid/index.js';
 
-export const modules = [panel, help, language, media, embeds, post, greet, autorole, logging, info, moderation, automod, verification];
+export const modules = [panel, help, language, media, embeds, post, greet, autorole, logging, info, moderation, automod, verification, antiraid];

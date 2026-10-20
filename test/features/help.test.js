@@ -12,7 +12,7 @@ test('overview lists features with status and commands, and the later ones as co
   assert.match(description, /\*\*Embeds\*\* \(Core\): .*\/embed create/);
   assert.match(description, /\*\*Greet messages\*\* \(Off\): \/set greet, \/test greet/);
   assert.match(description, /\*\*Info commands\*\* \(Off\): .*\/userinfo.*\/serverinfo/);
-  assert.match(description, /Coming soon: .*Anti-raid/);
+  assert.match(description, /Coming soon: .*Sticky roles/);
 });
 
 test('an enabled feature says On', () => {
@@ -28,9 +28,14 @@ test('one feature shows every path with its description, found by key or name', 
   assert.equal(buildHelp('en', new Map(), commands, 'Auto role').title, 'Auto role (Off)');
 });
 
-test('an unknown or coming-soon feature returns null', () => {
+test('an unknown feature returns null', () => {
   assert.equal(buildHelp('en', new Map(), commands, 'nonsense'), null);
-  assert.equal(buildHelp('en', new Map(), commands, 'antiraid'), null);
+});
+
+test('anti-raid is a real feature with its own page', () => {
+  const page = buildHelp('en', new Map(), commands, 'antiraid');
+  assert.equal(page.title, 'Anti-raid (Off)');
+  assert.match(page.description, /`\/antiraid config`/);
 });
 
 test('the text follows the language', () => {
