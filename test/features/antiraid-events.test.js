@@ -130,6 +130,56 @@ test('while locked a young join is kicked and an old join is left alone, and nei
   assert.equal(calls.starts.length, 0);
 });
 
+test('a join that loses the start race is kicked', async () => {
+  await setFeature(db, G, 'antiraid', { enabled: true, config: { joins: 3, windowSeconds: 60 } });
+  const kicked = [];
+  const { handler } = makeEvents({
+    startLockdown: async () => ({ ok: false, reason: 'already_locked' }),
+    kickYoungJoin: async (c, guild, member) => { kicked.push(member.id); },
+  });
+  await handler(ctx(), makeMember({ id: 'u1' }));
+  await handler(ctx(), makeMember({ id: 'u2' }));
+  assert.deepEqual(kicked, [], 'nothing before the threshold');
+  await handler(ctx(), makeMember({ id: 'u3' }));
+  assert.deepEqual(kicked, ['u3']);
+});
+
+test('an expired lock is ended on the next join, which then counts as idle', async () => {
+  await setFeature(db, G, 'antiraid', {
+    enabled: true,
+    config: { joins: 3, windowSeconds: 60, state: 'locked', lockedUntil: NOW - 1000 },
+  });
+  const ends = [];
+  const kicked = [];
+  const { handler, calls, store } = makeEvents({
+    endLockdown: async (c, guild, options) => { ends.push(options); return { ok: true }; },
+    kickYoungJoin: async (c, guild, member) => { kicked.push(member.id); },
+  });
+  await handler(ctx(), makeMember({ id: 'u1' }));
+  assert.equal(ends.length, 1);
+  assert.equal(ends[0].by, 'timer');
+  assert.equal(kicked.length, 0);
+  assert.equal(store.size(), 1, 'the join is counted');
+  assert.equal(calls.starts.length, 0);
+});
+
+test('a live lock still kicks and does not end', async () => {
+  await setFeature(db, G, 'antiraid', {
+    enabled: true,
+    config: { joins: 3, windowSeconds: 60, state: 'locked', lockedUntil: NOW + 60_000 },
+  });
+  const ends = [];
+  const kicked = [];
+  const { handler, store } = makeEvents({
+    endLockdown: async (c, guild, options) => { ends.push(options); return { ok: true }; },
+    kickYoungJoin: async (c, guild, member) => { kicked.push(member.id); },
+  });
+  await handler(ctx(), makeMember({ id: 'u1' }));
+  assert.equal(ends.length, 0);
+  assert.deepEqual(kicked, ['u1']);
+  assert.equal(store.size(), 0);
+});
+
 test('after the lockdown ends the same burst does not start a new one', async () => {
   await setFeature(db, G, 'antiraid', { enabled: true, config: { joins: 3, windowSeconds: 60 } });
   const store = createJoinStore();
