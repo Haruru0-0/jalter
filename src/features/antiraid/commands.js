@@ -10,7 +10,7 @@ import { ephemeral } from '../../core/replies.js';
 import { parseDuration, formatDuration } from '../../core/duration.js';
 import { getFeature, setFeature } from '../../db/settings.js';
 import { t } from '../../i18n/index.js';
-import { readConfig, checkConfig } from './config.js';
+import { readConfig, checkConfig, resolvePingRole } from './config.js';
 
 const FEATURE = 'antiraid';
 
@@ -89,16 +89,6 @@ async function executeConfig(interaction, ctx) {
 
 // ---- status --------------------------------------------------------------------------------
 
-// The role that is pinged when a lockdown starts: the one the admin picked, else the bot
-// manager role. The @everyone role shares the guild id and is never a manager role.
-async function pingRoleOf(ctx, guildId, cfg) {
-  if (cfg.pingRoleId) return { roleId: cfg.pingRoleId, isDefault: false };
-  const { config } = await getFeature(ctx.db, guildId, 'panel');
-  const roleId = config?.managerRoleId;
-  if (typeof roleId !== 'string' || roleId === '' || roleId === guildId) return { roleId: null, isDefault: false };
-  return { roleId, isDefault: true };
-}
-
 async function executeStatus(interaction, ctx) {
   const lang = await guard(interaction, ctx, FEATURE, { requireEnabled: false });
   if (!lang) return;
@@ -113,7 +103,7 @@ async function executeStatus(interaction, ctx) {
     t(lang, 'antiraid.status.duration', { duration: formatDuration(cfg.durationSeconds) }),
   ];
 
-  const ping = await pingRoleOf(ctx, guildId, cfg);
+  const ping = await resolvePingRole(ctx, guildId, cfg);
   if (ping.roleId) {
     lines.push(t(lang, ping.isDefault ? 'antiraid.status.ping_role_default' : 'antiraid.status.ping_role',
       { role: `<@&${ping.roleId}>` }));

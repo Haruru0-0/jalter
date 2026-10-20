@@ -6,6 +6,8 @@
 //
 // The ranges are the admin limits. A value outside them is refused at save time (checkConfig)
 // and read back as the default (readConfig), so a hand-edited config cannot break the detector.
+import { getFeature } from '../../db/settings.js';
+
 export const DEFAULTS = {
   joins: 10,
   windowSeconds: 60,
@@ -79,4 +81,16 @@ export function checkConfig(patch) {
     if (!Number.isInteger(v) || v < min || v > max) return { ok: false, reason: REASON[key] };
   }
   return { ok: true };
+}
+
+/**
+ * The role that is pinged when a lockdown starts: the one the admin picked, else the bot
+ * manager role. The @everyone role shares the guild id and is never a manager role.
+ */
+export async function resolvePingRole(ctx, guildId, cfg) {
+  if (cfg.pingRoleId) return { roleId: cfg.pingRoleId, isDefault: false };
+  const { config } = await getFeature(ctx.db, guildId, 'panel');
+  const roleId = config?.managerRoleId;
+  if (typeof roleId !== 'string' || roleId === '' || roleId === guildId) return { roleId: null, isDefault: false };
+  return { roleId, isDefault: true };
 }
