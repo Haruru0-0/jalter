@@ -158,6 +158,7 @@ test('an expired lock is ended on the next join, which then counts as idle', asy
   await handler(ctx(), makeMember({ id: 'u1' }));
   assert.equal(ends.length, 1);
   assert.equal(ends[0].by, 'timer');
+  assert.equal(ends[0].lockedUntil, NOW - 1000, 'only the expired lockdown it saw is ended');
   assert.equal(kicked.length, 0);
   assert.equal(store.size(), 1, 'the join is counted');
   assert.equal(calls.starts.length, 0);

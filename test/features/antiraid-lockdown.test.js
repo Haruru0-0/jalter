@@ -28,12 +28,14 @@ const UNKNOWN_MEMBER = 10007;
 
 function makeMember({
   id, bot = false, createdAt = 0, top = 1, manage = false, managerRole = false, verified = false,
+  joinedTimestamp = NOW - 500,
 } = {}) {
   const roles = new Map();
   if (managerRole) roles.set('mgr', { id: 'mgr', position: 0 });
   if (verified) roles.set('verified', { id: 'verified', position: 0 });
   return {
     id,
+    joinedTimestamp,
     guild: { id: G },
     user: { id, bot, createdTimestamp: createdAt },
     roles: { cache: roles, highest: { position: top } },
@@ -695,7 +697,8 @@ test('raid kicks pass config.dm false', async () => {
   await startLockdown(ctxFor(guild), guild, {
     trigger: 'auto', startedBy: 'auto', joinedCount: 1, candidates: candidates(['u1', 1000]),
   }, deps);
-  await kickYoungJoin(ctxFor(guild), guild, makeMember({ id: 'u2', createdAt: NOW - 1000 }), deps);
+  // The same user, rejoining: a new membership, so it is kicked again.
+  await kickYoungJoin(ctxFor(guild), guild, { ...member, joinedTimestamp: NOW + 1 }, deps);
   assert.equal(calls.run.length, 2);
   for (const call of calls.run) assert.equal(call.config.dm, false);
 });
@@ -947,12 +950,39 @@ test('a join kicked by kickYoungJoin is not kicked again by a start loop', async
 });
 
 test('kickYoungJoin does not kick the same join twice', async () => {
-  const m1 = makeMember({ id: 'm1', createdAt: NOW - 1000 });
+  const m1 = makeMember({ id: 'm1', createdAt: NOW - 1000, joinedTimestamp: NOW - 100 });
   const { guild } = makeGuild();
   await enableLocked();
   const { deps, calls } = makeDeps();
   assert.equal(await kickYoungJoin(ctxFor(guild), guild, m1, deps), 'kicked');
-  assert.equal(await kickYoungJoin(ctxFor(guild), guild, m1, deps), 'failed');
+  // The same membership (same join time), reached a second time.
+  const again = makeMember({ id: 'm1', createdAt: NOW - 1000, joinedTimestamp: NOW - 100 });
+  assert.equal(await kickYoungJoin(ctxFor(guild), guild, again, deps), 'failed');
+  assert.equal(calls.run.length, 1);
+});
+
+test('a rejoin with a new joinedTimestamp is kicked again', async () => {
+  const { guild } = makeGuild();
+  await enableLocked();
+  const { deps, calls } = makeDeps();
+  const first = makeMember({ id: 'm1', createdAt: NOW - 1000, joinedTimestamp: NOW - 100 });
+  const rejoin = makeMember({ id: 'm1', createdAt: NOW - 1000, joinedTimestamp: NOW + 100 });
+  assert.equal(await kickYoungJoin(ctxFor(guild), guild, first, deps), 'kicked');
+  assert.equal(await kickYoungJoin(ctxFor(guild), guild, rejoin, deps), 'kicked');
+  assert.equal(calls.run.length, 2);
+  assert.equal((await cfgOf()).kicked, 2);
+});
+
+test('a start loop kick and a late join of the same membership share one claim', async () => {
+  const m1 = makeMember({ id: 'm1', createdAt: NOW - 1000 });
+  const { guild } = makeGuild({ members: new Map([['m1', m1]]) });
+  await enable();
+  const { deps, calls } = makeDeps();
+  await startLockdown(ctxFor(guild), guild, {
+    trigger: 'auto', startedBy: 'auto', joinedCount: 1, candidates: candidates(['m1', 1000]),
+  }, deps);
+  assert.equal(calls.run.length, 1);
+  assert.equal(await kickYoungJoin(ctxFor(guild), guild, { ...m1 }, deps), 'failed');
   assert.equal(calls.run.length, 1);
 });
 
@@ -1222,4 +1252,192 @@ test('end does not lift a pause that does not match when the flag was lost', asy
   const { deps } = makeDeps();
   await endLockdown(ctxFor(guild), guild, { by: 'timer' }, deps);
   assert.equal(incidentCalls.length, 0);
+});
+
+// ---- final whole-branch review fixes -----------------------------------------------------------
+
+const pauseField = (embed) => embed.fields.find((f) => f.name === t('en', 'antiraid.log.pause')).value;
+
+test('forceIdle with a different lockedUntil leaves the newer lock alone', async () => {
+  const { deps, calls } = makeDeps();
+  await enableLocked();
+  assert.equal(await forceIdle({ db }, G, deps, { lockedUntil: NOW - 12345 }), false);
+  assert.equal((await cfgOf()).state, 'locked');
+  assert.equal(calls.log.length, 0);
+  assert.equal(await forceIdle({ db }, G, deps, { lockedUntil: NOW + 1800_000 }), true);
+  assert.equal((await cfgOf()).state, 'idle');
+});
+
+test('the undo after a failed end timer never ends a newer lockdown', async (t) => {
+  quiet(t);
+  const { guild } = makeGuild();
+  await enable();
+  const newer = { state: 'locked', lockedAt: NOW + 5000, lockedUntil: NOW + 5000 + 1800_000 };
+  const { deps } = makeDeps({
+    scheduleJob: async () => {
+      // Our lockdown ended and a newer one started while the timer was being queued.
+      await db.query(
+        `UPDATE guild_settings SET config = config || $2::jsonb WHERE guild_id = $1 AND feature = 'antiraid'`,
+        [G, JSON.stringify(newer)],
+      );
+      throw new Error('queue down');
+    },
+  });
+  const res = await startLockdown(ctxFor(guild), guild, { trigger: 'auto', startedBy: 'auto' }, deps);
+  assert.deepEqual(res, { ok: false, reason: 'schedule_failed' });
+  const cfg = await cfgOf();
+  assert.equal(cfg.state, 'locked');
+  assert.equal(cfg.lockedUntil, newer.lockedUntil);
+});
+
+test('the forced end after a failed undo claims no lift', async (tc) => {
+  quiet(tc);
+  const { guild } = makeGuild();
+  await enable();
+  const failing = {
+    query: async (sql, params) => {
+      if (/WITH old AS/.test(sql)) throw new Error('undo failed');
+      return db.query(sql, params);
+    },
+  };
+  const { deps, calls } = makeDeps({ scheduleJob: async () => { throw new Error('queue down'); } });
+  await startLockdown(ctxFor(guild, failing), guild, { trigger: 'auto', startedBy: 'auto' }, deps);
+  assert.equal((await cfgOf()).state, 'idle');
+  assert.equal(calls.log.length, 1);
+  assert.equal(pauseField(calls.log[0].embed), t('en', 'antiraid.log.pause_kept'));
+});
+
+test('a handover whose newer lockdown ended meanwhile lifts the moved pause', async () => {
+  const { guild, incidentCalls } = makeGuild();
+  await enable();
+  const { deps } = makeDeps();
+  const original = guild.setIncidentActions;
+  const bUntil = NOW + 5000 + 1800_000;
+  let step = 0;
+  guild.setIncidentActions = async (payload) => {
+    await original(payload);
+    step += 1;
+    if (step === 1) {
+      // A's pause is set; A ends and B starts before A saves its invite result.
+      await db.query(
+        `UPDATE guild_settings SET config = config || $2::jsonb WHERE guild_id = $1 AND feature = 'antiraid'`,
+        [G, JSON.stringify({
+          state: 'locked', lockedAt: NOW + 5000, lockedUntil: bUntil,
+          inviteResult: 'already', invitesPausedByUs: false,
+        })],
+      );
+    } else if (step === 2) {
+      // The pause was moved to B's end, and B ends before A records the handover.
+      await db.query(
+        `UPDATE guild_settings SET config = config || '{"state":"idle","lockedAt":null,"lockedUntil":null}'::jsonb
+          WHERE guild_id = $1 AND feature = 'antiraid'`,
+        [G],
+      );
+    }
+  };
+  const res = await startLockdown(ctxFor(guild), guild, { trigger: 'auto', startedBy: 'auto' }, deps);
+  assert.deepEqual(res, { ok: false, reason: 'ended' });
+  assert.equal(incidentCalls[1].invitesDisabledUntil.getTime(), bUntil, 'moved to B');
+  assert.equal(incidentCalls.length, 3);
+  assert.equal(incidentCalls[2].invitesDisabledUntil, null, 'the pause nobody owns is lifted');
+});
+
+test("a handover leaves an admin's pause alone", async () => {
+  const { guild, incidentCalls } = makeGuild();
+  await enable();
+  const { deps } = makeDeps();
+  const original = guild.setIncidentActions;
+  const adminPause = new Date(NOW + 99 * 3600_000);
+  let swapped = false;
+  guild.setIncidentActions = async (payload) => {
+    await original(payload);
+    if (!swapped) {
+      swapped = true;
+      await db.query(
+        `UPDATE guild_settings SET config = config || $2::jsonb WHERE guild_id = $1 AND feature = 'antiraid'`,
+        [G, JSON.stringify({
+          state: 'locked', lockedAt: NOW + 5000, lockedUntil: NOW + 5000 + 1800_000,
+          inviteResult: 'already', invitesPausedByUs: false,
+        })],
+      );
+      // An admin replaced our pause with their own.
+      guild.incidentsData = { invitesDisabledUntil: adminPause };
+    }
+  };
+  const res = await startLockdown(ctxFor(guild), guild, { trigger: 'auto', startedBy: 'auto' }, deps);
+  assert.deepEqual(res, { ok: false, reason: 'ended' });
+  assert.equal(incidentCalls.length, 1, 'neither moved nor lifted');
+  assert.equal(guild.incidentsData.invitesDisabledUntil, adminPause);
+  const cfg = await cfgOf();
+  assert.equal(cfg.invitesPausedByUs, false);
+  assert.equal(cfg.inviteResult, 'already');
+});
+
+test('a handover re-pauses for the newer lockdown when an end already lifted ours', async () => {
+  const { guild, incidentCalls } = makeGuild();
+  await enable();
+  const { deps } = makeDeps();
+  const original = guild.setIncidentActions;
+  const bUntil = NOW + 5000 + 1800_000;
+  let swapped = false;
+  guild.setIncidentActions = async (payload) => {
+    await original(payload);
+    if (!swapped) {
+      swapped = true;
+      await db.query(
+        `UPDATE guild_settings SET config = config || $2::jsonb WHERE guild_id = $1 AND feature = 'antiraid'`,
+        [G, JSON.stringify({
+          state: 'locked', lockedAt: NOW + 5000, lockedUntil: bUntil,
+          inviteResult: 'already', invitesPausedByUs: false,
+        })],
+      );
+      guild.incidentsData = { invitesDisabledUntil: null };
+    }
+  };
+  await startLockdown(ctxFor(guild), guild, { trigger: 'auto', startedBy: 'auto' }, deps);
+  assert.equal(incidentCalls.length, 2);
+  assert.equal(incidentCalls[1].invitesDisabledUntil.getTime(), bUntil);
+  const cfg = await cfgOf();
+  assert.equal(cfg.invitesPausedByUs, true);
+  assert.equal(cfg.inviteResult, 'paused');
+});
+
+test('endJob last attempt lifts a pause whose flag was lost and logs the lift', async () => {
+  const { guild, incidentCalls } = makeGuild({ incidents: { invitesDisabledUntil: new Date(NOW + 1800_000) } });
+  await enableLocked({ invitesPausedByUs: false, inviteResult: 'none' });
+  const { deps, calls } = makeDeps();
+  const failing = {
+    query: async (sql, params) => {
+      if (/WITH old AS/.test(sql)) throw new Error('end failed');
+      return db.query(sql, params);
+    },
+  };
+  await assert.rejects(
+    () => endJob(ctxFor(guild, failing), { guildId: G, attempts: 5, payload: { lockedUntil: NOW + 1800_000 } }, deps),
+    /end failed/,
+  );
+  assert.equal((await cfgOf()).state, 'idle');
+  assert.equal(incidentCalls.length, 1);
+  assert.equal(incidentCalls[0].invitesDisabledUntil, null);
+  assert.equal(calls.log.length, 1);
+  assert.equal(pauseField(calls.log[0].embed), t('en', 'antiraid.log.pause_lifted'));
+});
+
+test('endJob last attempt does not lift an admin pause when the result is already', async () => {
+  const { guild, incidentCalls } = makeGuild({ incidents: { invitesDisabledUntil: new Date(NOW + 1800_000) } });
+  await enableLocked({ invitesPausedByUs: false, inviteResult: 'already' });
+  const { deps, calls } = makeDeps();
+  const failing = {
+    query: async (sql, params) => {
+      if (/WITH old AS/.test(sql)) throw new Error('end failed');
+      return db.query(sql, params);
+    },
+  };
+  await assert.rejects(
+    () => endJob(ctxFor(guild, failing), { guildId: G, attempts: 5, payload: { lockedUntil: NOW + 1800_000 } }, deps),
+    /end failed/,
+  );
+  assert.equal((await cfgOf()).state, 'idle');
+  assert.equal(incidentCalls.length, 0);
+  assert.equal(pauseField(calls.log[0].embed), t('en', 'antiraid.log.pause_kept'));
 });

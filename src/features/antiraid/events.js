@@ -33,7 +33,8 @@ export function createEvents(deps = {}) {
     // follows the idle path.
     let locked = cfg.state === 'locked';
     if (locked && cfg.lockedUntil && cfg.lockedUntil <= now()) {
-      await end(ctx, guild, { by: 'timer' }, deps);
+      // Only the expired lockdown seen here: a newer one may start before this end runs.
+      await end(ctx, guild, { by: 'timer', lockedUntil: cfg.lockedUntil }, deps);
       locked = false;
     }
 

@@ -133,16 +133,19 @@ async function isCurrent(ctx, guildId, lockedAt) {
 /**
  * Ends a lockdown that could not be ended the normal way: idle again, the join list and the
  * claims cleared, one best-effort line in the mod log. Only a locked row is touched, so an
- * idle or other row is left alone. True when a locked row was reset.
+ * idle or other row is left alone; with lockedUntil, only the lockdown that ends at that time.
+ * lifted and by go into the log line as they are. True when a locked row was reset.
  */
-export async function forceIdle(ctx, guildId, deps = {}) {
+export async function forceIdle(ctx, guildId, deps = {}, { lockedUntil = null, lifted = false, by = 'timer' } = {}) {
   const { log, joins } = using(deps);
+  const expected = lockedUntil === null || lockedUntil === undefined ? null : String(lockedUntil);
   const res = await ctx.db.query(
     `UPDATE guild_settings
         SET config = config || $2::jsonb
       WHERE guild_id = $1 AND feature = 'antiraid' AND config->>'state' = 'locked'
+        AND ($3::text IS NULL OR config->>'lockedUntil' = $3::text)
   RETURNING config->>'kicked' AS kicked`,
-    [guildId, JSON.stringify(IDLE)],
+    [guildId, JSON.stringify(IDLE), expected],
   );
   if (res.rowCount === 0) return false;
   joins.clear(guildId);
@@ -151,7 +154,7 @@ export async function forceIdle(ctx, guildId, deps = {}) {
     const lang = await getLang(ctx.db, guildId);
     const kicked = Number(res.rows[0]?.kicked);
     await log(ctx, guildId, 'modAction', endEmbed(lang, {
-      by: 'timer', actorId: null, kicked: Number.isFinite(kicked) ? kicked : 0, lifted: false,
+      by, actorId: null, kicked: Number.isFinite(kicked) ? kicked : 0, lifted,
     }));
   } catch (err) {
     console.warn(`Could not log the forced anti-raid end in ${guildId}: ${errorText(err)}`);
@@ -173,31 +176,36 @@ async function bumpKicked(ctx, guildId, lockedAt) {
 
 // ---- one kick per join -----------------------------------------------------------------------
 
-// The accounts being kicked in each guild by this lockdown: the start loop and a late join can
-// reach the same account, and only the first one may kick it. In memory is enough: a restart
-// loses the claims and the lockdown they belong to is checked again by the database anyway.
+// The joins being kicked in each guild by this lockdown: the start loop and a late join can
+// reach the same membership, and only the first one may kick it. A claim is per membership
+// (user and join time), so a user who was kicked and joins again is a new join and is kicked
+// again. In memory is enough: a restart loses the claims and the lockdown they belong to is
+// checked again by the database anyway.
 const claims = new Map();
 
-/** True when this call now owns the kick of userId; false when it is already claimed. */
-export function claimKick(guildId, userId) {
-  return claimSet(guildId, userId) !== null;
+/** The claim key of one membership: the same user joining again gets a new one. */
+const joinKey = (member) => `${member.id}:${member.joinedTimestamp ?? ''}`;
+
+/** True when this call now owns the kick of key; false when it is already claimed. */
+export function claimKick(guildId, key) {
+  return claimSet(guildId, key) !== null;
 }
 
 /** Like claimKick, but hands back the set that holds the claim (null when already claimed). */
-function claimSet(guildId, userId) {
+function claimSet(guildId, key) {
   let set = claims.get(guildId);
   if (!set) {
     set = new Set();
     claims.set(guildId, set);
   }
-  if (set.has(userId)) return null;
-  set.add(userId);
+  if (set.has(key)) return null;
+  set.add(key);
   return set;
 }
 
 // Releases from the set the claim was made in: a reset since then means a newer lockdown, whose
-// claim of the same user must stay.
-const releaseKick = (set, userId) => { set.delete(userId); };
+// claim of the same join must stay.
+const releaseKick = (set, key) => { set.delete(key); };
 
 /** Forgets every claim of the guild: a new lockdown starts, or the old one ended. */
 export function resetClaims(guildId) {
@@ -220,6 +228,16 @@ function pauseIsOurs(guild, lockedUntil) {
   const raw = guild.incidentsData?.invitesDisabledUntil;
   const ms = raw ? new Date(raw).getTime() : NaN;
   return Number.isFinite(ms) && Number.isFinite(lockedUntil) && Math.abs(ms - lockedUntil) <= 1000;
+}
+
+/**
+ * True when the end of the lockdown cfg describes should lift the guild's invite pause.
+ * The flag can be lost when its write failed: a 'none' result with a pause that ends exactly
+ * when this lockdown does is still ours.
+ */
+function pauseToLift(guild, cfg) {
+  const maybeOurs = cfg.invitesPausedByUs || cfg.inviteResult === 'none';
+  return maybeOurs && pauseIsOurs(guild, cfg.lockedUntil);
 }
 
 // ---- the alert and the log line ------------------------------------------------------------
@@ -321,12 +339,13 @@ export async function startLockdown(ctx, guild, {
     });
   } catch (err) {
     console.warn(`Could not queue the anti-raid end in ${guildId}: ${errorText(err)}`);
+    // Only this lockdown: a newer one may have started while the timer was being queued.
     try {
-      await flipToIdle(ctx, guildId, IDLE);
+      await flipToIdle(ctx, guildId, IDLE, lockedUntil);
     } catch (inner) {
       console.warn(`Could not undo the anti-raid lock in ${guildId}: ${errorText(inner)}`);
       try {
-        await forceIdle(ctx, guildId, deps);
+        await forceIdle(ctx, guildId, deps, { lockedUntil, lifted: false, by: 'timer' });
       } catch (last) {
         console.warn(`Could not force the anti-raid lock off in ${guildId}: ${errorText(last)}`);
       }
@@ -373,9 +392,16 @@ export async function startLockdown(ctx, guild, {
     if (invitesPausedByUs) {
       // A newer lockdown may already be running: the pause becomes its to lift, not ours.
       let handedOver = false;
+      // The end our pause has now: it changes once the pause is moved to the newer lockdown.
+      let pauseEnd = lockedUntil;
       try {
         const current = readConfig((await getFeature(ctx.db, guildId, FEATURE)).config);
-        if (current.state === 'locked' && current.lockedAt !== at) {
+        const raw = guild.incidentsData?.invitesDisabledUntil;
+        const pausedUntil = raw ? new Date(raw).getTime() : NaN;
+        // Only our own pause is moved, or none at all (an end may have lifted ours, and the newer
+        // lockdown saw it and paused nothing). An admin's pause is left alone.
+        const movable = pauseIsOurs(guild, lockedUntil) || !(pausedUntil > now());
+        if (current.state === 'locked' && current.lockedAt !== at && movable) {
           // The pause still ends with this lockdown: move its end to the newer one's.
           let result = 'paused';
           try {
@@ -383,6 +409,7 @@ export async function startLockdown(ctx, guild, {
               invitesDisabledUntil: new Date(current.lockedUntil),
               dmsDisabledUntil: keepDms(guild, at),
             });
+            pauseEnd = current.lockedUntil;
           } catch (err) {
             console.warn(`Could not move the invite pause in ${guildId}: ${errorText(err)}`);
             result = 'failed';
@@ -396,7 +423,9 @@ export async function startLockdown(ctx, guild, {
       } catch (err) {
         console.warn(`Could not hand the invite pause over in ${guildId}: ${errorText(err)}`);
       }
-      if (!handedOver && pauseIsOurs(guild, lockedUntil)) {
+      // Not handed over (no newer lockdown, or it ended before it could take the pause): a pause
+      // that still ends when we set it is nobody's, so it is lifted.
+      if (!handedOver && pauseIsOurs(guild, pauseEnd)) {
         try {
           await guild.setIncidentActions({ invitesDisabledUntil: null, dmsDisabledUntil: keepDms(guild, at) });
         } catch (err) {
@@ -479,7 +508,8 @@ async function kickCandidate(ctx, guild, candidate, { run, modConfig, lang, reas
   }
   if (!member) return 'failed';
   if (await isSpared(ctx, guild, member)) return 'spared';
-  const claim = claimSet(guild.id, member.id);
+  const key = joinKey(member);
+  const claim = claimSet(guild.id, key);
   if (!claim) return 'failed';
   try {
     const result = await run(ctx, {
@@ -494,10 +524,10 @@ async function kickCandidate(ctx, guild, candidate, { run, modConfig, lang, reas
       lang,
     });
     if (result?.ok === true) return 'kicked';
-    releaseKick(claim, member.id);
+    releaseKick(claim, key);
     return 'failed';
   } catch (err) {
-    releaseKick(claim, member.id);
+    releaseKick(claim, key);
     console.warn(`Could not kick ${member.id} in ${guild.id}: ${errorText(err)}`);
     return 'failed';
   }
@@ -536,10 +566,7 @@ export async function endLockdown(ctx, guild, {
   // Only the pause this lockdown made is lifted: an admin's own pause stays, even one that
   // replaced ours since.
   let lifted = false;
-  // The flag can be lost when its write failed: a 'none' result with a pause that ends exactly
-  // when this lockdown does is still ours.
-  const maybeOurs = was.invitesPausedByUs || was.inviteResult === 'none';
-  if (maybeOurs && pauseIsOurs(guild, was.lockedUntil)) {
+  if (pauseToLift(guild, was)) {
     try {
       await guild.setIncidentActions({ invitesDisabledUntil: null, dmsDisabledUntil: keepDms(guild, now()) });
       lifted = true;
@@ -583,7 +610,8 @@ export async function kickYoungJoin(ctx, guild, member, deps = {}) {
   const lang = await getLang(ctx.db, guildId);
   const modConfig = readModConfig((await getFeature(ctx.db, guildId, 'moderation')).config);
   const reason = t(lang, 'antiraid.kick_reason');
-  const claim = claimSet(guildId, member.id);
+  const key = joinKey(member);
+  const claim = claimSet(guildId, key);
   if (!claim) return 'failed';
   try {
     const result = await run(ctx, {
@@ -597,11 +625,11 @@ export async function kickYoungJoin(ctx, guild, member, deps = {}) {
       lang,
     });
     if (result?.ok !== true) {
-      releaseKick(claim, member.id);
+      releaseKick(claim, key);
       return 'failed';
     }
   } catch (err) {
-    releaseKick(claim, member.id);
+    releaseKick(claim, key);
     console.warn(`Could not kick ${member?.id} in ${guildId}: ${errorText(err)}`);
     return 'failed';
   }
@@ -637,10 +665,17 @@ export async function endJob(ctx, job, deps = {}) {
         const cfg = readConfig(config);
         if (job.payload?.lockedUntil === cfg.lockedUntil) {
           const guild = ctx.client?.guilds?.cache?.get(guildId);
-          if (guild && cfg.invitesPausedByUs && pauseIsOurs(guild, cfg.lockedUntil)) {
-            await guild.setIncidentActions({ invitesDisabledUntil: null, dmsDisabledUntil: keepDms(guild, (deps.now ?? Date.now)()) });
+          let lifted = false;
+          // The same rule as a normal end; a refused lift must not keep the lockdown on.
+          if (guild && pauseToLift(guild, cfg)) {
+            try {
+              await guild.setIncidentActions({ invitesDisabledUntil: null, dmsDisabledUntil: keepDms(guild, (deps.now ?? Date.now)()) });
+              lifted = true;
+            } catch (liftErr) {
+              console.warn(`Could not lift the invite pause in ${guildId}: ${errorText(liftErr)}`);
+            }
           }
-          await forceIdle(ctx, guildId, deps);
+          await forceIdle(ctx, guildId, deps, { lockedUntil: job.payload.lockedUntil, lifted, by: 'timer' });
         }
       } catch (inner) {
         console.warn(`Could not conclude the anti-raid lockdown in ${guildId}: ${errorText(inner)}`);
