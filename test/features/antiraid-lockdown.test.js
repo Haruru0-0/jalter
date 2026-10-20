@@ -718,3 +718,87 @@ test('the invite pause happens before the alert is sent', async () => {
   await startLockdown(ctxFor(guild), guild, { trigger: 'auto', startedBy: 'auto' }, deps);
   assert.deepEqual(order, ['pause', 'alert']);
 });
+
+// ---- review fixes ----------------------------------------------------------------------------
+
+test('end cancels only its own timer: a lockdown started meanwhile keeps its job', async () => {
+  const { guild } = makeGuild();
+  await enable({ durationSeconds: 1800 });
+  const { deps } = makeDeps();
+  await startLockdown(ctxFor(guild), guild, { trigger: 'auto', startedBy: 'auto' }, deps);
+  let started = false;
+  const racing = {
+    query: async (sql, params) => {
+      if (!started && /DELETE FROM scheduled_jobs/.test(sql)) {
+        started = true;
+        const later = makeDeps({ now: () => NOW + 5000 }).deps;
+        const res = await startLockdown(ctxFor(guild), guild, { trigger: 'auto', startedBy: 'auto' }, later);
+        assert.equal(res.ok, true);
+      }
+      return db.query(sql, params);
+    },
+  };
+  await endLockdown(ctxFor(guild, racing), guild, { by: 'manual', actorId: 'admin' }, deps);
+  assert.equal(started, true);
+  const config = await cfgOf();
+  assert.equal(config.state, 'locked');
+  const { rows } = await db.query('SELECT payload FROM scheduled_jobs WHERE guild_id = $1', [G]);
+  assert.equal(rows.length, 1, 'the new lockdown keeps its timer');
+  assert.equal(rows[0].payload.lockedUntil, config.lockedUntil);
+});
+
+test('end clears the join list before any other I/O', async () => {
+  const { guild } = makeGuild();
+  await enable();
+  const { deps } = makeDeps();
+  await startLockdown(ctxFor(guild), guild, { trigger: 'auto', startedBy: 'auto' }, deps);
+  deps.joins.record(G, { userId: 'u9', createdAt: 0 }, NOW, 60_000);
+  let sizeAtCancel = -1;
+  const spying = {
+    query: async (sql, params) => {
+      if (/DELETE FROM scheduled_jobs/.test(sql)) sizeAtCancel = deps.joins.size();
+      return db.query(sql, params);
+    },
+  };
+  await endLockdown(ctxFor(guild, spying), guild, { by: 'timer' }, deps);
+  assert.equal(sizeAtCancel, 0);
+});
+
+test('when the timer cannot be queued and the undo fails too, the lock is forced off', async (t) => {
+  quiet(t);
+  const { guild } = makeGuild();
+  await enable();
+  const failing = {
+    query: async (sql, params) => {
+      if (/WITH old AS/.test(sql)) throw new Error('undo failed');
+      return db.query(sql, params);
+    },
+  };
+  const { deps } = makeDeps({ scheduleJob: async () => { throw new Error('queue down'); } });
+  const res = await startLockdown(ctxFor(guild, failing), guild, { trigger: 'auto', startedBy: 'auto' }, deps);
+  assert.deepEqual(res, { ok: false, reason: 'schedule_failed' });
+  assert.equal((await cfgOf()).state, 'idle');
+});
+
+test('a start whose lockdown ended meanwhile returns ended', async () => {
+  const { guild } = makeGuild();
+  await enable();
+  const { deps } = makeDeps();
+  const original = guild.setIncidentActions;
+  guild.setIncidentActions = async (payload) => {
+    await original(payload);
+    if (payload.invitesDisabledUntil) {
+      await db.query(`UPDATE guild_settings SET config = config || '{"state":"idle","lockedAt":null}'::jsonb`);
+    }
+  };
+  const res = await startLockdown(ctxFor(guild), guild, { trigger: 'auto', startedBy: 'auto' }, deps);
+  assert.deepEqual(res, { ok: false, reason: 'ended' });
+});
+
+test('a dmsDisabledUntil that is already past is not passed back', async () => {
+  const { guild, incidentCalls } = makeGuild({ incidents: { dmsDisabledUntil: new Date(NOW - 3600_000) } });
+  await enable();
+  const { deps } = makeDeps();
+  await startLockdown(ctxFor(guild), guild, { trigger: 'auto', startedBy: 'auto' }, deps);
+  assert.equal(incidentCalls[0].dmsDisabledUntil, null);
+});

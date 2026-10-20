@@ -141,7 +141,11 @@ async function bumpKicked(ctx, guildId, lockedAt) {
 // ---- discord helpers -----------------------------------------------------------------------
 
 /** The admin's own DM pause, passed back unchanged: setIncidentActions replaces both fields. */
-const keepDms = (guild) => guild.incidentsData?.dmsDisabledUntil ?? null;
+const keepDms = (guild, at) => {
+  const raw = guild.incidentsData?.dmsDisabledUntil;
+  const ms = raw ? new Date(raw).getTime() : NaN;
+  return Number.isFinite(ms) && ms > at ? raw : null;
+};
 
 const canKick = (guild) => guild.members?.me?.permissions?.has(PermissionFlagsBits.KickMembers) === true;
 
@@ -253,6 +257,11 @@ export async function startLockdown(ctx, guild, {
       await flipToIdle(ctx, guildId, IDLE);
     } catch (inner) {
       console.warn(`Could not undo the anti-raid lock in ${guildId}: ${errorText(inner)}`);
+      try {
+        await forceIdle(ctx, guildId);
+      } catch (last) {
+        console.warn(`Could not force the anti-raid lock off in ${guildId}: ${errorText(last)}`);
+      }
     }
     return { ok: false, reason: 'schedule_failed' };
   }
@@ -271,7 +280,7 @@ export async function startLockdown(ctx, guild, {
     try {
       await guild.setIncidentActions({
         invitesDisabledUntil: new Date(lockedUntil),
-        dmsDisabledUntil: keepDms(guild),
+        dmsDisabledUntil: keepDms(guild, at),
       });
       inviteResult = 'paused';
       invitesPausedByUs = true;
@@ -292,12 +301,12 @@ export async function startLockdown(ctx, guild, {
     // The lockdown ended while we were starting, so the end could not know about our pause.
     if (invitesPausedByUs) {
       try {
-        await guild.setIncidentActions({ invitesDisabledUntil: null, dmsDisabledUntil: keepDms(guild) });
+        await guild.setIncidentActions({ invitesDisabledUntil: null, dmsDisabledUntil: keepDms(guild, at) });
       } catch (err) {
         console.warn(`Could not lift the invite pause in ${guildId}: ${errorText(err)}`);
       }
     }
-    return { ok: true, kicked: 0 };
+    return { ok: false, reason: 'ended' };
   }
 
   // The alert: a mod-log message, and a ping in the same channel.
@@ -399,15 +408,20 @@ async function kickCandidate(ctx, guild, candidate, { run, modConfig, lang, reas
  * It does not need the feature to be on: /antiraid disable ends the lockdown after turning it off.
  */
 export async function endLockdown(ctx, guild, { by = 'timer', actorId = null } = {}, deps = {}) {
-  const { log, joins } = using(deps);
+  const { log, joins, now } = using(deps);
   const guildId = guild.id;
 
   const old = await flipToIdle(ctx, guildId, IDLE);
   if (!old) return { ok: false, reason: 'not_locked' };
   const was = readConfig(old);
+  // Right away, before any other I/O: a lockdown that starts next must keep its own joins.
+  joins.clear(guildId);
 
   try {
-    await cancelJobs(ctx.db, { guildId, type: END_JOB, key: END_KEY });
+    // Only this lockdown's timer: a newer lockdown may already have queued its own.
+    await cancelJobs(ctx.db, {
+      guildId, type: END_JOB, key: END_KEY, payload: { lockedUntil: was.lockedUntil },
+    });
   } catch (err) {
     console.warn(`Could not cancel the anti-raid end in ${guildId}: ${errorText(err)}`);
   }
@@ -417,14 +431,12 @@ export async function endLockdown(ctx, guild, { by = 'timer', actorId = null } =
   let lifted = false;
   if (was.invitesPausedByUs && pauseIsOurs(guild, was.lockedUntil)) {
     try {
-      await guild.setIncidentActions({ invitesDisabledUntil: null, dmsDisabledUntil: keepDms(guild) });
+      await guild.setIncidentActions({ invitesDisabledUntil: null, dmsDisabledUntil: keepDms(guild, now()) });
       lifted = true;
     } catch (err) {
       console.warn(`Could not lift the invite pause in ${guildId}: ${errorText(err)}`);
     }
   }
-
-  joins.clear(guildId);
 
   try {
     const lang = await getLang(ctx.db, guildId);
@@ -507,7 +519,7 @@ export async function endJob(ctx, job, deps = {}) {
         if (job.payload?.lockedUntil === cfg.lockedUntil) {
           const guild = ctx.client?.guilds?.cache?.get(guildId);
           if (guild && cfg.invitesPausedByUs && pauseIsOurs(guild, cfg.lockedUntil)) {
-            await guild.setIncidentActions({ invitesDisabledUntil: null, dmsDisabledUntil: keepDms(guild) });
+            await guild.setIncidentActions({ invitesDisabledUntil: null, dmsDisabledUntil: keepDms(guild, (deps.now ?? Date.now)()) });
           }
           await forceIdle(ctx, guildId);
         }
