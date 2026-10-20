@@ -4,6 +4,7 @@ import { testDb } from '../helpers/db.js';
 import { getFeature, setFeature } from '../../src/db/settings.js';
 import { t } from '../../src/i18n/index.js';
 import { createAntiraidCommand } from '../../src/features/antiraid/commands.js';
+import { endLockdown } from '../../src/features/antiraid/lockdown.js';
 import { createJoinStore } from '../../src/features/antiraid/joins.js';
 
 let db;
@@ -280,4 +281,49 @@ test('enable leaves a lockdown that has not reached its end time alone', async (
   });
   await run({ sub: 'enable' });
   assert.equal((await cfgOf()).state, 'locked');
+});
+
+function enableCmd(endLockdown) {
+  return createAntiraidCommand({
+    joins: createJoinStore(),
+    now: () => NOW,
+    sendLog: async () => ({ channelId: 'modchan', messageId: 'm1' }),
+    trySend: async (channel) => ({ id: 'p1', channelId: channel.id }),
+    fetchSendable: async (client, channelId) => ({ id: channelId, isTextBased: () => true }),
+    runAction: async () => ({ ok: true, modCase: { number: 1 }, warnings: [] }),
+    endLockdown,
+  });
+}
+
+test('enable passes the expired lock\'s lockedUntil to the end', async () => {
+  const { guild } = makeGuild();
+  guildRef.guild = guild;
+  await setFeature(db, G, 'antiraid', {
+    enabled: false, config: { state: 'locked', lockedAt: NOW - 5000, lockedUntil: NOW - 1000 },
+  });
+  const seen = [];
+  const c = enableCmd(async (_ctx, _guild, opts) => { seen.push(opts); return { ok: true }; });
+  await c.execute(makeInteraction(guild, { sub: 'enable' }), ctx());
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].by, 'timer');
+  assert.equal(seen[0].lockedUntil, NOW - 1000);
+});
+
+test('enable does not end a newer lockdown that replaced the expired one', async () => {
+  const { guild } = makeGuild();
+  guildRef.guild = guild;
+  await setFeature(db, G, 'antiraid', {
+    enabled: false, config: { state: 'locked', lockedAt: NOW - 5000, lockedUntil: NOW - 1000 },
+  });
+  const c = enableCmd(async (cx, g, opts, d) => {
+    // A join ended the expired lock and a burst started a new live one before enable's end ran.
+    await setFeature(db, G, 'antiraid', {
+      enabled: true, config: { state: 'locked', lockedAt: NOW, lockedUntil: NOW + 60_000 },
+    });
+    return endLockdown(cx, g, opts, d);
+  });
+  await c.execute(makeInteraction(guild, { sub: 'enable' }), ctx());
+  const cfg = await cfgOf();
+  assert.equal(cfg.state, 'locked');
+  assert.equal(cfg.lockedUntil, NOW + 60_000);
 });

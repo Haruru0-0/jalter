@@ -218,7 +218,7 @@ async function executeEnable(interaction, ctx, tools, deps) {
   try {
     const cfg = readConfig((await getFeature(ctx.db, interaction.guildId, FEATURE)).config);
     if (cfg.state === 'locked' && cfg.lockedUntil && cfg.lockedUntil <= now()) {
-      await end(ctx, interaction.guild, { by: 'timer' }, deps);
+      await end(ctx, interaction.guild, { by: 'timer', lockedUntil: cfg.lockedUntil }, deps);
     }
   } catch (err) {
     console.warn(`antiraid: ending a stale lockdown on enable failed in ${interaction.guildId}:`, err);
