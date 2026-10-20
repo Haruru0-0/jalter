@@ -162,7 +162,12 @@ async function executeStart(interaction, ctx, tools, deps) {
     trigger: 'manual', startedBy: interaction.user.id, joinedCount: candidates.length, candidates,
   }, deps);
   if (!res.ok) {
-    const key = res.reason === 'disabled' ? 'common.featureOff' : 'antiraid.start.already';
+    const keys = {
+      disabled: 'common.featureOff',
+      schedule_failed: 'antiraid.start.failed',
+      ended: 'antiraid.start.ended',
+    };
+    const key = keys[res.reason] ?? 'antiraid.start.already';
     const vars = res.reason === 'disabled' ? { command: SETUP } : {};
     await interaction.reply(ephemeral(t(lang, key, vars)));
     return;
@@ -203,8 +208,13 @@ async function executeDisable(interaction, ctx, tools, deps) {
   if (!lang) return;
   const { config } = await getFeature(ctx.db, interaction.guildId, FEATURE);
   if (readConfig(config).state === 'locked') {
-    await end(ctx, interaction.guild, { by: 'disable', actorId: interaction.user.id }, deps);
+    // Off first: if ending fails, the end job and the next-join expiry check still finish it.
     await setFeature(ctx.db, interaction.guildId, FEATURE, { enabled: false });
+    try {
+      await end(ctx, interaction.guild, { by: 'disable', actorId: interaction.user.id }, deps);
+    } catch (err) {
+      console.warn(`antiraid: ending the lockdown on disable failed in ${interaction.guildId}:`, err);
+    }
     await interaction.reply(ephemeral(t(lang, 'antiraid.disable.ended')));
     return;
   }

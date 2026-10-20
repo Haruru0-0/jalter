@@ -715,6 +715,7 @@
   "antiraid.start.already": "Un confinement est déjà en cours. Terminez-le d'abord avec /antiraid end.",
   "antiraid.start.done": "Confinement démarré. Comptes retirés : {kicked}. Il se termine {until}. Pause des invitations : {invite}. Alerte : {alert}.",
   "antiraid.start.failed": "Impossible de démarrer le confinement : le minuteur de fin n’a pas pu être mis en file. Réessayez.",
+  "antiraid.start.ended": "Le confinement a été terminé pendant son démarrage.",
   "antiraid.end.not_locked": "Aucun confinement n'est en cours.",
   "antiraid.end.done": "Le confinement est terminé. La pause des invitations et le compteur de rejoints sont réinitialisés.",
   "antiraid.disable.ended": "Le confinement est terminé et l'anti-raid est maintenant désactivé."

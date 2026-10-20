@@ -161,6 +161,52 @@ test('disable ends an active lockdown first', async () => {
   assert.deepEqual(incidentCalls, [{ invitesDisabledUntil: null, dmsDisabledUntil: null }]);
 });
 
+async function runWith(deps, args) {
+  const c = createAntiraidCommand({ joins: createJoinStore(), now: () => NOW, ...deps });
+  const i = makeInteraction(guildRef.guild, args);
+  await c.execute(i, ctx());
+  return i;
+}
+
+test('disable turns the feature off even when ending the lockdown throws', async () => {
+  const { guild } = makeGuild();
+  guildRef.guild = guild;
+  await setFeature(db, G, 'antiraid', { enabled: true, config: { state: 'locked', lockedUntil: NOW + 1000 } });
+  const i = await runWith({ endLockdown: async () => { throw new Error('boom'); } }, { sub: 'disable' });
+  assert.equal(last(i).content, t('en', 'antiraid.disable.ended'));
+  assert.equal((await getFeature(db, G, 'antiraid')).enabled, false);
+});
+
+test('disable turns the feature off before it ends the lockdown', async () => {
+  const { guild } = makeGuild();
+  guildRef.guild = guild;
+  await setFeature(db, G, 'antiraid', { enabled: true, config: { state: 'locked', lockedUntil: NOW + 1000 } });
+  let enabledAtEnd = null;
+  await runWith({
+    endLockdown: async () => {
+      enabledAtEnd = (await getFeature(db, G, 'antiraid')).enabled;
+      return { ok: true };
+    },
+  }, { sub: 'disable' });
+  assert.equal(enabledAtEnd, false);
+});
+
+test('start replies with the failure text on schedule_failed', async () => {
+  const { guild } = makeGuild();
+  guildRef.guild = guild;
+  await setFeature(db, G, 'antiraid', { enabled: true, config: {} });
+  const i = await runWith({ startLockdown: async () => ({ ok: false, reason: 'schedule_failed' }) }, { sub: 'start' });
+  assert.equal(last(i).content, t('en', 'antiraid.start.failed'));
+});
+
+test('start replies with the ended text when the lockdown was ended while starting', async () => {
+  const { guild } = makeGuild();
+  guildRef.guild = guild;
+  await setFeature(db, G, 'antiraid', { enabled: true, config: {} });
+  const i = await runWith({ startLockdown: async () => ({ ok: false, reason: 'ended' }) }, { sub: 'start' });
+  assert.equal(last(i).content, t('en', 'antiraid.start.ended'));
+});
+
 test('enable and disable still toggle the feature', async () => {
   const { guild } = makeGuild();
   guildRef.guild = guild;
