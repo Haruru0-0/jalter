@@ -161,17 +161,24 @@ const claims = new Map();
 
 /** True when this call now owns the kick of userId; false when it is already claimed. */
 export function claimKick(guildId, userId) {
+  return claimSet(guildId, userId) !== null;
+}
+
+/** Like claimKick, but hands back the set that holds the claim (null when already claimed). */
+function claimSet(guildId, userId) {
   let set = claims.get(guildId);
   if (!set) {
     set = new Set();
     claims.set(guildId, set);
   }
-  if (set.has(userId)) return false;
+  if (set.has(userId)) return null;
   set.add(userId);
-  return true;
+  return set;
 }
 
-const releaseKick = (guildId, userId) => { claims.get(guildId)?.delete(userId); };
+// Releases from the set the claim was made in: a reset since then means a newer lockdown, whose
+// claim of the same user must stay.
+const releaseKick = (set, userId) => { set.delete(userId); };
 
 /** Forgets every claim of the guild: a new lockdown starts, or the old one ended. */
 export function resetClaims(guildId) {
@@ -285,6 +292,8 @@ export async function startLockdown(ctx, guild, {
     const cur = await getFeature(ctx.db, guildId, FEATURE);
     return { ok: false, reason: cur.enabled ? 'already_locked' : 'disabled' };
   }
+  // Right away, before any await: a join kicked from now on is claimed in this lockdown's set.
+  resetClaims(guildId);
 
   // The end timer. It survives a restart, because the state and the job are both in the database.
   try {
@@ -305,7 +314,6 @@ export async function startLockdown(ctx, guild, {
     }
     return { ok: false, reason: 'schedule_failed' };
   }
-  resetClaims(guildId);
 
   const lang = await getLang(ctx.db, guildId);
 
@@ -346,14 +354,27 @@ export async function startLockdown(ctx, guild, {
       try {
         const current = readConfig((await getFeature(ctx.db, guildId, FEATURE)).config);
         if (current.state === 'locked' && current.lockedAt !== at) {
+          // The pause still ends with this lockdown: move its end to the newer one's.
+          let result = 'paused';
+          try {
+            await guild.setIncidentActions({
+              invitesDisabledUntil: new Date(current.lockedUntil),
+              dmsDisabledUntil: keepDms(guild, at),
+            });
+          } catch (err) {
+            console.warn(`Could not move the invite pause in ${guildId}: ${errorText(err)}`);
+            result = 'failed';
+          }
           handedOver = await patchIfCurrent(ctx, guildId, current.lockedAt, {
-            invitesPausedByUs: true, inviteResult: 'paused',
+            invitesPausedByUs: result === 'paused', inviteResult: result,
           });
+          // A failed move leaves the old pause to expire on its own; there is nothing to lift.
+          if (result === 'failed') handedOver = true;
         }
       } catch (err) {
         console.warn(`Could not hand the invite pause over in ${guildId}: ${errorText(err)}`);
       }
-      if (!handedOver) {
+      if (!handedOver && pauseIsOurs(guild, lockedUntil)) {
         try {
           await guild.setIncidentActions({ invitesDisabledUntil: null, dmsDisabledUntil: keepDms(guild, at) });
         } catch (err) {
@@ -436,7 +457,8 @@ async function kickCandidate(ctx, guild, candidate, { run, modConfig, lang, reas
   }
   if (!member) return 'failed';
   if (await isSpared(ctx, guild, member)) return 'spared';
-  if (!claimKick(guild.id, member.id)) return 'failed';
+  const claim = claimSet(guild.id, member.id);
+  if (!claim) return 'failed';
   try {
     const result = await run(ctx, {
       guild,
@@ -450,10 +472,10 @@ async function kickCandidate(ctx, guild, candidate, { run, modConfig, lang, reas
       lang,
     });
     if (result?.ok === true) return 'kicked';
-    releaseKick(guild.id, member.id);
+    releaseKick(claim, member.id);
     return 'failed';
   } catch (err) {
-    releaseKick(guild.id, member.id);
+    releaseKick(claim, member.id);
     console.warn(`Could not kick ${member.id} in ${guild.id}: ${errorText(err)}`);
     return 'failed';
   }
@@ -536,7 +558,8 @@ export async function kickYoungJoin(ctx, guild, member, deps = {}) {
   const lang = await getLang(ctx.db, guildId);
   const modConfig = readModConfig((await getFeature(ctx.db, guildId, 'moderation')).config);
   const reason = t(lang, 'antiraid.kick_reason');
-  if (!claimKick(guildId, member.id)) return 'failed';
+  const claim = claimSet(guildId, member.id);
+  if (!claim) return 'failed';
   try {
     const result = await run(ctx, {
       guild,
@@ -549,11 +572,11 @@ export async function kickYoungJoin(ctx, guild, member, deps = {}) {
       lang,
     });
     if (result?.ok !== true) {
-      releaseKick(guildId, member.id);
+      releaseKick(claim, member.id);
       return 'failed';
     }
   } catch (err) {
-    releaseKick(guildId, member.id);
+    releaseKick(claim, member.id);
     console.warn(`Could not kick ${member?.id} in ${guildId}: ${errorText(err)}`);
     return 'failed';
   }

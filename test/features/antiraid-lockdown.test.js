@@ -2,6 +2,7 @@ import { test, before, beforeEach, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { PermissionFlagsBits } from 'discord.js';
 import { testDb } from '../helpers/db.js';
+import { scheduleJob } from '../../src/core/scheduler.js';
 import { getFeature, setFeature } from '../../src/db/settings.js';
 import { t } from '../../src/i18n/index.js';
 import { readConfig } from '../../src/features/antiraid/config.js';
@@ -1052,4 +1053,89 @@ test('start hands the invite pause to a newer lockdown instead of lifting it', a
   assert.equal(cfg.lockedAt, NOW + 5000);
   assert.equal(cfg.invitesPausedByUs, true);
   assert.equal(cfg.inviteResult, 'paused');
+  // The pause now ends with the newer lockdown, and its end lifts it.
+  const moved = incidentCalls.at(-1);
+  assert.equal(moved.invitesDisabledUntil.getTime(), NOW + 5000 + 1800_000);
+  await endLockdown(ctxFor(guild), guild, { by: 'manual', actorId: 'admin' }, deps);
+  assert.equal(incidentCalls.at(-1).invitesDisabledUntil, null, 'the newer lockdown end lifts it');
+});
+
+test('a handover whose pause cannot be moved records failed and lifts nothing', async (t) => {
+  quiet(t);
+  const { guild, incidentCalls } = makeGuild();
+  await enable();
+  const { deps } = makeDeps();
+  const original = guild.setIncidentActions;
+  let swapped = false;
+  guild.setIncidentActions = async (payload) => {
+    if (swapped) throw new Error('Missing Permissions');
+    await original(payload);
+    swapped = true;
+    await db.query(
+      `UPDATE guild_settings SET config = config || $2::jsonb WHERE guild_id = $1 AND feature = 'antiraid'`,
+      [G, JSON.stringify({
+        state: 'locked', lockedAt: NOW + 5000, lockedUntil: NOW + 5000 + 1800_000,
+        inviteResult: 'already', invitesPausedByUs: false,
+      })],
+    );
+  };
+  await startLockdown(ctxFor(guild), guild, { trigger: 'auto', startedBy: 'auto' }, deps);
+  const cfg = await cfgOf();
+  assert.equal(cfg.invitesPausedByUs, false);
+  assert.equal(cfg.inviteResult, 'failed');
+  assert.equal(incidentCalls.length, 1);
+});
+
+test('a start whose lockdown ended does not lift a pause that is no longer its own', async () => {
+  const { guild, incidentCalls } = makeGuild();
+  await enable();
+  const { deps } = makeDeps();
+  const original = guild.setIncidentActions;
+  guild.setIncidentActions = async (payload) => {
+    await original(payload);
+    if (payload.invitesDisabledUntil) {
+      await db.query(
+        `UPDATE guild_settings SET config = config || '{"state":"idle","lockedAt":null}'::jsonb
+          WHERE guild_id = $1 AND feature = 'antiraid'`,
+        [G],
+      );
+      guild.incidentsData = { invitesDisabledUntil: new Date(NOW + 99 * 3600_000) };
+    }
+  };
+  const res = await startLockdown(ctxFor(guild), guild, { trigger: 'auto', startedBy: 'auto' }, deps);
+  assert.deepEqual(res, { ok: false, reason: 'ended' });
+  assert.equal(incidentCalls.length, 1, 'nothing lifted');
+});
+
+test('a join claimed while the start queues its end timer is not kicked again by the loop', async () => {
+  const members = new Map([['m1', makeMember({ id: 'm1', createdAt: NOW - 1000 })]]);
+  const { guild } = makeGuild({ members });
+  await enable();
+  const { deps, calls } = makeDeps();
+  deps.scheduleJob = async (...args) => {
+    assert.equal(await kickYoungJoin(ctxFor(guild), guild, members.get('m1'), makeDeps().deps), 'kicked');
+    return scheduleJob(...args);
+  };
+  await startLockdown(ctxFor(guild), guild, {
+    trigger: 'auto', startedBy: 'auto', joinedCount: 1, candidates: candidates(['m1', 1000]),
+  }, deps);
+  assert.equal(calls.run.length, 0, 'the start loop did not kick m1 again');
+});
+
+test('a stale kick that fails does not release the claim of a newer lockdown', async (t) => {
+  quiet(t);
+  const m1 = makeMember({ id: 'm1', createdAt: NOW - 1000 });
+  const { guild } = makeGuild();
+  await enableLocked();
+  const { deps, calls } = makeDeps();
+  let finish;
+  const slow = { ...deps, runAction: () => new Promise((resolve) => { finish = resolve; }) };
+  const first = kickYoungJoin(ctxFor(guild), guild, m1, slow);
+  while (!finish) await new Promise((r) => setImmediate(r));
+  resetClaims(G);
+  assert.equal(await kickYoungJoin(ctxFor(guild), guild, m1, deps), 'kicked');
+  finish({ ok: false });
+  assert.equal(await first, 'failed');
+  assert.equal(await kickYoungJoin(ctxFor(guild), guild, m1, deps), 'failed', 'still claimed');
+  assert.equal(calls.run.length, 1);
 });
