@@ -1342,6 +1342,48 @@ test('a handover whose newer lockdown ended meanwhile lifts the moved pause', as
   assert.equal(incidentCalls[2].invitesDisabledUntil, null, 'the pause nobody owns is lifted');
 });
 
+test("a throwing handover patch after a successful move does not lift the newer lockdown's pause", async (t) => {
+  quiet(t);
+  const { guild, incidentCalls } = makeGuild();
+  await enable();
+  const { deps } = makeDeps();
+  const original = guild.setIncidentActions;
+  const bUntil = NOW + 5000 + 1800_000;
+  let step = 0;
+  let failPatch = false;
+  guild.setIncidentActions = async (payload) => {
+    await original(payload);
+    step += 1;
+    if (step === 1) {
+      // A's pause is set; A ends and B starts before A saves its invite result.
+      await db.query(
+        `UPDATE guild_settings SET config = config || $2::jsonb WHERE guild_id = $1 AND feature = 'antiraid'`,
+        [G, JSON.stringify({
+          state: 'locked', lockedAt: NOW + 5000, lockedUntil: bUntil,
+          inviteResult: 'already', invitesPausedByUs: false,
+        })],
+      );
+    } else if (step === 2) {
+      // The pause was moved to B's end: the write that records the handover on B now fails.
+      failPatch = true;
+    }
+  };
+  const flaky = {
+    query: async (sql, params) => {
+      if (failPatch && /UPDATE guild_settings/.test(sql) && params?.[1] === String(NOW + 5000)) {
+        throw new Error('db down');
+      }
+      return db.query(sql, params);
+    },
+  };
+  const res = await startLockdown(ctxFor(guild, flaky), guild, { trigger: 'auto', startedBy: 'auto' }, deps);
+  assert.deepEqual(res, { ok: false, reason: 'ended' });
+  assert.equal(incidentCalls.length, 2, 'set, then moved to B; nothing lifted');
+  assert.equal(incidentCalls[1].invitesDisabledUntil.getTime(), bUntil, 'the pause stays at B');
+  assert.equal(incidentCalls.some((c) => c.invitesDisabledUntil === null), false);
+  assert.equal((await cfgOf()).state, 'locked');
+});
+
 test("a handover leaves an admin's pause alone", async () => {
   const { guild, incidentCalls } = makeGuild();
   await enable();

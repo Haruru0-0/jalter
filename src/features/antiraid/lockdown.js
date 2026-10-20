@@ -414,9 +414,16 @@ export async function startLockdown(ctx, guild, {
             console.warn(`Could not move the invite pause in ${guildId}: ${errorText(err)}`);
             result = 'failed';
           }
-          handedOver = await patchIfCurrent(ctx, guildId, current.lockedAt, {
-            invitesPausedByUs: result === 'paused', inviteResult: result,
-          });
+          try {
+            handedOver = await patchIfCurrent(ctx, guildId, current.lockedAt, {
+              invitesPausedByUs: result === 'paused', inviteResult: result,
+            });
+          } catch (err) {
+            // The pause is already on the newer lockdown's end time: lifting it now would strip a
+            // lockdown that is probably still running. Its end (or the timer) lifts it by time.
+            console.warn(`Could not record the invite pause handover in ${guildId}: ${errorText(err)}`);
+            handedOver = true;
+          }
           // A failed move leaves the old pause to expire on its own; there is nothing to lift.
           if (result === 'failed') handedOver = true;
         }
