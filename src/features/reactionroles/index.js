@@ -4,3 +4,4 @@ import { createReactionRolesCommand } from './commands.js';
 export const commands = [createReactionRolesCommand()];
 
 export const jobs = { ...settingsJobs };
+export { events } from './events.js';

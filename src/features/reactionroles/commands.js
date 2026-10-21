@@ -11,6 +11,7 @@ import { createMessage, getMessage, listMessages, removeEntry } from './store.js
 import { postRoleMessage, syncMessage } from './render.js';
 import { logReactionRoles } from './log.js';
 import { addOne, fetchDiscordMessage, fitLines, loadMessage, messageIdOption, refuseMissingPermission } from './setup.js';
+import { handle } from './components.js';
 import { settingsSubcommands, settingsHandlers } from './commands-settings.js';
 
 export { checkRoleForSetup } from './setup.js';
@@ -171,6 +172,7 @@ const HANDLERS = { create, adopt, add, remove, show, status, ...settingsHandlers
 export function createReactionRolesCommand() {
   return {
     data: buildData(),
+    components: { prefix: 'reactionroles', handle },
     async execute(interaction, ctx) {
       const sub = interaction.options.getSubcommand();
       if (sub === 'enable' || sub === 'disable') return handleToggle(interaction, ctx, 'reactionroles');
