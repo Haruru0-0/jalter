@@ -21,7 +21,14 @@ async function defaultGrantLog(ctx, guild, message, role) {
 
 /** Applies one pick ({kind:'entry', entry, action} or {kind:'menu', roleIds}) to a member. Never throws. */
 export function applyPick(ctx, member, message, pick, deps = {}) {
-  return serialize(`${message.messageId}:${member.id}`, () => run(ctx, member, message, pick, deps));
+  return serialize(`${message.messageId}:${member.id}`, async () => {
+    try {
+      return await run(ctx, member, message, pick, deps);
+    } catch (err) {
+      console.warn(`Reaction role pick failed: ${err?.message ?? err}`);
+      return { ok: false, reason: 'discord_failed', clearReaction: true };
+    }
+  });
 }
 
 /**
@@ -75,12 +82,19 @@ async function run(ctx, member, message, pick, deps) {
     return refuse('discord_failed');
   }
   if (message.type === 'binding' && decision.add.length) {
-    await setBinding(ctx.db, {
-      guildId: guild.id,
-      messageId: message.messageId,
-      userId: member.id,
-      roleId: decision.add[0],
-    });
+    try {
+      await setBinding(ctx.db, {
+        guildId: guild.id,
+        messageId: message.messageId,
+        userId: member.id,
+        roleId: decision.add[0],
+      });
+    } catch (err) {
+      // Without the binding row the member could pick again; undo the grant so state stays consistent.
+      console.warn(`Reaction role binding save failed: ${err?.message ?? err}`);
+      await member.roles.remove(decision.add, REASON).catch((e) => console.warn(`Reaction role rollback failed: ${e?.message ?? e}`));
+      return refuse('discord_failed');
+    }
   }
   return { ok: true, added: decision.add, removed: decision.remove, clearReaction: decision.clearReaction };
 }

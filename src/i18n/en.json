@@ -26,7 +26,7 @@
   "feature.stickyroles": "Sticky roles",
   "feature.autoresponder": "Autoresponder",
   "feature.reactionroles": "Reaction roles",
-  "reactionroles.log.danger": "Reaction role grant refused: the bot can no longer give the role",
+  "reactionroles.log.danger": "Reaction role grant refused on message {message}: the bot can no longer give {role}",
   "feature.quote": "Quote",
   "feature.leveling": "Leveling",
   "feature.tickets": "Tickets",

@@ -26,7 +26,7 @@
   "feature.stickyroles": "Rôles persistants",
   "feature.autoresponder": "Réponse automatique",
   "feature.reactionroles": "Rôles par réaction",
-  "reactionroles.log.danger": "Attribution de rôle par réaction refusée : le bot ne peut plus donner ce rôle",
+  "reactionroles.log.danger": "Attribution de rôle par réaction refusée sur le message {message} : le bot ne peut plus donner {role}",
   "feature.quote": "Citation",
   "feature.leveling": "Niveaux",
   "feature.tickets": "Tickets",

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { testDb } from '../helpers/db.js';
 import { resetDb } from '../../src/db/index.js';
 import { applyPick, createGrantAlert } from '../../src/features/reactionroles/apply.js';
+import { logRoleDanger } from '../../src/features/reactionroles/log.js';
 import { createMessage, addEntry, getMessage } from '../../src/features/reactionroles/store.js';
 
 let db;
@@ -177,4 +178,35 @@ test('createGrantAlert never throws when the log throws', async () => {
   const message = { messageId: 'm1' };
   await alert({}, guild, message, { id: 'A' });
   await alert({}, guild, message, { id: 'A' });
+});
+
+test('a database error reading the binding yields discord_failed and never rejects', async () => {
+  const message = await seed('binding');
+  const member = fakeMember('u1');
+  const broken = { db: { query: async () => { throw new Error('db down'); } } };
+  const result = await applyPick(broken, member, message, addEntryPick(message, 'A'), allow);
+  assert.deepEqual([result.ok, result.reason], [false, 'discord_failed']);
+  assert.equal(member.calls.length, 0);
+});
+
+test('a setBinding failure after a successful add rolls the role back', async () => {
+  const message = await seed('binding');
+  const member = fakeMember('u1');
+  // getBinding (a SELECT) works; the binding INSERT throws.
+  const flaky = { db: { query: (sql, ...rest) => {
+    if (/insert/i.test(String(sql?.text ?? sql))) throw new Error('write failed');
+    return db.query(sql, ...rest);
+  } } };
+  const result = await applyPick(flaky, member, message, addEntryPick(message, 'A'), allow);
+  assert.deepEqual([result.ok, result.reason], [false, 'discord_failed']);
+  assert.equal(member.roles.cache.has('A'), false);
+  assert.deepEqual(member.calls.map((c) => c[0]), ['add', 'remove']);
+});
+
+test('logRoleDanger puts the message id and role mention into the localized text', async () => {
+  let sent;
+  await logRoleDanger({}, 'g1', 'en', { messageId: 'm42', roleId: 'r7' }, { sendLog: async (c, g, ev, embed) => { sent = embed; } });
+  assert.match(sent.description, /m42/);
+  assert.match(sent.description, /<@&r7>/);
+  assert.equal(sent.fields, undefined);
 });
