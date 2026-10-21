@@ -169,6 +169,16 @@ test('reversed remove action adds an unheld role', () => {
   assert.deepEqual(out, { ok: true, add: ['A'], remove: [], clearReaction: false });
 });
 
+test('reversed add of a role the member does not hold does nothing and keeps the reaction', () => {
+  const out = decidePick({
+    message: makeMsg({ type: 'reversed', entries: [{ roleId: 'A' }] }),
+    entry: { roleId: 'A' },
+    action: 'add',
+    memberRoleIds: setOf(),
+  });
+  assert.deepEqual(out, { ok: false, reason: 'nothing', clearReaction: false });
+});
+
 // ── decidePick: binding ─────────────────────────────────────────────────────
 test('binding first pick adds the role and asks for reaction clear', () => {
   const out = decidePick({

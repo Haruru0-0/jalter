@@ -135,6 +135,20 @@ test('a unique pick removes the reactions of the roles it replaced, but not the 
   assert.deepEqual(removed, [['🅱️', 'u1']]);
 });
 
+test('reversed: reacting without the role changes nothing; removing the reaction later is the opt-in', async () => {
+  await seed({ type: 'reversed' });
+  const guild = fakeGuild();
+  const member = fakeMember(guild);
+  const events = createEvents();
+  const add = fakeReaction(guild);
+  await handler(events, Events.MessageReactionAdd)(ctx(), add.reaction, user());
+  assert.deepEqual([member.calls, add.removed], [[], []]);
+  const remove = fakeReaction(guild);
+  await handler(events, Events.MessageReactionRemove)(ctx(), remove.reaction, user());
+  assert.deepEqual(member.calls, [['add', ['A']]]);
+  assert.deepEqual(remove.removed, []);
+});
+
 test('a custom emoji matches its entry by id', async () => {
   await seed({ entries: [['A', '<:wave:123456789012345678>']] });
   const guild = fakeGuild();
