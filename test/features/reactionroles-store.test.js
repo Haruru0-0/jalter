@@ -4,7 +4,7 @@ import { testDb } from '../helpers/db.js';
 import { resetDb } from '../../src/db/index.js';
 import {
   createMessage, getMessage, addEntry, updateMessage, removeEntry, deleteMessage,
-  deleteMessagesInChannel, deleteGuildMessages, deleteEntriesForRole,
+  deleteMessagesInChannel, deleteGuildMessages, clearEntries, deleteEntriesForRole,
   setBinding, getBinding, clearMemberBindings,
 } from '../../src/features/reactionroles/store.js';
 
@@ -103,4 +103,16 @@ test('deleteMessagesInChannel and deleteGuildMessages return the deleted ids', a
   assert.deepEqual((await deleteMessagesInChannel(db, 'g1', 'c1')).sort(), ['m1', 'm2']);
   await createMessage(db, { ...base, messageId: 'm4', channelId: 'c2' });
   assert.deepEqual((await deleteGuildMessages(db, 'g1')).sort(), ['m3', 'm4']);
+});
+
+test('clearEntries removes the entries of one message and keeps the message', async () => {
+  await createMessage(db, base);
+  await createMessage(db, { ...base, messageId: 'm2' });
+  await addEntry(db, 'm1', { roleId: 'r1', label: 'A' });
+  await addEntry(db, 'm1', { roleId: 'r2', label: 'B' });
+  await addEntry(db, 'm2', { roleId: 'r1', label: 'A' });
+  assert.equal(await clearEntries(db, 'm1'), 2);
+  assert.equal((await getMessage(db, 'm1')).entries.length, 0);
+  assert.equal((await getMessage(db, 'm2')).entries.length, 1);
+  assert.equal(await clearEntries(db, 'm1'), 0);
 });

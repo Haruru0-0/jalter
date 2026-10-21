@@ -93,6 +93,12 @@ export async function removeEntry(db, messageId, roleId) {
   return rowCount > 0;
 }
 
+/** Removes every role of a message and keeps the message itself. Returns how many were removed. */
+export async function clearEntries(db, messageId) {
+  const { rowCount } = await db.query('DELETE FROM reaction_role_entries WHERE message_id = $1', [messageId]);
+  return rowCount;
+}
+
 export async function deleteMessage(db, messageId) {
   const { rowCount } = await db.query('DELETE FROM reaction_role_messages WHERE message_id = $1', [messageId]);
   return rowCount > 0;

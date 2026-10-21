@@ -10,16 +10,16 @@ import { STYLES, TYPES, typeAllowedForStyle } from './config.js';
 import { createMessage, getMessage, listMessages, removeEntry } from './store.js';
 import { postRoleMessage, syncMessage } from './render.js';
 import { logReactionRoles } from './log.js';
-import { addOne, fetchDiscordMessage, fitLines, loadMessage, refuseMissingPermission } from './setup.js';
+import { addOne, fetchDiscordMessage, fitLines, loadMessage, messageIdOption, refuseMissingPermission } from './setup.js';
+import { settingsSubcommands, settingsHandlers } from './commands-settings.js';
 
 export { checkRoleForSetup } from './setup.js';
 
 const CHANNEL_TYPES = [ChannelType.GuildText, ChannelType.GuildAnnouncement];
 const choices = (list) => list.map((v) => ({ name: v, value: v }));
-const messageIdOption = (o) => o.setName('message_id').setDescription('Id of the role message').setRequired(true);
 
 export function buildData() {
-  return new SlashCommandBuilder()
+  const data = new SlashCommandBuilder()
     .setName('reactionroles')
     .setDescription('Let members pick roles from an embed message')
     .addSubcommand((s) => s.setName('enable').setDescription('Turn reaction roles on'))
@@ -49,6 +49,7 @@ export function buildData() {
     .addSubcommand((s) =>
       s.setName('show').setDescription('List the role messages, or one message in detail')
         .addStringOption((o) => o.setName('message_id').setDescription('Id of the role message')));
+  return settingsSubcommands(data);
 }
 
 async function create(interaction, ctx, lang) {
@@ -165,7 +166,7 @@ async function status(interaction, ctx, lang) {
   return interaction.editReply(fitLines(lang, [head, ...problems]));
 }
 
-const HANDLERS = { create, adopt, add, remove, show, status };
+const HANDLERS = { create, adopt, add, remove, show, status, ...settingsHandlers };
 
 export function createReactionRolesCommand() {
   return {

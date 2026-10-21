@@ -81,6 +81,9 @@ export async function addOne(ctx, { guild, caller }, message, { role, emojiText,
   return 'ok';
 }
 
+/** The required `message_id` option shared by the subcommands that act on a role message. */
+export const messageIdOption = (o) => o.setName('message_id').setDescription('Id of the role message').setRequired(true);
+
 /** Joins lines into one reply of at most `limit` characters, dropping whole trailing lines for an "and {count} more" line. */
 export function fitLines(lang, lines, limit = 2000) {
   if (lines.join('\n').length <= limit) return lines.join('\n');
