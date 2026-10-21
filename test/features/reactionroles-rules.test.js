@@ -138,6 +138,16 @@ test('drop add action on an unheld role is nothing and asks for reaction clear',
   assert.deepEqual(out, { ok: false, reason: 'nothing', clearReaction: true });
 });
 
+test('drop remove action is nothing and does not ask for reaction clear', () => {
+  const out = decidePick({
+    message: makeMsg({ type: 'drop', entries: [{ roleId: 'A' }] }),
+    entry: { roleId: 'A' },
+    action: 'remove',
+    memberRoleIds: setOf('A'),
+  });
+  assert.deepEqual(out, { ok: false, reason: 'nothing', clearReaction: false });
+});
+
 // ── decidePick: reversed ────────────────────────────────────────────────────
 test('reversed add action removes a held role', () => {
   const out = decidePick({
@@ -222,6 +232,16 @@ test('a member outside the whitelist is refused with not_whitelisted on add', ()
     memberRoleIds: setOf(),
   });
   assert.deepEqual(out, { ok: false, reason: 'not_whitelisted', clearReaction: true });
+});
+
+test('whitelist refusal on toggle does not ask for reaction clear', () => {
+  const out = decidePick({
+    message: makeMsg({ entries: [{ roleId: 'A' }], whitelist: ['w'] }),
+    entry: { roleId: 'A' },
+    action: 'toggle',
+    memberRoleIds: setOf(),
+  });
+  assert.deepEqual(out, { ok: false, reason: 'not_whitelisted', clearReaction: false });
 });
 
 test('the gate prefers lock over blacklist over whitelist', () => {
