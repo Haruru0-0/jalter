@@ -74,28 +74,34 @@ export async function syncMessage(ctx, message, discordMessage) {
   }
 }
 
-async function embedPayload(ctx, guild, user, member, lang, embedName) {
-  const spec = await getEmbed(ctx.db, guild.id, embedName);
+async function embedPayload(ctx, guild, user, member, lang, embedName, deps) {
+  const spec = await deps.getEmbed(ctx.db, guild.id, embedName);
   if (!spec) return { error: 'missing' };
   try {
-    return { payload: await buildEmbedPayload(ctx, guild.id, spec, buildVars({ user, member, guild, lang })) };
+    return { payload: await deps.buildEmbedPayload(ctx, guild.id, spec, buildVars({ user, member, guild, lang })) };
   } catch (err) {
     return { error: err.message === 'image-not-found' ? 'image' : 'invalid' };
   }
 }
 
 /** Posts the named embed to `channel`. Returns `{ message }` or `{ error: 'missing' | 'image' | 'invalid' | 'cannot_send' }`. */
-export async function postRoleMessage(ctx, interaction, lang, channel, embedName) {
-  const built = await embedPayload(ctx, interaction.guild, interaction.user, interaction.member, lang, embedName);
+export async function postRoleMessage(ctx, interaction, lang, channel, embedName, deps = {}) {
+  deps = { getEmbed, buildEmbedPayload, trySend, ...deps };
+  const built = await embedPayload(ctx, interaction.guild, interaction.user, interaction.member, lang, embedName, deps);
   if (built.error) return built;
-  const sent = await trySend(channel, { ...built.payload, allowedMentions: safeMentions() });
+  const sent = await deps.trySend(channel, { ...built.payload, allowedMentions: safeMentions() });
   return sent ? { message: sent } : { error: 'cannot_send' };
 }
 
 /** Re-renders the named embed onto the posted message, keeping its components. */
-export async function refreshEmbed(ctx, interaction, lang, message, discordMessage) {
-  const built = await embedPayload(ctx, interaction.guild, interaction.user, interaction.member, lang, message.embedName);
+export async function refreshEmbed(ctx, interaction, lang, message, discordMessage, deps = {}) {
+  deps = { getEmbed, buildEmbedPayload, ...deps };
+  const built = await embedPayload(ctx, interaction.guild, interaction.user, interaction.member, lang, message.embedName, deps);
   if (built.error) return built;
-  await discordMessage.edit({ ...built.payload, allowedMentions: safeMentions() });
+  try {
+    await discordMessage.edit({ ...built.payload, allowedMentions: safeMentions() });
+  } catch {
+    return { error: 'cannot_edit' };
+  }
   return { ok: true };
 }

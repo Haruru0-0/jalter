@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildComponents, missingReactions, syncMessage } from '../../src/features/reactionroles/render.js';
+import { buildComponents, missingReactions, syncMessage, postRoleMessage, refreshEmbed } from '../../src/features/reactionroles/render.js';
 
 const entries = (n) => Array.from({ length: n }, (_, i) => ({ id: i + 1, roleId: `r${i + 1}`, emoji: null, label: `Role ${i + 1}` }));
 const msg = (over = {}) => ({ messageId: 'm1', style: 'buttons', type: 'normal', entries: entries(3), ...over });
@@ -69,4 +69,41 @@ test('syncMessage reports failures instead of throwing', async () => {
   const react = { reactions: { cache: new Map() }, react: async () => { throw new Error('nope'); } };
   const m = msg({ style: 'reactions', entries: [{ id: 1, roleId: 'r1', emoji: '🔥' }] });
   assert.deepEqual(await syncMessage({ client: { user: { id: 'bot' } } }, m, react), { ok: false, reason: 'cannot_react' });
+});
+
+const interaction = {
+  guild: { id: 'g1', name: 'G', ownerId: 'o1', memberCount: 3, createdTimestamp: 0, iconURL: () => null },
+  user: { id: 'u1', username: 'u', displayAvatarURL: () => null },
+  member: { id: 'u1', displayName: 'U' },
+};
+const deps = (over = {}) => ({
+  getEmbed: async () => ({ name: 'e' }),
+  buildEmbedPayload: async () => ({ embeds: [{ title: 'T' }] }),
+  trySend: async (_c, payload) => ({ id: 'sent', payload }),
+  ...over,
+});
+const throwing = (message) => async () => { throw new Error(message); };
+
+test('postRoleMessage maps embed failures to error keys', async () => {
+  const run = (d) => postRoleMessage({ db: {} }, interaction, 'en', {}, 'e', deps(d));
+  assert.deepEqual(await run({ getEmbed: async () => null }), { error: 'missing' });
+  assert.deepEqual(await run({ buildEmbedPayload: throwing('image-not-found') }), { error: 'image' });
+  assert.deepEqual(await run({ buildEmbedPayload: throwing('boom') }), { error: 'invalid' });
+  assert.deepEqual(await run({ trySend: async () => null }), { error: 'cannot_send' });
+});
+
+test('postRoleMessage returns the sent message with safe mentions', async () => {
+  const res = await postRoleMessage({ db: {} }, interaction, 'en', {}, 'e', deps());
+  assert.equal(res.message.id, 'sent');
+  assert.deepEqual(res.message.payload.embeds, [{ title: 'T' }]);
+  assert.ok(res.message.payload.allowedMentions);
+});
+
+test('refreshEmbed edits the message, and reports a failed edit instead of throwing', async () => {
+  const m = msg({ embedName: 'e' });
+  const edits = [];
+  assert.deepEqual(await refreshEmbed({ db: {} }, interaction, 'en', m, { edit: async (p) => edits.push(p) }, deps()), { ok: true });
+  assert.deepEqual(edits[0].embeds, [{ title: 'T' }]);
+  assert.deepEqual(await refreshEmbed({ db: {} }, interaction, 'en', m, { edit: throwing('gone') }, deps()), { error: 'cannot_edit' });
+  assert.deepEqual(await refreshEmbed({ db: {} }, interaction, 'en', m, {}, deps({ getEmbed: async () => null })), { error: 'missing' });
 });
