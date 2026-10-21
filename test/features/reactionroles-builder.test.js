@@ -309,3 +309,51 @@ test('components.js routes reactionroles:b:* to the builder', async () => {
   await handle(i, env.ctx);
   assert.equal(i.calls[0][0], 'update');
 });
+
+// ---- the Discord message is synced ----
+
+// Gives the guild a channel c1 holding one fake bot message that records edits and reaction changes.
+function withDiscordMessage(env, reactionKeys = []) {
+  const edits = [];
+  const removed = [];
+  const reacted = [];
+  const discordMessage = {
+    id: MSG, guild: env.guild, edits, removed, reacted,
+    reactions: { cache: new Map(reactionKeys.map((k) => [k, { me: true, emoji: { id: null, name: k }, users: { remove: async (u) => { removed.push([k, u]); } } }])) },
+    edit: async (p) => { edits.push(p); },
+    react: async (e) => { reacted.push(e); },
+  };
+  env.guild.channels.fetch = async (cid) => (cid === 'c1' ? { messages: { fetch: async (mid) => (mid === MSG ? discordMessage : null) } } : null);
+  return discordMessage;
+}
+const buttonLabels = (edit) => edit.components.flatMap((r) => r.toJSON().components.map((c) => c.label));
+
+test('Remove syncs a buttons message: the removed role button leaves the Discord message', async () => {
+  const env = setup();
+  await seed();
+  await addEntry(db, MSG, { roleId: ROLE, label: 'A' });
+  await addEntry(db, MSG, { roleId: ROLE2, label: 'B' });
+  const dm = withDiscordMessage(env);
+  await handleBuilder(fake(env, panelId('rm'), { values: [ROLE] }), env.ctx);
+  assert.equal(dm.edits.length, 1);
+  assert.deepEqual(buttonLabels(dm.edits[0]), ['B']);
+});
+
+test('Remove syncs a reactions message: the removed entry own reaction is taken off', async () => {
+  const env = setup();
+  await seed('reactions');
+  await addEntry(db, MSG, { roleId: ROLE, emoji: '😀' });
+  await addEntry(db, MSG, { roleId: ROLE2, emoji: '😎' });
+  const dm = withDiscordMessage(env, ['😀', '😎']);
+  await handleBuilder(fake(env, panelId('rm'), { values: [ROLE] }), env.ctx);
+  assert.deepEqual(dm.removed, [['😀', BOT]]);
+});
+
+test('Add syncs the Discord message: the new button appears', async () => {
+  const env = setup();
+  await seed();
+  const dm = withDiscordMessage(env);
+  await handleBuilder(fake(env, panelId('modal', { extra: ROLE }), { fields: { label: 'Gamers' } }), env.ctx);
+  assert.equal(dm.edits.length, 1);
+  assert.deepEqual(buttonLabels(dm.edits[0]), ['Gamers']);
+});
