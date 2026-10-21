@@ -4,6 +4,7 @@ import { ephemeral } from '../../core/replies.js';
 import { getMessage } from './store.js';
 import { applyPick } from './apply.js';
 import { PREFIX } from './render.js';
+import { handleBuilder } from './builder.js';
 import { handlePurge } from './commands-settings.js';
 
 const roleName = (guild, id) => guild.roles.cache.get(id)?.name ?? id;
@@ -47,5 +48,6 @@ export async function handle(interaction, ctx) {
   if (kind === 'menu') {
     return pick(interaction, ctx, lang, rest[0], () => ({ kind: 'menu', roleIds: interaction.values }));
   }
+  if (kind === 'b') return handleBuilder(interaction, ctx);
   if (kind === 'purge') return handlePurge(interaction, ctx);
 }

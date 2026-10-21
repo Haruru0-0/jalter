@@ -88,7 +88,6 @@ test('the settings subcommands are registered and respect Discord option rules',
   const json = command.data.toJSON();
   const names = json.options.map((o) => o.name);
   for (const n of ['type', 'limit', 'whitelist', 'blacklist', 'selfdestruct', 'refresh', 'fix', 'purge']) assert.ok(names.includes(n), n);
-  assert.ok(!names.includes('builder'));
   for (const sub of json.options) {
     assert.ok(sub.description.length >= 1 && sub.description.length <= 100);
     let optional = false;

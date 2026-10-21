@@ -98,7 +98,7 @@
   "reactionroles.builder.pickRole": "Choisissez un rôle",
   "reactionroles.builder.add": "Ajouter le rôle",
   "reactionroles.builder.done": "Terminé",
-  "reactionroles.builder.remove": "Retirer le dernier",
+  "reactionroles.builder.remove": "Retirer un rôle",
   "reactionroles.builder.finished": "Le constructeur est fermé.",
   "reactionroles.builder.modalTitle": "Ajouter un rôle",
   "reactionroles.builder.emoji": "Emoji",

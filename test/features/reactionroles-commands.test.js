@@ -108,7 +108,7 @@ test('the module exposes one reactionroles command', () => {
   assert.equal(commands.length, 1);
   const json = commands[0].data.toJSON();
   assert.equal(json.name, 'reactionroles');
-  assert.deepEqual(json.options.map((o) => o.name), ['enable', 'disable', 'status', 'create', 'adopt', 'add', 'remove', 'show', 'type', 'limit', 'whitelist', 'blacklist', 'selfdestruct', 'refresh', 'fix', 'purge']);
+  assert.deepEqual(json.options.map((o) => o.name), ['enable', 'disable', 'status', 'create', 'adopt', 'add', 'remove', 'show', 'builder', 'type', 'limit', 'whitelist', 'blacklist', 'selfdestruct', 'refresh', 'fix', 'purge']);
 });
 
 test('required options come before optional ones and descriptions fit', () => {

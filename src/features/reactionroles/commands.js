@@ -11,6 +11,7 @@ import { createMessage, getMessage, listMessages, removeEntry } from './store.js
 import { postRoleMessage, syncMessage } from './render.js';
 import { logReactionRoles } from './log.js';
 import { addOne, fetchDiscordMessage, fitLines, loadMessage, messageIdOption, refuseMissingPermission } from './setup.js';
+import { builderHandler } from './builder.js';
 import { handle } from './components.js';
 import { settingsSubcommands, settingsHandlers } from './commands-settings.js';
 
@@ -49,7 +50,10 @@ export function buildData() {
         .addRoleOption((o) => o.setName('role').setDescription('Role to remove').setRequired(true)))
     .addSubcommand((s) =>
       s.setName('show').setDescription('List the role messages, or one message in detail')
-        .addStringOption((o) => o.setName('message_id').setDescription('Id of the role message')));
+        .addStringOption((o) => o.setName('message_id').setDescription('Id of the role message')))
+    .addSubcommand((s) =>
+      s.setName('builder').setDescription('Build a role message with a panel')
+        .addStringOption(messageIdOption));
   return settingsSubcommands(data);
 }
 
@@ -167,7 +171,7 @@ async function status(interaction, ctx, lang) {
   return interaction.editReply(fitLines(lang, [head, ...problems]));
 }
 
-const HANDLERS = { create, adopt, add, remove, show, status, ...settingsHandlers };
+const HANDLERS = { create, adopt, add, remove, show, status, builder: builderHandler, ...settingsHandlers };
 
 export function createReactionRolesCommand() {
   return {
