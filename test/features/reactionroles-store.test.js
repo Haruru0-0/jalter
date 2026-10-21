@@ -4,7 +4,8 @@ import { testDb } from '../helpers/db.js';
 import { resetDb } from '../../src/db/index.js';
 import {
   createMessage, getMessage, addEntry, updateMessage, removeEntry, deleteMessage,
-  deleteEntriesForRole, setBinding, getBinding, clearMemberBindings,
+  deleteMessagesInChannel, deleteGuildMessages, deleteEntriesForRole,
+  setBinding, getBinding, clearMemberBindings,
 } from '../../src/features/reactionroles/store.js';
 
 let db;
@@ -62,6 +63,7 @@ test('updateMessage changes fields; an unknown message returns false', async () 
   const m = await getMessage(db, 'm1');
   assert.deepEqual([m.type, m.limit, m.whitelist, m.blacklist], ['unique', 2, ['w'], ['b']]);
   assert.equal(await updateMessage(db, 'nope', { type: 'verify' }), false);
+  assert.equal(await updateMessage(db, 'm1', {}), false);
 });
 
 test('deleteMessage cascades entries and bindings; removeEntry removes one', async () => {
@@ -92,4 +94,13 @@ test('bindings are one per member and message, and clearMemberBindings is per gu
   assert.equal(await getBinding(db, 'm1', 'u2'), 'r1');
   await clearMemberBindings(db, 'g1', 'u2');
   assert.equal(await getBinding(db, 'm1', 'u2'), null);
+});
+
+test('deleteMessagesInChannel and deleteGuildMessages return the deleted ids', async () => {
+  await createMessage(db, base);
+  await createMessage(db, { ...base, messageId: 'm2' });
+  await createMessage(db, { ...base, messageId: 'm3', channelId: 'c2' });
+  assert.deepEqual((await deleteMessagesInChannel(db, 'g1', 'c1')).sort(), ['m1', 'm2']);
+  await createMessage(db, { ...base, messageId: 'm4', channelId: 'c2' });
+  assert.deepEqual((await deleteGuildMessages(db, 'g1')).sort(), ['m3', 'm4']);
 });
