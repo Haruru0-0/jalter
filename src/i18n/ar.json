@@ -26,6 +26,7 @@
   "feature.stickyroles": "الرتب الثابتة",
   "feature.autoresponder": "الرد التلقائي",
   "feature.reactionroles": "رتب التفاعل",
+  "reactionroles.log.danger": "رُفض منح رتبة تفاعل: البوت لم يعد قادرًا على إعطاء هذه الرتبة",
   "feature.quote": "الاقتباس",
   "feature.leveling": "المستويات",
   "feature.tickets": "التذاكر",
