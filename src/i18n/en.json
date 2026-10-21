@@ -42,6 +42,7 @@
   "reactionroles.selfdestructSet": "The message will delete itself {time}.",
   "reactionroles.reversedNeedsReactions": "The reversed type only works with reactions.",
   "reactionroles.needPermission": "I need the {permission} permission to do that. Nothing was changed.",
+  "reactionroles.more": "… and {count} more",
   "reactionroles.list.needRole": "Mention at least one role.",
   "reactionroles.adopt.notOurs": "I can only use messages that I posted.",
   "reactionroles.adopt.noEmbed": "That message has no embed.",

@@ -42,6 +42,7 @@
   "reactionroles.selfdestructSet": "ستُحذف الرسالة تلقائيًا {time}.",
   "reactionroles.reversedNeedsReactions": "النوع المعكوس يعمل مع التفاعلات فقط.",
   "reactionroles.needPermission": "أحتاج إلى صلاحية {permission} للقيام بذلك. لم يتغيّر شيء.",
+  "reactionroles.more": "… و{count} أخرى",
   "reactionroles.list.needRole": "اذكر دورًا واحدًا على الأقل.",
   "reactionroles.adopt.notOurs": "يمكنني استخدام الرسائل التي نشرتها أنا فقط.",
   "reactionroles.adopt.noEmbed": "هذه الرسالة لا تحتوي على embed.",

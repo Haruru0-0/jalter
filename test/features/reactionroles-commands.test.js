@@ -459,3 +459,54 @@ test('logReactionRoles sends one modAction embed and never throws', async () => 
     console.warn = warn;
   }
 });
+
+// ---- fix round 1 ----
+
+test('create needs Manage Messages for a reactions binding message', async () => {
+  await enable();
+  await createEmbed(db, G, 'roles');
+  await saveEmbed(db, G, 'roles', { title: 'Pick', description: 'Choose below' });
+  const env = setup({ channels: [fakeChannel('c1', { perms: P.ManageRoles | P.AddReactions | P.ReadMessageHistory })] });
+  const i = await run(env, 'create', { embed: 'roles', style: 'reactions', type: 'binding' });
+  assert.equal(last(i), t('en', 'reactionroles.needPermission', { permission: 'Manage Messages' }));
+  assert.equal(env.chans.get('c1').sent.length, 0);
+});
+
+async function storeMany(n) {
+  for (let i = 0; i < n; i += 1) {
+    await createMessage(db, { guildId: G, messageId: `${'9'.repeat(18)}${i}`, channelId: 'c1', style: 'buttons', createdBy: 'u' });
+  }
+}
+
+test('show with 60 stored messages fits in 2000 characters and ends with the more line', async () => {
+  await enable();
+  await storeMany(60);
+  const env = setup();
+  const text = last(await run(env, 'show', {}));
+  assert.ok(text.length <= 2000, `length ${text.length}`);
+  const shown = text.split('\n').length - 1;
+  assert.ok(shown > 0 && shown < 60);
+  assert.equal(text.split('\n').at(-1), t('en', 'reactionroles.more', { count: 60 - shown }));
+  assert.notEqual(t('en', 'reactionroles.more', { count: 1 }), 'reactionroles.more');
+});
+
+test('status defers before fetching and its final text fits in 2000 characters', async () => {
+  await enable();
+  await storeMany(60);
+  const env = setup();
+  const events = [];
+  const channel = env.chans.get('c1');
+  const originalFetch = env.guild.channels.fetch;
+  env.guild.channels.fetch = async (id) => { events.push('fetch'); return originalFetch(id); };
+  const interaction = fakeInteraction(env, 'status');
+  interaction.deferReply = async () => { events.push('defer'); };
+  interaction.reply = async () => { events.push('reply'); };
+  interaction.editReply = async (p) => { events.push('edit'); interaction.final = typeof p === 'string' ? p : p.content; };
+  await command.execute(interaction, env.ctx);
+  assert.equal(events[0], 'defer');
+  assert.ok(!events.includes('reply'));
+  assert.equal(events.at(-1), 'edit');
+  assert.ok(channel && interaction.final.length <= 2000, `length ${interaction.final.length}`);
+  assert.ok(interaction.final.includes(t('en', 'reactionroles.status.head', { count: 60 })));
+  assert.match(interaction.final.split('\n').at(-1), /^\D*\d+/);
+});

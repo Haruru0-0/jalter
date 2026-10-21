@@ -15,7 +15,7 @@ export function checkRoleForSetup(guild, caller, role) {
 }
 
 // Types that clear the member's reaction after a pick, which needs Manage Messages.
-const CLEARS_REACTION = ['drop', 'verify', 'lock'];
+const CLEARS_REACTION = ['drop', 'verify', 'lock', 'binding'];
 
 /**
  * The first permission the bot lacks to run a role message of this style and type, as the name shown
@@ -80,3 +80,14 @@ export async function addOne(ctx, { guild, caller }, message, { role, emojiText,
   }
   return 'ok';
 }
+
+/** Joins lines into one reply of at most `limit` characters, dropping whole trailing lines for an "and {count} more" line. */
+export function fitLines(lang, lines, limit = 2000) {
+  if (lines.join('\n').length <= limit) return lines.join('\n');
+  for (let keep = lines.length - 1; keep > 0; keep -= 1) {
+    const text = [...lines.slice(0, keep), t(lang, 'reactionroles.more', { count: lines.length - keep })].join('\n');
+    if (text.length <= limit) return text;
+  }
+  return t(lang, 'reactionroles.more', { count: lines.length });
+}
+

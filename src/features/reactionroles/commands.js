@@ -10,7 +10,7 @@ import { STYLES, TYPES, typeAllowedForStyle } from './config.js';
 import { createMessage, getMessage, listMessages, removeEntry } from './store.js';
 import { postRoleMessage, syncMessage } from './render.js';
 import { logReactionRoles } from './log.js';
-import { addOne, fetchDiscordMessage, loadMessage, refuseMissingPermission } from './setup.js';
+import { addOne, fetchDiscordMessage, fitLines, loadMessage, refuseMissingPermission } from './setup.js';
 
 export { checkRoleForSetup } from './setup.js';
 
@@ -130,7 +130,7 @@ async function show(interaction, ctx, lang) {
   const id = interaction.options.getString('message_id');
   if (!id) {
     const all = await listMessages(ctx.db, interaction.guildId);
-    return interaction.reply(ephemeral(all.length ? all.map((m) => describe(lang, m)).join('\n') : t(lang, 'reactionroles.show.none')));
+    return interaction.reply(ephemeral(all.length ? fitLines(lang, all.map((m) => describe(lang, m))) : t(lang, 'reactionroles.show.none')));
   }
   const message = await loadMessage(interaction, ctx, lang);
   if (!message) return;
@@ -139,10 +139,11 @@ async function show(interaction, ctx, lang) {
   if (message.limit != null) lines.push(t(lang, 'reactionroles.show.limit', { limit: message.limit }));
   if (message.whitelist.length) lines.push(t(lang, 'reactionroles.show.whitelist', { roles: message.whitelist.map((r) => `<@&${r}>`).join(' ') }));
   if (message.blacklist.length) lines.push(t(lang, 'reactionroles.show.blacklist', { roles: message.blacklist.map((r) => `<@&${r}>`).join(' ') }));
-  return interaction.reply(ephemeral(lines.join('\n')));
+  return interaction.reply(ephemeral(fitLines(lang, lines)));
 }
 
 async function status(interaction, ctx, lang) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const all = await listMessages(ctx.db, interaction.guildId);
   const problems = [];
   for (const m of all) {
@@ -161,7 +162,7 @@ async function status(interaction, ctx, lang) {
     }
   }
   const head = t(lang, 'reactionroles.status.head', { count: all.length });
-  return interaction.reply(ephemeral([head, ...problems].join('\n')));
+  return interaction.editReply(fitLines(lang, [head, ...problems]));
 }
 
 const HANDLERS = { create, adopt, add, remove, show, status };
