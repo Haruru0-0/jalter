@@ -10,3 +10,18 @@ export async function logRoleDanger(ctx, guildId, lang, { messageId, roleId }, d
     console.warn('reactionroles log failed:', err?.message ?? err);
   }
 }
+
+/** One `mod` log line for a staff action on a role message. Never throws. */
+export async function logReactionRoles(ctx, guild, lang, { action, actorId, messageId, detail }, deps = {}) {
+  try {
+    const send = deps.sendLog ?? sendLog;
+    const fields = [
+      { name: t(lang, 'reactionroles.log.moderator'), value: `<@${actorId}>`, inline: true },
+      { name: t(lang, 'reactionroles.log.message'), value: String(messageId), inline: true },
+    ];
+    if (detail) fields.push({ name: '​', value: String(detail) });
+    await send(ctx, guild.id, 'modAction', { title: t(lang, 'reactionroles.log.title', { action }), fields });
+  } catch (err) {
+    console.warn(`Could not write reaction roles log: ${err.message}`);
+  }
+}
