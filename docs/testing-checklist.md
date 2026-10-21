@@ -473,7 +473,71 @@ Needs the bot to have Kick Members (it removes the young accounts of a burst) an
 - [ ] Take Manage Server from the bot: the lockdown still starts and the kicks still happen; `/antiraid status` says the invite pause was refused.
 - [ ] Stop the bot while a lockdown is on and start it again: the lockdown is still on (the state is in the database) and it still ends by itself at the time it was given.
 
-## 15. Permissions and robustness
+## 15. Reaction roles
+
+Needs the bot to have Manage Roles, Add Reactions, Read Message History and Manage Messages, plus View Channel, Send Messages and Embed Links in the test channel, and its top role above the roles you offer. Use your admin account and a normal test member. Create a few harmless test roles (for example Red, Blue, Green, Ping) and a named embed with `/embed create name:colors`. Run `npm run deploy` first so `/reactionroles` appears (migration 009 runs on the next start).
+
+### Setup and create
+
+- [ ] `/reactionroles status` works while the feature is off. A normal member is refused on every `/reactionroles` subcommand. Every reply is ephemeral.
+- [ ] `/reactionroles enable`, then `/reactionroles create embed:colors style:reactions` posts the embed in the current channel (the embed name autocompletes), replies with the new message id and writes one mod log line. `channel:<other>` posts there instead. An unknown embed name is refused.
+- [ ] `create style:reactions type:reversed` works; `create style:buttons type:reversed` and `style:menu type:reversed` are refused (reversed needs reactions).
+- [ ] Take Add Reactions (or Manage Roles) from the bot and run `create style:reactions`: it is refused naming the missing permission and posts nothing. A reactions message of type `drop`, `verify`, `lock` or `binding` also needs Manage Messages.
+
+### Adopt
+
+- [ ] Post an embed with `/embed show`, then `/reactionroles adopt message_id:<id> style:buttons`: it becomes a role message. A message by another user or bot, a message with no embed, a message that already has buttons or a menu, and a message that is already a role message are each refused with a clear reply. An unknown id says it is gone.
+- [ ] An adopted message works like a created one, but `refresh` is refused (it has no named embed).
+
+### Add, remove, show and the builder
+
+- [ ] `/reactionroles add message_id:<id> role:Red emoji:<emoji>` on a reactions message: the bot adds that reaction and writes a mod log line. Without an emoji it is refused. A custom emoji from another server, text that is not an emoji, a second role with the same emoji and the same role twice are each refused.
+- [ ] On a buttons message, `add` with only `label:Red` adds a button; with only an emoji also works; with neither it is refused. On a menu message the same adds a dropdown option. Buttons wrap at 5 per row.
+- [ ] Roles refused with a clear reason: a role with Administrator or other staff permissions, a bot or integration role, the @everyone role, a role at or above the bot's top role, and a role at or above the top role of the admin running the command (unless they own the server).
+- [ ] Add 20 roles to one message: a 21st is refused.
+- [ ] `/reactionroles remove message_id:<id> role:Red` takes the reaction, button or option off the message. A role that is not on the message says so.
+- [ ] `/reactionroles show` lists every role message (id, channel, style, type, number of roles); with `message_id` it also lists the roles, the limit and the lists. An id from another server or an unknown id says it is gone.
+- [ ] `/reactionroles builder message_id:<id>` opens a private panel: pick a role, press Add, fill the emoji and label in the form, and the role appears in the list and on the message. Add several, remove one from the remove menu, press Done. The same refusals as `add` appear as a reply.
+- [ ] Another admin pressing the panel's controls is told it is not theirs. After 10 minutes the panel says it expired. Restart the bot with the panel open and use it again within 10 minutes: it still works.
+
+### Types, with each style
+
+Use a fresh message per style (reactions, buttons, menu) with three roles A, B, C, and a normal test member. Change the type with `/reactionroles type`.
+
+- [ ] `normal`: reactions, adding gives the role and removing the reaction takes it; buttons, each press toggles with an ephemeral message; menu, the selection is the set of roles the member wants (selecting adds, deselecting removes).
+- [ ] `unique`: picking B while holding A swaps A for B (on reactions the bot also removes the member's old reaction; the menu allows one selection).
+- [ ] `verify`: a pick only adds (a second pick does nothing); removing a reaction takes nothing away; on reactions the bot clears the member's reaction after the grant.
+- [ ] `drop`: a pick only removes the role (reaction cleared); a member without the role gets a "nothing to do" reply.
+- [ ] `reversed` (reactions only): reacting removes the role (when held), removing the reaction gives it back.
+- [ ] `binding`: the first pick is kept; every later pick is refused as already chosen, even after the member loses the role by hand. A menu allows one selection. When the member leaves and rejoins they may choose again.
+- [ ] `lock`: every pick is refused as locked and nothing is given or taken; reactions are cleared.
+- [ ] Changing the type does not change roles members already hold; only later picks follow the new type. Changing a menu to `unique` or back updates how many options can be selected.
+- [ ] A reaction that is not one of the message's roles is removed by the bot. The bot's own reactions are never counted as picks.
+
+### Limit, whitelist and blacklist
+
+- [ ] `/reactionroles limit message_id:<id> number:2` on a `normal` message: a member holding two of its roles is refused a third (reaction removed, or an ephemeral refusal for buttons and the menu; a menu submission over the limit changes nothing). `number:0` removes the limit. `unique` and `binding` always allow one role, whatever the limit.
+- [ ] A role the member holds from somewhere else counts toward the limit if it is also one of the message's roles.
+- [ ] `whitelist mode:add role:Member`: a member without Member is refused, one with it is allowed. `mode:remove` and `mode:clear` undo it; `mode:add` without a role is refused.
+- [ ] `blacklist mode:add role:Muted`: a member holding Muted is refused. The blacklist wins over the whitelist.
+- [ ] A member clicking very fast (or two reactions at once) cannot get past the limit or a `unique` or `binding` rule.
+
+### Selfdestruct, refresh, purge and fix
+
+- [ ] `/reactionroles selfdestruct message_id:<id> duration:1m`: after about a minute (the scheduler ticks every 30 seconds) the message is deleted and `show` no longer lists it. `duration:off` cancels it. A bad duration is refused. Deleting the message by hand first causes no error.
+- [ ] Change the embed with `/embed edit`, then `/reactionroles refresh message_id:<id>`: the message shows the new embed and keeps its reactions, buttons or menu.
+- [ ] `/reactionroles purge message_id:<id>` asks for confirmation (Cancel changes nothing, another admin cannot press it). Confirm removes the roles from that message: it stays posted and stored but loses its reactions, buttons or menu. `purge` with no id forgets every role message in the server (the Discord messages stay) and cancels their selfdestruct timers.
+- [ ] Remove the bot's reactions by hand (or use "Remove all reactions"), then `/reactionroles status` flags the message and `/reactionroles fix` puts the reactions back. `fix` also re-renders a buttons or menu message whose components were removed. `fix` never gives or takes member roles.
+
+### Role deleted, message deleted, feature off, bot offline
+
+- [ ] Delete a role that is on a message: its entry disappears and the reaction, button or option is removed; `status` shows a message left with no roles as empty. Delete the message by hand: it is no longer in `show`. Delete the channel: its role messages are gone.
+- [ ] Move the bot's role below an offered role (or give an offered role Administrator): a pick for it is refused with "ask staff", and one mod log line appears per message per hour. `status` lists the role as a problem.
+- [ ] `/reactionroles disable`: reactions are ignored (left in place) and a button or menu pick says reaction roles are off. `enable` brings everything back with the same messages.
+- [ ] Stop the bot, react (or un-react) on a reactions message, start the bot: the earlier reaction does not change any role (reactions made while the bot was offline are not replayed), and `fix` only re-adds the bot's own reactions. Buttons and menus keep working after the restart.
+- [ ] The console shows no unhandled errors.
+
+## 16. Permissions and robustness
 
 - [ ] Every setup reply is ephemeral (only you see it).
 - [ ] A normal member cannot run `/logging`, `/autorole`, `/set`, `/media` or `/moderation` setup commands.
