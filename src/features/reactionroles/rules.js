@@ -18,9 +18,10 @@ export function decidePick({ message, entry, action, memberRoleIds, binding = nu
   // Lock / verify / binding: the staff-owned messages always clear the member's reaction
   // (even on a refusal or a `remove` action), so the toggle can be re-attempted fresh.
   const alwaysClear = type === 'lock' || type === 'verify' || type === 'binding';
-  // A reversed message is opt-out: the bot removing the reaction would fire a remove event, which grants the role.
-  const keepReaction = type === 'reversed';
-  const stop = (reason) => ({ ok: false, reason, clearReaction: alwaysClear || (action === 'add' && !(keepReaction && reason === 'nothing')) });
+  // The bot clearing a reaction fires a remove event for the member. A `nothing` refusal therefore keeps the reaction
+  // wherever that event would undo the member's state: reversed (it would grant) and normal/unique (it would revoke).
+  const keepsOnNothing = type === 'reversed' || type === 'normal' || type === 'unique';
+  const stop = (reason) => ({ ok: false, reason, clearReaction: alwaysClear || (action === 'add' && !(keepsOnNothing && reason === 'nothing')) });
 
   const blocked = gate(message, memberRoleIds);
   if (blocked) return stop(blocked);

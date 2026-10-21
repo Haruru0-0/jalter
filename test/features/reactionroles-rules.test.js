@@ -148,6 +148,18 @@ test('drop remove action is nothing and does not ask for reaction clear', () => 
   assert.deepEqual(out, { ok: false, reason: 'nothing', clearReaction: false });
 });
 
+for (const type of ['normal', 'unique']) {
+  test(`${type} add of a role the member already holds does nothing and keeps the reaction`, () => {
+    const out = decidePick({
+      message: makeMsg({ type, entries: [{ roleId: 'A' }] }),
+      entry: { roleId: 'A' },
+      action: 'add',
+      memberRoleIds: setOf('A'),
+    });
+    assert.deepEqual(out, { ok: false, reason: 'nothing', clearReaction: false });
+  });
+}
+
 // ── decidePick: reversed ────────────────────────────────────────────────────
 test('reversed add action removes a held role', () => {
   const out = decidePick({
