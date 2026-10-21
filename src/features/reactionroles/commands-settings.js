@@ -155,14 +155,26 @@ export async function handlePurge(interaction, ctx) {
   return interaction.update({ content, components: [] });
 }
 
-/** Deletes the Discord message (already gone counts as done) and its stored rows. */
+const UNKNOWN_CHANNEL = 10003;
+const UNKNOWN_MESSAGE = 10008;
+
+// Only "unknown channel / message" means the Discord message is gone; any other failure must reach the scheduler for a retry.
+async function orGone(promise) {
+  try {
+    return await promise;
+  } catch (err) {
+    if (err?.code === UNKNOWN_CHANNEL || err?.code === UNKNOWN_MESSAGE) return null;
+    throw err;
+  }
+}
+
+/** Deletes the Discord message (already gone counts as done), then its stored rows. Other failures are rethrown to retry. */
 export async function destructJob(ctx, job) {
   const message = await getMessage(ctx.db, job.key);
-  if (message) {
-    const channel = await ctx.client.channels.fetch(message.channelId).catch(() => null);
-    const discordMessage = channel && (await channel.messages.fetch(message.messageId).catch(() => null));
-    if (discordMessage) await discordMessage.delete();
-  }
+  if (!message) return;
+  const channel = await orGone(ctx.client.channels.fetch(message.channelId));
+  const discordMessage = channel && (await orGone(channel.messages.fetch(message.messageId)));
+  if (discordMessage) await orGone(discordMessage.delete());
   await deleteMessage(ctx.db, job.key);
 }
 

@@ -213,9 +213,60 @@ test('destructJob deletes the Discord message and the stored rows', async () => 
   assert.equal(await getMessage(db, 'm1'), null);
 });
 
+const discordError = (code) => Object.assign(new Error(`Discord error ${code}`), { code });
+const seedWithEntry = async () => {
+  await seed();
+  await addEntry(db, 'm1', { roleId: 'r1', label: 'A' });
+};
+
 test('destructJob counts an already deleted Discord message as done', async () => {
   await seed();
-  const env = setup({ messages: [] });
+  const env = setup();
+  env.store.get('m1').delete = async () => { throw discordError(10008); };
+  await destructJob(env.ctx, { guildId: G, key: 'm1' });
+  assert.equal(await getMessage(db, 'm1'), null);
+
+  await seed();
+  const gone = setup();
+  gone.ctx.client.channels.fetch = async () => { throw discordError(10003); };
+  await destructJob(gone.ctx, { guildId: G, key: 'm1' });
+  assert.equal(await getMessage(db, 'm1'), null);
+
+  await seed();
+  const missing = setup();
+  missing.ctx.client.channels.fetch = async () => ({ messages: { fetch: async () => { throw discordError(10008); } } });
+  await destructJob(missing.ctx, { guildId: G, key: 'm1' });
+  assert.equal(await getMessage(db, 'm1'), null);
+});
+
+test('destructJob rethrows a channel fetch failure and keeps the stored message', async () => {
+  await seedWithEntry();
+  const env = setup();
+  env.ctx.client.channels.fetch = async () => { throw discordError(50013); };
+  await assert.rejects(destructJob(env.ctx, { guildId: G, key: 'm1' }), { code: 50013 });
+  assert.equal((await getMessage(db, 'm1')).entries.length, 1);
+});
+
+test('destructJob rethrows a generic message fetch failure and keeps the stored message', async () => {
+  await seedWithEntry();
+  const env = setup();
+  env.ctx.client.channels.fetch = async () => ({ messages: { fetch: async () => { throw new Error('socket hang up'); } } });
+  await assert.rejects(destructJob(env.ctx, { guildId: G, key: 'm1' }), /socket hang up/);
+  assert.ok(await getMessage(db, 'm1'));
+});
+
+test('destructJob rethrows a failed delete and keeps the stored message', async () => {
+  await seedWithEntry();
+  const env = setup();
+  env.store.get('m1').delete = async () => { throw discordError(50013); };
+  await assert.rejects(destructJob(env.ctx, { guildId: G, key: 'm1' }), { code: 50013 });
+  assert.ok(await getMessage(db, 'm1'));
+});
+
+test('destructJob run again after success resolves quietly', async () => {
+  await seed();
+  const env = setup();
+  await destructJob(env.ctx, { guildId: G, key: 'm1' });
   await destructJob(env.ctx, { guildId: G, key: 'm1' });
   assert.equal(await getMessage(db, 'm1'), null);
 });
