@@ -479,7 +479,7 @@ Needs the bot to have Manage Roles, Add Reactions, Read Message History and Mana
 
 ### Setup and create
 
-- [ ] `/reactionroles status` works while the feature is off. A normal member is refused on every `/reactionroles` subcommand. Every reply is ephemeral.
+- [ ] While the feature is off, every `/reactionroles` subcommand except `enable` and `disable` (`status`, `create`, `show` and the rest) is refused with the "off" reply. A normal member is refused on every subcommand, `enable` and `disable` included. Every reply is ephemeral.
 - [ ] `/reactionroles enable`, then `/reactionroles create embed:colors style:reactions` posts the embed in the current channel (the embed name autocompletes), replies with the new message id and writes one mod log line. `channel:<other>` posts there instead. An unknown embed name is refused.
 - [ ] `create style:reactions type:reversed` works; `create style:buttons type:reversed` and `style:menu type:reversed` are refused (reversed needs reactions).
 - [ ] Take Add Reactions (or Manage Roles) from the bot and run `create style:reactions`: it is refused naming the missing permission and posts nothing. A reactions message of type `drop`, `verify`, `lock` or `binding` also needs Manage Messages.
@@ -527,7 +527,7 @@ Use a fresh message per style (reactions, buttons, menu) with three roles A, B, 
 - [ ] `/reactionroles selfdestruct message_id:<id> duration:1m`: after about a minute (the scheduler ticks every 30 seconds) the message is deleted and `show` no longer lists it. `duration:off` cancels it. A bad duration is refused. Deleting the message by hand first causes no error.
 - [ ] Change the embed with `/embed edit`, then `/reactionroles refresh message_id:<id>`: the message shows the new embed and keeps its reactions, buttons or menu.
 - [ ] `/reactionroles purge message_id:<id>` asks for confirmation (Cancel changes nothing, another admin cannot press it). Confirm removes the roles from that message: it stays posted and stored but loses its reactions, buttons or menu. `purge` with no id forgets every role message in the server (the Discord messages stay) and cancels their selfdestruct timers.
-- [ ] Remove the bot's reactions by hand (or use "Remove all reactions"), then `/reactionroles status` flags the message and `/reactionroles fix` puts the reactions back. `fix` also re-renders a buttons or menu message whose components were removed. `fix` never gives or takes member roles.
+- [ ] Remove all reactions from a reactions message (message menu, "Remove all reactions"), then `/reactionroles status` flags it as having no reactions (removing only some reactions is not flagged) and `/reactionroles fix` puts the reactions back. Removing just one of the bot's reactions by hand is not flagged by `status`, but `fix` puts it back. `fix` also re-renders a buttons or menu message whose components were removed. `fix` never gives or takes member roles.
 
 ### Role deleted, message deleted, feature off, bot offline
 
