@@ -36,7 +36,7 @@ The other intents Jalter uses (Guilds, Auto Moderation Execution, Guild Messages
    - Kick Members, Ban Members, Moderate Members (moderation: `/kick`, `/ban` and `/unban`, `/timeout` and `/untimeout`)
    - View Audit Log (logging "By" field; optional)
    - Manage Messages (`/purge messages`, auto-mod deleting offending messages, and reaction roles removing a member's reaction)
-   - Reaction roles: Manage Roles (gives and takes the roles), Add Reactions and Read Message History (the bot's own reactions on a reactions-style message), Manage Messages (removes a member's reaction for the `drop`, `verify`, `lock` and `binding` types)
+   - Reaction roles: Manage Roles (gives and takes the roles), Add Reactions and Read Message History (the bot's own reactions on a reactions-style message), Manage Messages (removes a member's reaction: after a refused pick, on a `unique` swap, and after every `drop`, `verify`, `lock` and `binding` pick; needed by every reactions-style message)
    - Manage Nicknames (auto-mod nickname check; optional)
    - Manage Server (auto-mod reading Discord AutoMod rules and receiving their events, and anti-raid's invite pause; optional for auto-mod, needed for the anti-raid invite pause)
    - Manage Channels (`/purge channel`, `/slowmode`, `/lock`, `/unlock`; also `/logging setup` and the log, welcome, goodbye and boost channels the bot creates when none was chosen)
