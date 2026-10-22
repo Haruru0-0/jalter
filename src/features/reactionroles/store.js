@@ -120,6 +120,13 @@ export const deleteEntriesForRole = (db, guildId, roleId) => deleteReturning(db,
    WHERE e.message_id = m.message_id AND m.guild_id = $1 AND e.role_id = $2
    RETURNING e.message_id`, [guildId, roleId]);
 
+/** Strips a role from the whitelist and blacklist of every message of the guild (the role was deleted). */
+export async function removeRoleFromLists(db, guildId, roleId) {
+  await db.query(
+    `UPDATE reaction_role_messages SET whitelist = whitelist - $2::text, blacklist = blacklist - $2::text
+     WHERE guild_id = $1 AND (whitelist ? $2::text OR blacklist ? $2::text)`, [guildId, roleId]);
+}
+
 export async function getBinding(db, messageId, userId) {
   const { rows } = await db.query(
     'SELECT role_id FROM reaction_role_bindings WHERE message_id = $1 AND user_id = $2', [messageId, userId]);

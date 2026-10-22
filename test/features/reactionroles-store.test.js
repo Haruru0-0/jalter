@@ -5,7 +5,7 @@ import { resetDb } from '../../src/db/index.js';
 import {
   createMessage, getMessage, addEntry, updateMessage, removeEntry, deleteMessage,
   deleteMessagesInChannel, deleteGuildMessages, clearEntries, deleteEntriesForRole,
-  setBinding, getBinding, clearMemberBindings,
+  setBinding, getBinding, clearMemberBindings, removeRoleFromLists,
 } from '../../src/features/reactionroles/store.js';
 
 let db;
@@ -115,4 +115,16 @@ test('clearEntries removes the entries of one message and keeps the message', as
   assert.equal((await getMessage(db, 'm1')).entries.length, 0);
   assert.equal((await getMessage(db, 'm2')).entries.length, 1);
   assert.equal(await clearEntries(db, 'm1'), 0);
+});
+
+test('removeRoleFromLists strips the role from both lists of every message of that guild only', async () => {
+  await createMessage(db, base);
+  await createMessage(db, { ...base, messageId: 'm2' });
+  await createMessage(db, { ...base, guildId: 'g2', messageId: 'm3' });
+  await updateMessage(db, 'm1', { whitelist: ['r1', 'r2'], blacklist: ['r1'] });
+  await updateMessage(db, 'm2', { blacklist: ['r3', 'r1'] });
+  await updateMessage(db, 'm3', { whitelist: ['r1'] });
+  await removeRoleFromLists(db, 'g1', 'r1');
+  const [m1, m2, m3] = await Promise.all(['m1', 'm2', 'm3'].map((id) => getMessage(db, id)));
+  assert.deepEqual([m1.whitelist, m1.blacklist, m2.whitelist, m2.blacklist, m3.whitelist], [['r2'], [], [], ['r3'], ['r1']]);
 });

@@ -237,7 +237,7 @@ test('a partial reaction or user that fails to fetch is ignored without throwing
   const a = fakeReaction(guild, { partial: true, failFetch: true });
   await handler(createEvents(), Events.MessageReactionAdd)(ctx(), a.reaction, user());
   const b = fakeReaction(guild);
-  await handler(createEvents(), Events.MessageReactionAdd)(ctx(), b.reaction, user('u1', { partial: true, fetch: async () => { throw new Error('gone'); } }));
+  await handler(createEvents(), Events.MessageReactionAdd)(ctx(), b.reaction, user('u1', { partial: true, bot: null, fetch: async () => { throw new Error('gone'); } }));
   assert.deepEqual([member.calls, a.removed, b.removed], [[], [], []]);
 });
 
@@ -313,20 +313,129 @@ test('an event handler never throws', async () => {
   }
 });
 
+// I3: a refusal decided after the rules (role gone, bot can no longer give it, Discord error) clears the
+// member's reaction; the Remove event that clearing fires finds nothing to change.
+for (const [reason, arrange] of [
+  ['role_missing', (guild) => { guild.roles.cache.delete('A'); }],
+  ['cannot_give', (guild) => { guild.roles.cache.set('A', { id: 'A', name: 'Alpha', position: 50 }); }],
+  ['discord_failed', (guild, member) => { member.failOn.add('put'); }],
+]) {
+  test(`${reason} on a reaction add removes the reaction and the follow-up Remove changes nothing`, async () => {
+    await seed();
+    const guild = fakeGuild();
+    const member = fakeMember(guild);
+    arrange(guild, member);
+    const events = createEvents();
+    const warn = console.warn;
+    console.warn = () => {};
+    try {
+      const add = fakeReaction(guild);
+      await handler(events, Events.MessageReactionAdd)(ctx(), add.reaction, user());
+      assert.deepEqual(add.removed, [['🅰️', 'u1']]);
+      const before = member.calls.length;
+      const remove = fakeReaction(guild);
+      await handler(events, Events.MessageReactionRemove)(ctx(), remove.reaction, user());
+      assert.equal(member.calls.length, before);
+      assert.deepEqual(heldRoles(member), []);
+    } finally {
+      console.warn = warn;
+    }
+  });
+}
+
+// I4: a reaction on a message that is not ours, or while the feature is off, costs no REST call.
+test('a reaction on an unknown message or with the feature off fetches nothing', async () => {
+  await seed();
+  const guild = fakeGuild();
+  fakeMember(guild);
+  const userFetches = [];
+  const partialUser = () => user('u1', { partial: true, bot: null, fetch: async () => { userFetches.push('user'); } });
+  const unknown = fakeReaction(guild, { messageId: 'nope', partial: true, messagePartial: true });
+  await handler(createEvents(), Events.MessageReactionAdd)(ctx(), unknown.reaction, partialUser());
+  await setFeature(db, 'g1', 'reactionroles', { enabled: false });
+  const off = fakeReaction(guild, { partial: true, messagePartial: true });
+  await handler(createEvents(), Events.MessageReactionAdd)(ctx(), off.reaction, partialUser());
+  assert.deepEqual([unknown.fetched, off.fetched, userFetches, guild.members.fetches], [[], [], [], []]);
+});
+
+test('a hit hydrates the partials, and a user already known not to be a bot is not fetched', async () => {
+  await seed();
+  const guild = fakeGuild();
+  const member = fakeMember(guild);
+  const userFetches = [];
+  const r = fakeReaction(guild, { partial: true, messagePartial: true });
+  await handler(createEvents(), Events.MessageReactionAdd)(ctx(), r.reaction, user('u1', { partial: true, fetch: async () => { userFetches.push('user'); } }));
+  assert.deepEqual(r.fetched, ['reaction', 'message']);
+  assert.deepEqual(userFetches, []);
+  assert.deepEqual(member.calls, [['put', 'A']]);
+});
+
+test('a partial user whose bot flag is unknown is fetched, and a bot is then ignored', async () => {
+  await seed();
+  const guild = fakeGuild();
+  const member = fakeMember(guild);
+  const u = user('u1', { partial: true, bot: null });
+  u.fetch = async () => { u.bot = true; u.partial = false; };
+  await handler(createEvents(), Events.MessageReactionAdd)(ctx(), fakeReaction(guild).reaction, u);
+  assert.deepEqual(member.calls, []);
+});
+
+// I6: a deleted role leaves the whitelist and blacklist of every message of the guild.
+test('RoleDelete strips the role from every whitelist and blacklist of the guild', async () => {
+  await seed({ messageId: 'm1' });
+  await seed({ messageId: 'm2' });
+  await createMessage(db, { guildId: 'g2', messageId: 'm9', channelId: 'c9', style: 'buttons', createdBy: 'x' });
+  await updateMessage(db, 'm1', { whitelist: ['Z', 'K'], blacklist: ['Z'] });
+  await updateMessage(db, 'm2', { blacklist: ['K', 'Z'] });
+  await updateMessage(db, 'm9', { whitelist: ['Z'] });
+  const guild = { id: 'g1', channels: { fetch: async () => null } };
+  await handler(createEvents(), Events.GuildRoleDelete)(ctx(), { id: 'Z', guild });
+  const [m1, m2, m9] = await Promise.all(['m1', 'm2', 'm9'].map((id) => getMessage(db, id)));
+  assert.deepEqual([m1.whitelist, m1.blacklist, m2.blacklist, m9.whitelist], [['K'], [], ['K'], ['Z']]);
+});
+
+// T7#22: one message that fails to sync does not stop the others.
+test('RoleDelete keeps syncing the other messages when one sync fails', async () => {
+  await seed({ style: 'buttons', messageId: 'm1' });
+  await seed({ style: 'buttons', messageId: 'm2' });
+  const edits = [];
+  const discordMessage = (id) => ({ guild: fakeGuild(), edit: async (p) => { edits.push([id, p]); } });
+  // A fetch that throws outright (not a rejected promise) for m1 escapes the .catch() guards.
+  const fetchMessage = (m) => { if (m === 'm1') throw new Error('boom'); return Promise.resolve(discordMessage(m)); };
+  const guild = { id: 'g1', channels: { fetch: async () => ({ messages: { fetch: fetchMessage } }) } };
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    await handler(createEvents(), Events.GuildRoleDelete)(ctx(), { id: 'A', guild });
+  } finally {
+    console.warn = warn;
+  }
+  assert.deepEqual(edits.map(([id]) => id), ['m2']);
+  assert.deepEqual((await getMessage(db, 'm2')).entries.map((e) => e.roleId), ['B']);
+});
+
 // Interactions.
+// `replies` holds what the member is shown, from reply() or the editReply() that ends a deferred pick.
+// `deferred` records each deferReply, with how many role calls and member fetches had happened by then.
 function fakeInteraction(guild, member, customId, extra = {}) {
   const replies = [];
+  const deferred = [];
   return {
     replies,
+    deferred,
     guildId: 'g1',
     guild,
     member,
     user: { id: member.id },
     customId,
     reply: async (p) => { replies.push(p); },
+    deferReply: async (p) => { deferred.push({ ...p, calls: member.calls?.length ?? 0, fetches: guild.members.fetches?.length ?? 0 }); },
+    editReply: async (p) => { replies.push(p); },
     ...extra,
   };
 }
+
+const DEFERRED = [{ flags: MessageFlags.Ephemeral, calls: 0, fetches: 0 }];
 
 test('a button click replies ephemerally with the added role name', async () => {
   const message = await seed({ style: 'buttons' });
@@ -335,7 +444,9 @@ test('a button click replies ephemerally with the added role name', async () => 
   const i = fakeInteraction(guild, member, `reactionroles:btn:m1:${message.entries[0].id}`);
   await handle(i, ctx());
   assert.deepEqual(member.calls, [['put', 'A']]);
-  assert.deepEqual(i.replies, [{ content: 'You now have Alpha.', flags: MessageFlags.Ephemeral }]);
+  // I5: acknowledged before the member fetch and the role call, answered with editReply.
+  assert.deepEqual(i.deferred, DEFERRED);
+  assert.deepEqual(i.replies, ['You now have Alpha.']);
 });
 
 test('a second button click removes the role and says so', async () => {
@@ -345,7 +456,8 @@ test('a second button click removes the role and says so', async () => {
   const i = fakeInteraction(guild, member, `reactionroles:btn:m1:${message.entries[0].id}`);
   await handle(i, ctx());
   assert.deepEqual(member.calls, [['delete', 'A']]);
-  assert.deepEqual(i.replies, [{ content: 'Alpha was removed.', flags: MessageFlags.Ephemeral }]);
+  assert.deepEqual(i.deferred, DEFERRED);
+  assert.deepEqual(i.replies, ['Alpha was removed.']);
 });
 
 test('a refused button click replies with the refusal text', async () => {
@@ -355,7 +467,7 @@ test('a refused button click replies with the refusal text', async () => {
   const i = fakeInteraction(guild, member, `reactionroles:btn:m1:${message.entries[0].id}`);
   await handle(i, ctx());
   assert.deepEqual(member.calls, []);
-  assert.deepEqual(i.replies, [{ content: 'You cannot change your roles on this message.', flags: MessageFlags.Ephemeral }]);
+  assert.deepEqual(i.replies, ['You cannot change your roles on this message.']);
 });
 
 test('a button of a disabled feature replies that reaction roles are off', async () => {
@@ -402,7 +514,8 @@ test('a menu selection adds the chosen roles and removes the unchosen ones', asy
   const i = fakeInteraction(guild, member, 'reactionroles:menu:m1', { values: ['A'] });
   await handle(i, ctx());
   assert.deepEqual(member.calls, [['put', 'A'], ['delete', 'B']]);
-  assert.deepEqual(i.replies, [{ content: 'You now have Alpha.\nBeta was removed.', flags: MessageFlags.Ephemeral }]);
+  assert.deepEqual(i.deferred, DEFERRED);
+  assert.deepEqual(i.replies, ['You now have Alpha.\nBeta was removed.']);
 });
 
 test('an empty menu selection on a verify message removes nothing', async () => {
@@ -422,6 +535,27 @@ test('a member missing from the interaction cache is fetched', async () => {
   const i = fakeInteraction(guild, { id: 'u1' }, `reactionroles:btn:m1:${message.entries[0].id}`);
   await handle(i, ctx());
   assert.deepEqual(member.calls, [['put', 'A']]);
+  assert.deepEqual(i.replies, ['You now have Alpha.']);
+});
+
+test('a member who cannot be fetched gets the generic error after the defer', async () => {
+  const message = await seed({ style: 'buttons' });
+  const guild = fakeGuild();
+  fakeMember(guild);
+  const i = fakeInteraction(guild, { id: 'stranger' }, `reactionroles:btn:m1:${message.entries[0].id}`);
+  await handle(i, ctx());
+  assert.equal(i.deferred.length, 1);
+  assert.deepEqual(i.replies, ['Something went wrong. Please try again.']);
+});
+
+// C1 + C2 through the button route: two quick clicks on a unique message, the cache never catching up.
+test('two quick clicks on different buttons of a unique message leave one role', async () => {
+  const message = await seed({ style: 'buttons', type: 'unique' });
+  const guild = fakeGuild();
+  const member = fakeMember(guild, ['A']);
+  const click = (roleId) => fakeInteraction(guild, member, `reactionroles:btn:m1:${message.entries.find((e) => e.roleId === roleId).id}`);
+  await Promise.all([handle(click('B'), ctx()), handle(click('A'), ctx())]);
+  assert.equal(heldRoles(member).length, 1);
 });
 
 test('a foreign prefix or a DM is ignored', async () => {

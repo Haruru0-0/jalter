@@ -1,3 +1,4 @@
+import { MessageFlags } from 'discord.js';
 import { getFeature } from '../../db/settings.js';
 import { getLang, t } from '../../i18n/index.js';
 import { ephemeral } from '../../core/replies.js';
@@ -24,12 +25,14 @@ async function pick(interaction, ctx, lang, messageId, build) {
   if (!message) return interaction.reply(ephemeral(t(lang, 'reactionroles.gone')));
   const feature = await getFeature(ctx.db, interaction.guildId, 'reactionroles');
   if (!feature.enabled) return interaction.reply(ephemeral(t(lang, 'reactionroles.off')));
-  const member = interaction.member?.roles?.cache ? interaction.member : await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
-  if (!member) return interaction.reply(ephemeral(t(lang, 'common.error')));
   const picked = build(message);
   if (!picked) return interaction.reply(ephemeral(t(lang, 'reactionroles.gone')));
+  // The pick waits for the member lock and makes role calls: acknowledge first, inside Discord's 3 seconds.
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const member = interaction.member?.roles?.cache ? interaction.member : await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+  if (!member) return interaction.editReply(t(lang, 'common.error'));
   const result = await applyPick(ctx, member, message, picked);
-  return interaction.reply(ephemeral(summary(lang, interaction.guild, result)));
+  return interaction.editReply(summary(lang, interaction.guild, result));
 }
 
 /** Routes every `reactionroles:*` component: picks and the purge confirm. */
