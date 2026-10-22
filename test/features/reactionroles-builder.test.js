@@ -56,12 +56,17 @@ function fake(env, customId, extra = {}) {
     update: async (p) => { calls.push(['update', p]); },
     reply: async (p) => { calls.push(['reply', p]); },
     showModal: async (m) => { calls.push(['showModal', m]); },
+    deferUpdate: async () => { calls.push(['deferUpdate']); },
+    editReply: async (p) => { calls.push(['editReply', p]); },
+    followUp: async (p) => { calls.push(['followUp', p]); },
   };
 }
 const panelId = (action, { user = USER, msg = MSG, at = stamp(), extra } = {}) =>
   ['reactionroles', 'b', action, user, msg, at, extra].filter((p) => p !== undefined).join(':');
 const parts = (components) => components.flatMap((r) => r.toJSON().components);
 const refusal = (key) => ['reply', { content: t('en', key), flags: MessageFlags.Ephemeral }];
+// A refusal after the panel was acknowledged (deferUpdate): a separate ephemeral message, the panel stays.
+const lateRefusal = (key) => [['deferUpdate'], ['followUp', { content: t('en', key), flags: MessageFlags.Ephemeral }]];
 
 // ---- builderPayload ----
 
@@ -168,9 +173,9 @@ test('modal submit adds the entry, re-renders the panel and writes one log line'
   await seed();
   const i = fake(env, panelId('modal', { extra: ROLE }), { fields: { emoji: '', label: ' Gamers ' } });
   await handleBuilder(i, env.ctx);
-  assert.equal(i.calls.length, 1);
-  assert.equal(i.calls[0][0], 'update');
-  assert.ok(i.calls[0][1].content.includes(`Gamers <@&${ROLE}>`));
+  // I5 / T8#29: acknowledged before the store and the Discord sync, then the panel is edited.
+  assert.deepEqual(i.calls.map((c) => c[0]), ['deferUpdate', 'editReply']);
+  assert.ok(i.calls[1][1].content.includes(`Gamers <@&${ROLE}>`));
   const stored = (await getMessage(db, MSG)).entries;
   assert.deepEqual(stored.map((e) => [e.roleId, e.emoji, e.label]), [[ROLE, null, 'Gamers']]);
   assert.equal(env.logged.length, 1);
@@ -181,7 +186,7 @@ test('a dangerous role is refused with the setup message, nothing stored or logg
   await seed();
   const i = fake(env, panelId('modal', { extra: ROLE }), { fields: { label: 'Gamers' } });
   await handleBuilder(i, env.ctx);
-  assert.deepEqual(i.calls, [refusal('reactionroles.add.role.dangerous')]);
+  assert.deepEqual(i.calls, lateRefusal('reactionroles.add.role.dangerous'));
   assert.equal((await getMessage(db, MSG)).entries.length, 0);
   assert.equal(env.logged.length, 0);
 });
@@ -192,10 +197,10 @@ test('a duplicate role and a bad emoji reuse the /reactionroles add refusals', a
   await addEntry(db, MSG, { roleId: ROLE, label: 'A' });
   const dup = fake(env, panelId('modal', { extra: ROLE }), { fields: { label: 'B' } });
   await handleBuilder(dup, env.ctx);
-  assert.deepEqual(dup.calls, [refusal('reactionroles.add.duplicate')]);
+  assert.deepEqual(dup.calls, lateRefusal('reactionroles.add.duplicate'));
   const bad = fake(env, panelId('modal', { extra: ROLE2 }), { fields: { emoji: 'notanemoji', label: 'B' } });
   await handleBuilder(bad, env.ctx);
-  assert.deepEqual(bad.calls, [refusal('reactionroles.add.emoji.invalid')]);
+  assert.deepEqual(bad.calls, lateRefusal('reactionroles.add.emoji.invalid'));
   assert.equal(env.logged.length, 0);
 });
 
@@ -214,9 +219,9 @@ test('Remove deletes the entry, re-renders and writes one log line', async () =>
   await addEntry(db, MSG, { roleId: ROLE2, label: 'B' });
   const i = fake(env, panelId('rm'), { values: [ROLE] });
   await handleBuilder(i, env.ctx);
-  assert.equal(i.calls[0][0], 'update');
-  assert.ok(!i.calls[0][1].content.includes(`<@&${ROLE}>`));
-  assert.ok(i.calls[0][1].content.includes(`<@&${ROLE2}>`));
+  assert.deepEqual(i.calls.map((c) => c[0]), ['deferUpdate', 'editReply']);
+  assert.ok(!i.calls[1][1].content.includes(`<@&${ROLE}>`));
+  assert.ok(i.calls[1][1].content.includes(`<@&${ROLE2}>`));
   assert.deepEqual((await getMessage(db, MSG)).entries.map((e) => e.roleId), [ROLE2]);
   assert.equal(env.logged.length, 1);
 });
@@ -226,7 +231,7 @@ test('Remove of an entry that is already gone logs nothing but still re-renders'
   await seed();
   const i = fake(env, panelId('rm'), { values: [ROLE] });
   await handleBuilder(i, env.ctx);
-  assert.equal(i.calls[0][0], 'update');
+  assert.deepEqual(i.calls.map((c) => c[0]), ['deferUpdate', 'editReply']);
   assert.equal(env.logged.length, 0);
 });
 
@@ -356,4 +361,22 @@ test('Add syncs the Discord message: the new button appears', async () => {
   await handleBuilder(fake(env, panelId('modal', { extra: ROLE }), { fields: { label: 'Gamers' } }), env.ctx);
   assert.equal(dm.edits.length, 1);
   assert.deepEqual(buttonLabels(dm.edits[0]), ['Gamers']);
+});
+
+test('Add and Remove acknowledge the panel before the Discord sync', async () => {
+  const env = setup();
+  await seed();
+  const dm = withDiscordMessage(env);
+  const order = [];
+  const edit = dm.edit;
+  dm.edit = async (p) => { order.push('sync'); return edit(p); };
+  const add = fake(env, panelId('modal', { extra: ROLE }), { fields: { label: 'Gamers' } });
+  add.deferUpdate = async () => { order.push('defer'); };
+  add.editReply = async () => { order.push('panel'); };
+  await handleBuilder(add, env.ctx);
+  const rm = fake(env, panelId('rm'), { values: [ROLE] });
+  rm.deferUpdate = async () => { order.push('defer'); };
+  rm.editReply = async () => { order.push('panel'); };
+  await handleBuilder(rm, env.ctx);
+  assert.deepEqual(order, ['defer', 'sync', 'panel', 'defer', 'sync', 'panel']);
 });

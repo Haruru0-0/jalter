@@ -4,13 +4,14 @@ import { handleToggle } from '../../core/toggle.js';
 import { ephemeral } from '../../core/replies.js';
 import { t } from '../../i18n/index.js';
 import { canManage } from '../../core/permissions.js';
-import { botCanGive } from '../../core/role-safety.js';
 import { listEmbeds } from '../embeds/store.js';
 import { STYLES, TYPES, typeAllowedForStyle } from './config.js';
 import { createMessage, getMessage, listMessages, removeEntry } from './store.js';
 import { postRoleMessage, syncMessage } from './render.js';
 import { logReactionRoles } from './log.js';
-import { addOne, fetchDiscordMessage, fitLines, loadMessage, messageIdOption, refuseMissingPermission } from './setup.js';
+import {
+  addOne, fetchDiscordMessage, fitLines, loadMessage, messageIdOption, refuseMissingPermission, roleStillGivable,
+} from './setup.js';
 import { builderHandler } from './builder.js';
 import { handle } from './components.js';
 import { settingsSubcommands, settingsHandlers } from './commands-settings.js';
@@ -100,6 +101,8 @@ async function add(interaction, ctx, lang) {
   const channel = await interaction.guild.channels.fetch(message.channelId).catch(() => null);
   if (await refuseMissingPermission(interaction, lang, channel, message)) return;
   const role = interaction.options.getRole('role');
+  // The sync below reacts or edits on Discord: acknowledge first.
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const outcome = await addOne(ctx, { guild: interaction.guild, caller: interaction.member }, message, {
     role,
     emojiText: interaction.options.getString('emoji'),
@@ -110,7 +113,7 @@ async function add(interaction, ctx, lang) {
       action: 'add', actorId: interaction.user.id, messageId: message.messageId, detail: `<@&${role.id}>`,
     });
   }
-  return interaction.reply(ephemeral(t(lang, outcome === 'ok' ? 'reactionroles.added' : `reactionroles.add.${outcome}`)));
+  return interaction.editReply(t(lang, outcome === 'ok' ? 'reactionroles.added' : `reactionroles.add.${outcome}`));
 }
 
 async function remove(interaction, ctx, lang) {
@@ -161,7 +164,7 @@ async function status(interaction, ctx, lang) {
     if (!m.entries.length) problems.push(t(lang, 'reactionroles.status.empty', { id: m.messageId }));
     for (const e of m.entries) {
       const role = interaction.guild.roles.cache.get(e.roleId);
-      if (!role || !botCanGive(interaction.guild, role)) problems.push(t(lang, 'reactionroles.status.role', { id: m.messageId, role: `<@&${e.roleId}>` }));
+      if (!roleStillGivable(interaction.guild, role)) problems.push(t(lang, 'reactionroles.status.role', { id: m.messageId, role: `<@&${e.roleId}>` }));
     }
     if (m.style === 'reactions' && m.entries.some((e) => e.emoji) && discordMessage.reactions.cache.size === 0) {
       problems.push(t(lang, 'reactionroles.status.reactions', { id: m.messageId }));

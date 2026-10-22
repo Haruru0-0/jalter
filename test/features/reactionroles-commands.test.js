@@ -1,6 +1,6 @@
 import { test, before, beforeEach, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { PermissionFlagsBits as P } from 'discord.js';
+import { PermissionFlagsBits as P, MessageFlags } from 'discord.js';
 import { testDb } from '../helpers/db.js';
 import { resetDb } from '../../src/db/index.js';
 import { setFeature } from '../../src/db/settings.js';
@@ -206,9 +206,22 @@ test('create needs Manage Roles for every style and Manage Messages for a drop r
   assert.match(last(await run(noRoles, 'create', { embed: 'roles', style: 'buttons' })), /Manage Roles/);
   const noManage = setup({ channels: [fakeChannel('c1', { perms: P.ManageRoles | P.AddReactions | P.ReadMessageHistory })] });
   assert.match(last(await run(noManage, 'create', { embed: 'roles', style: 'reactions', type: 'drop' })), /Manage Messages/);
-  const fine = setup({ channels: [fakeChannel('c1', { perms: P.ManageRoles | P.AddReactions | P.ReadMessageHistory })] });
-  assert.equal(last(await run(fine, 'create', { embed: 'roles', style: 'reactions' })), t('en', 'reactionroles.created', { id: 'posted1' }));
+  const fine = setup({ channels: [fakeChannel('c1', { perms: P.ManageRoles })] });
+  assert.equal(last(await run(fine, 'create', { embed: 'roles', style: 'buttons' })), t('en', 'reactionroles.created', { id: 'posted1' }));
 });
+
+// M2: every reactions message can need its member reactions removed (a unique swap, any refused add).
+for (const type of ['normal', 'unique', 'reversed']) {
+  test(`create needs Manage Messages for a reactions ${type} message`, async () => {
+    await enable();
+    await createEmbed(db, G, 'roles');
+    await saveEmbed(db, G, 'roles', { title: 'Pick', description: 'Choose below' });
+    const env = setup({ channels: [fakeChannel('c1', { perms: P.ManageRoles | P.AddReactions | P.ReadMessageHistory })] });
+    const i = await run(env, 'create', { embed: 'roles', style: 'reactions', type });
+    assert.equal(last(i), t('en', 'reactionroles.needPermission', { permission: 'Manage Messages' }));
+    assert.equal(env.chans.get('c1').sent.length, 0);
+  });
+}
 
 // ---- adopt ----
 
@@ -422,6 +435,49 @@ test('status flags an empty message, an ungivable role and missing reactions', a
   assert.ok(text.includes(t('en', 'reactionroles.status.empty', { id: 'empty1' })));
   assert.ok(text.includes(t('en', 'reactionroles.status.role', { id: 'react1', role: '<@&gone-role>' })));
   assert.ok(text.includes(t('en', 'reactionroles.status.reactions', { id: 'react1' })));
+});
+
+// I1: a role that gained a staff permission since setup is a problem too.
+test('status flags a role that has since gained Administrator', async () => {
+  await enable();
+  await stored('buttons', 'btn1');
+  await addEntry(db, 'btn1', { roleId: 'admin', label: 'Admin' });
+  const admin = role('admin', 3, { permissions: { has: (p) => p === 'Administrator' } });
+  const env = setup({ roles: [admin], channels: [fakeChannel('c1', { messages: [fakeDiscordMessage('btn1')] })] });
+  const text = last(await run(env, 'status'));
+  assert.ok(text.includes(t('en', 'reactionroles.status.role', { id: 'btn1', role: '<@&admin>' })));
+});
+
+// I5: add acknowledges before the Discord sync and answers with editReply.
+test('add defers before syncing the message and finishes with editReply', async () => {
+  await enable();
+  await stored('reactions');
+  const r = role('r1', 3);
+  const msg = fakeDiscordMessage('m1');
+  const env = setup({ roles: [r], channels: [fakeChannel('c1', { messages: [msg] })] });
+  const events = [];
+  const react = msg.react;
+  msg.react = async (e) => { events.push('react'); return react(e); };
+  const interaction = fakeInteraction(env, 'add', { message_id: 'm1', role: r, emoji: '😀' });
+  interaction.deferReply = async (p) => { events.push(['defer', p.flags]); };
+  interaction.reply = async () => { events.push('reply'); };
+  interaction.editReply = async (p) => { events.push(['edit', p]); };
+  await command.execute(interaction, env.ctx);
+  assert.deepEqual(events, [['defer', MessageFlags.Ephemeral], 'react', ['edit', t('en', 'reactionroles.added')]]);
+});
+
+test('add refusals after the defer arrive through editReply', async () => {
+  await enable();
+  await stored('reactions');
+  const r = role('r1', 3, { permissions: { has: (p) => p === 'BanMembers' } });
+  const env = setup({ roles: [r] });
+  const interaction = fakeInteraction(env, 'add', { message_id: 'm1', role: r, emoji: '😀' });
+  const events = [];
+  interaction.deferReply = async () => { events.push('defer'); };
+  interaction.reply = async () => { events.push('reply'); };
+  interaction.editReply = async (p) => { events.push(['edit', p]); };
+  await command.execute(interaction, env.ctx);
+  assert.deepEqual(events, ['defer', ['edit', t('en', 'reactionroles.add.role.dangerous')]]);
 });
 
 // ---- autocomplete ----

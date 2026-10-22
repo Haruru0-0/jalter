@@ -34,9 +34,11 @@ function fakeDiscordMessage(id, { reactions = [] } = {}) {
   };
 }
 
-function setup({ messages = [fakeDiscordMessage('m1')], allowed = true } = {}) {
+function setup({ messages = [fakeDiscordMessage('m1')], allowed = true, perms = null } = {}) {
   const store = new Map(messages.map((m) => [m.id, m]));
   const channel = { id: 'c1', messages: { fetch: async (id) => { if (!store.has(id)) throw new Error('unknown'); return store.get(id); } } };
+  // `perms`: the bot's permission names in the channel (default: the fake checks no permission).
+  if (perms) channel.permissionsFor = () => ({ has: (flag) => perms.includes(flag) });
   const guild = {
     id: G, name: 'Guild', memberCount: 5, createdTimestamp: 1700000000000, iconURL: () => null,
     members: { me: { id: BOT } },
@@ -50,10 +52,12 @@ function setup({ messages = [fakeDiscordMessage('m1')], allowed = true } = {}) {
   return { guild, ctx, member, store, logged };
 }
 
+// `events` records the order of the acknowledgement and the answers: 'reply', 'defer', 'edit'.
 function fakeInteraction(env, sub, opts = {}) {
   const replies = [];
+  const events = [];
   return {
-    guildId: G, guild: env.guild, member: env.member, user: { id: 'staff', username: 'staff', displayAvatarURL: () => '' }, replies,
+    guildId: G, guild: env.guild, member: env.member, user: { id: 'staff', username: 'staff', displayAvatarURL: () => '' }, replies, events,
     inGuild: () => true,
     options: {
       getSubcommand: () => sub,
@@ -61,7 +65,9 @@ function fakeInteraction(env, sub, opts = {}) {
       getInteger: (n) => opts[n] ?? null,
       getRole: (n) => opts[n] ?? null,
     },
-    reply: async (p) => { replies.push(p); },
+    reply: async (p) => { events.push('reply'); replies.push(p); },
+    deferReply: async () => { events.push('defer'); },
+    editReply: async (p) => { events.push('edit'); replies.push(p); },
   };
 }
 
@@ -299,6 +305,25 @@ test('refresh re-renders a named embed, and reports a missing one', async () => 
   assert.equal(env2.logged.length, 0);
 });
 
+// M2: changing the type of a reactions message re-checks the bot's permissions first.
+test('type on a reactions message is refused when the bot lacks Manage Messages', async () => {
+  await enable();
+  await seed({ style: 'reactions' });
+  const env = setup({ perms: ['ManageRoles', 'AddReactions', 'ReadMessageHistory'] });
+  const i = await run(env, 'type', { message_id: 'm1', type: 'unique' });
+  assert.equal(last(i), t('en', 'reactionroles.needPermission', { permission: 'Manage Messages' }));
+  assert.equal((await getMessage(db, 'm1')).type, 'normal');
+});
+
+test('type on a reactions message with every permission is saved', async () => {
+  await enable();
+  await seed({ style: 'reactions' });
+  const env = setup({ perms: ['ManageRoles', 'AddReactions', 'ReadMessageHistory', 'ManageMessages'] });
+  const i = await run(env, 'type', { message_id: 'm1', type: 'drop' });
+  assert.equal(last(i), t('en', 'common.saved'));
+  assert.equal((await getMessage(db, 'm1')).type, 'drop');
+});
+
 // ---- fix ----
 
 test('fix repairs one message or every message of the server', async () => {
@@ -313,6 +338,22 @@ test('fix repairs one message or every message of the server', async () => {
   assert.equal(env.store.get('m2').edits.length, 0);
   const all = await run(env, 'fix', {});
   assert.equal(last(all), t('en', 'reactionroles.fixed', { count: 2 }));
+  // I5: acknowledged before the syncs, answered with editReply.
+  assert.deepEqual([one.events, all.events], [['defer', 'edit'], ['defer', 'edit']]);
+});
+
+test('fix defers before the first Discord fetch', async () => {
+  await enable();
+  await seed();
+  const env = setup();
+  const order = [];
+  const fetch = env.guild.channels.fetch;
+  env.guild.channels.fetch = async (id) => { order.push('fetch'); return fetch(id); };
+  const i = fakeInteraction(env, 'fix', {});
+  i.deferReply = async () => { order.push('defer'); };
+  i.editReply = async () => { order.push('edit'); };
+  await command.execute(i, env.ctx);
+  assert.deepEqual(order, ['defer', 'fetch', 'edit']);
 });
 
 // ---- purge ----
@@ -322,7 +363,10 @@ function buttonPress(env, customId, userId = 'staff') {
   const replies = [];
   return {
     customId, guildId: G, guild: env.guild, member: env.member, user: { id: userId, username: userId }, updates, replies,
-    update: async (p) => { updates.push(p); },
+    events: [],
+    update: async function update(p) { this.events.push('update'); updates.push(p); },
+    deferUpdate: async function deferUpdate() { this.events.push('defer'); },
+    editReply: async function editReply(p) { this.events.push('edit'); updates.push(p); },
     reply: async (p) => { replies.push(p); },
   };
 }
@@ -373,6 +417,8 @@ test('confirming purge of one message clears its roles, keeps the row and strips
   assert.deepEqual(env.store.get('m1').edits, [{ components: [] }]);
   assert.equal(env.store.get('m1').deleted, false);
   assert.equal(env.logged.length, 1);
+  // I5: the confirm acknowledges before removing the controls, then edits the prompt.
+  assert.deepEqual(press.events, ['defer', 'edit']);
 });
 
 test('confirming purge of all forgets every stored message and cancels the selfdestruct jobs', async () => {
@@ -389,6 +435,7 @@ test('confirming purge of all forgets every stored message and cancels the selfd
   assert.ok(await getMessage(db, 'o1'));
   assert.deepEqual(await jobsOf(), ['o1']);
   for (const m of env.store.values()) assert.equal(m.deleted, false);
+  assert.deepEqual(press.events, ['defer', 'edit']);
 });
 
 test('cancelling purge changes nothing', async () => {

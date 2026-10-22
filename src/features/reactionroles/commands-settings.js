@@ -7,7 +7,7 @@ import { canManage } from '../../core/permissions.js';
 import { TYPES, SELFDESTRUCT_JOB, typeAllowedForStyle } from './config.js';
 import { getMessage, listMessages, updateMessage, deleteMessage, deleteGuildMessages, clearEntries } from './store.js';
 import { syncMessage, refreshEmbed } from './render.js';
-import { fetchDiscordMessage, loadMessage, messageIdOption } from './setup.js';
+import { fetchDiscordMessage, loadMessage, messageIdOption, refuseMissingPermission } from './setup.js';
 import { logReactionRoles } from './log.js';
 
 const logged = (interaction, ctx, lang, message, action, detail) =>
@@ -18,6 +18,11 @@ async function type(interaction, ctx, lang) {
   if (!message) return;
   const next = interaction.options.getString('type');
   if (!typeAllowedForStyle(next, message.style)) return interaction.reply(ephemeral(t(lang, 'reactionroles.reversedNeedsReactions')));
+  if (message.style === 'reactions') {
+    // The bot may have lost a permission since setup: check again before the message changes behaviour.
+    const channel = await interaction.guild.channels.fetch(message.channelId).catch(() => null);
+    if (await refuseMissingPermission(interaction, lang, channel, { style: message.style, type: next })) return;
+  }
   // Existing role holders keep their roles: only later picks follow the new type.
   await updateMessage(ctx.db, message.messageId, { type: next });
   const fresh = await getMessage(ctx.db, message.messageId);
@@ -94,6 +99,8 @@ async function fix(interaction, ctx, lang) {
   } else {
     targets = await listMessages(ctx.db, interaction.guildId);
   }
+  // Every target is fetched and synced on Discord: acknowledge first.
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   let fixed = 0;
   for (const m of targets) {
     const discordMessage = await fetchDiscordMessage(interaction.guild, m);
@@ -102,7 +109,7 @@ async function fix(interaction, ctx, lang) {
   await logReactionRoles(ctx, interaction.guild, lang, {
     action: 'fix', actorId: interaction.user.id, messageId: targets.length === 1 ? targets[0].messageId : 'all', detail: String(fixed),
   });
-  return interaction.reply(ephemeral(t(lang, 'reactionroles.fixed', { count: fixed })));
+  return interaction.editReply(t(lang, 'reactionroles.fixed', { count: fixed }));
 }
 
 async function purge(interaction, ctx, lang) {
@@ -136,6 +143,8 @@ export async function handlePurge(interaction, ctx) {
     return interaction.reply({ content: t(lang, 'reactionroles.notYours'), flags: MessageFlags.Ephemeral });
   }
   if (answer !== 'ok') return interaction.update({ content: t(lang, 'reactionroles.purge.cancelled'), components: [] });
+  // Stripping a message's controls can take up to 20 reaction removals: acknowledge first, then edit the prompt.
+  await interaction.deferUpdate();
   let content;
   if (target === 'all') {
     const ids = await deleteGuildMessages(ctx.db, interaction.guildId);
@@ -144,7 +153,7 @@ export async function handlePurge(interaction, ctx) {
   } else {
     const message = await getMessage(ctx.db, target);
     if (!message || message.guildId !== interaction.guildId) {
-      return interaction.update({ content: t(lang, 'reactionroles.gone'), components: [] });
+      return interaction.editReply({ content: t(lang, 'reactionroles.gone'), components: [] });
     }
     const removed = await clearEntries(ctx.db, target);
     const discordMessage = await fetchDiscordMessage(interaction.guild, message);
@@ -152,7 +161,7 @@ export async function handlePurge(interaction, ctx) {
     content = t(lang, 'reactionroles.purge.doneOne', { count: removed });
   }
   await logReactionRoles(ctx, interaction.guild, lang, { action: 'purge', actorId: interaction.user.id, messageId: target });
-  return interaction.update({ content, components: [] });
+  return interaction.editReply({ content, components: [] });
 }
 
 const UNKNOWN_CHANNEL = 10003;

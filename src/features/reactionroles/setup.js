@@ -14,20 +14,18 @@ export function checkRoleForSetup(guild, caller, role) {
   return 'ok';
 }
 
-// Types that clear the member's reaction after a pick, which needs Manage Messages.
-const CLEARS_REACTION = ['drop', 'verify', 'lock', 'binding'];
-
 /**
- * The first permission the bot lacks to run a role message of this style and type, as the name shown
- * in Discord, or null. `channel` is the message's channel; without it the guild-wide permissions are used.
+ * The first permission the bot lacks to run a role message of this style, as the name shown in Discord,
+ * or null. `channel` is the message's channel; without it the guild-wide permissions are used.
+ * Every reactions message needs Manage Messages, whatever its type: the bot removes members' reactions
+ * on a refused add, on a unique swap, and after each drop / verify / lock / binding pick.
  */
-export function missingBotPermission(guild, channel, { style, type = 'normal' }) {
+export function missingBotPermission(guild, channel, { style }) {
   const me = guild.members.me;
   const perms = channel?.permissionsFor?.(me) ?? me?.permissions;
   const needed = [['ManageRoles', 'Manage Roles']];
   if (style === 'reactions') {
-    needed.push(['AddReactions', 'Add Reactions'], ['ReadMessageHistory', 'Read Message History']);
-    if (CLEARS_REACTION.includes(type)) needed.push(['ManageMessages', 'Manage Messages']);
+    needed.push(['AddReactions', 'Add Reactions'], ['ReadMessageHistory', 'Read Message History'], ['ManageMessages', 'Manage Messages']);
   }
   return needed.find(([flag]) => !perms?.has(flag))?.[1] ?? null;
 }
@@ -39,6 +37,9 @@ export async function refuseMissingPermission(interaction, lang, channel, messag
   await interaction.reply(ephemeral(t(lang, 'reactionroles.needPermission', { permission })));
   return true;
 }
+
+/** The bot may still hand out this role: it exists, has no staff permission (it may have gained one since setup) and is givable. */
+export const roleStillGivable = (guild, role) => !!role && !isDangerousRole(role) && botCanGive(guild, role);
 
 // Replies "gone" and returns null when the id is unknown or belongs to another guild; else the stored message.
 export async function loadMessage(interaction, ctx, lang) {

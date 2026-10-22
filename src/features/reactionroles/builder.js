@@ -75,6 +75,8 @@ export async function handleBuilder(interaction, ctx) {
   if (action === 'add') return interaction.showModal(modal(lang, id('modal', userId, messageId, startedAt, roleId)));
   if (action === 'done') return interaction.update({ content: t(lang, 'reactionroles.builder.finished'), components: [] });
   if (action === 'rm') {
+    // Removing an entry syncs the Discord message (up to 20 reaction removals): acknowledge first.
+    await interaction.deferUpdate();
     const removedId = interaction.values[0];
     const removed = await removeEntry(ctx.db, messageId, removedId);
     const fresh = await getMessage(ctx.db, messageId);
@@ -83,18 +85,21 @@ export async function handleBuilder(interaction, ctx) {
       if (discordMessage) await syncMessage(ctx, fresh, discordMessage);
       await logReactionRoles(ctx, guild, lang, { action: 'remove', actorId: userId, messageId, detail: `<@&${removedId}>` });
     }
-    return interaction.update(builderPayload(lang, fresh, guild, state));
+    return interaction.editReply(builderPayload(lang, fresh, guild, state));
   }
   if (action === 'modal') {
     const role = guild.roles.cache.get(roleId);
     if (!role) return refuse('reactionroles.refused.role_missing');
+    // Adding an entry syncs the Discord message: acknowledge first, then edit the panel.
+    await interaction.deferUpdate();
     const outcome = await addOne(ctx, { guild, caller: interaction.member }, message, {
       role,
       emojiText: interaction.fields.getTextInputValue('emoji').trim() || null,
       label: interaction.fields.getTextInputValue('label').trim() || null,
     });
-    if (outcome !== 'ok') return refuse(`reactionroles.add.${outcome}`);
+    // The panel stays as it was; the refusal arrives as its own ephemeral message.
+    if (outcome !== 'ok') return interaction.followUp(ephemeral(t(lang, `reactionroles.add.${outcome}`)));
     await logReactionRoles(ctx, guild, lang, { action: 'add', actorId: userId, messageId, detail: `<@&${role.id}>` });
-    return interaction.update(builderPayload(lang, await getMessage(ctx.db, messageId), guild, state));
+    return interaction.editReply(builderPayload(lang, await getMessage(ctx.db, messageId), guild, state));
   }
 }
