@@ -40,8 +40,9 @@ export function decidePick({ message, entry, action, memberRoleIds, binding = nu
   }
   if (want === 'add') {
     if (held) return stop('nothing');
-    if (type === 'binding' && binding) return stop('bound');
     const others = entryRoles(message).filter((r) => r !== entry.roleId && memberRoleIds.has(r));
+    // Any role of the message the member holds counts toward binding, however it was granted.
+    if (type === 'binding' && (binding || others.length)) return stop('bound');
     const single = type === 'unique' || type === 'binding';
     if (!single && message.limit != null && others.length >= message.limit) return stop('limit');
     return {
@@ -75,7 +76,7 @@ export function decideMenu({ message, selectedRoleIds, memberRoleIds, binding = 
     add = [...selected].filter((r) => !memberRoleIds.has(r));
     if (type === 'normal' || type === 'unique') remove = held.filter((r) => !selected.has(r));
   }
-  if (type === 'binding' && binding && add.length) return stop('bound');
+  if (type === 'binding' && add.length && (binding || held.length)) return stop('bound');
   if (!add.length && !remove.length) return stop('nothing');
   if (type !== 'unique' && type !== 'binding' && message.limit != null) {
     if (held.length - remove.length + add.length > message.limit) return stop('limit');

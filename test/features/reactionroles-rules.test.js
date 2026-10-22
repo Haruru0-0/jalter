@@ -214,6 +214,18 @@ test('binding with a stored binding refuses with bound and asks for reaction cle
   assert.deepEqual(out, { ok: false, reason: 'bound', clearReaction: true });
 });
 
+// I2: any role of the message the member holds counts toward binding, however it was granted.
+test('binding refuses with bound when the member already holds another role of the message, without a stored binding', () => {
+  const out = decidePick({
+    message: makeMsg({ type: 'binding', entries: [{ roleId: 'A' }, { roleId: 'B' }] }),
+    entry: { roleId: 'B' },
+    action: 'add',
+    memberRoleIds: setOf('A'),
+    binding: null,
+  });
+  assert.deepEqual(out, { ok: false, reason: 'bound', clearReaction: true });
+});
+
 // ── decidePick: lock ────────────────────────────────────────────────────────
 test('lock always refuses with locked and asks for reaction clear', () => {
   const out = decidePick({
@@ -352,6 +364,26 @@ test('empty selection on a binding menu is refused with nothing', () => {
     memberRoleIds: setOf(),
   });
   assert.deepEqual(out, { ok: false, reason: 'nothing', clearReaction: false });
+});
+
+test('a binding menu refuses with bound when the member already holds a role of the message, without a stored binding', () => {
+  const out = decideMenu({
+    message: makeMsg({ type: 'binding', entries: [{ roleId: 'A' }, { roleId: 'B' }] }),
+    selectedRoleIds: ['B'],
+    memberRoleIds: setOf('A'),
+    binding: null,
+  });
+  assert.deepEqual(out, { ok: false, reason: 'bound', clearReaction: false });
+});
+
+test('a binding menu with no role held yet and no stored binding adds the pick', () => {
+  const out = decideMenu({
+    message: makeMsg({ type: 'binding', entries: [{ roleId: 'A' }, { roleId: 'B' }] }),
+    selectedRoleIds: ['B'],
+    memberRoleIds: setOf('Z'),
+    binding: null,
+  });
+  assert.deepEqual(out, { ok: true, add: ['B'], remove: [], clearReaction: false });
 });
 
 test('empty selection on a lock menu is refused with locked', () => {
