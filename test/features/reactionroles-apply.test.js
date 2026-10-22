@@ -4,7 +4,8 @@ import { testDb } from '../helpers/db.js';
 import { resetDb } from '../../src/db/index.js';
 import { applyPick, createGrantAlert } from '../../src/features/reactionroles/apply.js';
 import { logRoleDanger } from '../../src/features/reactionroles/log.js';
-import { createMessage, addEntry, getMessage } from '../../src/features/reactionroles/store.js';
+import { createMessage, addEntry, getMessage, updateMessage } from '../../src/features/reactionroles/store.js';
+import { fakeDiscordMember, heldRoles } from '../helpers/discord-member.js';
 
 let db;
 before(async () => {
@@ -17,29 +18,11 @@ beforeEach(async () => {
   await resetDb(db);
 });
 
-// A guild with roles A, B, C and a member whose role changes land after a tick, like the real API.
+// A guild with roles A, B, C and a member that behaves like discord.js: role calls do not update the
+// cached roles (only the gateway does, later), array calls PATCH the whole set from that cache.
 function fakeMember(id, held = []) {
-  const roles = new Map([['A', {}], ['B', {}], ['C', {}]]);
-  const cache = new Map(held.map((id) => [id, {}]));
-  const calls = [];
-  return {
-    id,
-    calls,
-    guild: { id: 'g1', roles: { cache: roles } },
-    roles: {
-      cache,
-      async add(ids) {
-        await new Promise((r) => setImmediate(r));
-        calls.push(['add', ids]);
-        for (const id of ids) cache.set(id, {});
-      },
-      async remove(ids) {
-        await new Promise((r) => setImmediate(r));
-        calls.push(['remove', ids]);
-        for (const id of ids) cache.delete(id);
-      },
-    },
-  };
+  const guild = { id: 'g1', roles: { cache: new Map([['A', { id: 'A' }], ['B', { id: 'B' }], ['C', { id: 'C' }]]) } };
+  return fakeDiscordMember(guild, { id, held });
 }
 
 async function seed(type, msgId = 'm1') {
@@ -53,26 +36,62 @@ const allow = { botCanGive: () => true };
 const toggle = (message, roleId) => ({ kind: 'entry', entry: message.entries.find((e) => e.roleId === roleId), action: 'toggle' });
 const addEntryPick = (message, roleId) => ({ kind: 'entry', entry: message.entries.find((e) => e.roleId === roleId), action: 'add' });
 
+// Runs fn with console.warn silenced (the applier warns on every Discord failure).
+async function quiet(fn) {
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    return await fn();
+  } finally {
+    console.warn = warn;
+  }
+}
+
 test('adds a role and returns it', async () => {
   const message = await seed('normal');
   const member = fakeMember('u1');
   const result = await applyPick(ctx(), member, message, toggle(message, 'A'), allow);
   assert.deepEqual([result.ok, result.added], [true, ['A']]);
-  assert.ok(member.roles.cache.has('A'));
+  assert.deepEqual(heldRoles(member), ['A']);
 });
 
-test('removes the old role of a unique message (both calls recorded)', async () => {
+// C1: the array forms PATCH the whole role set from a stale cache, so remove-then-add restored the old role.
+test('a unique swap leaves exactly the new role even while the cached roles are stale', async () => {
   const message = await seed('unique');
   const member = fakeMember('u1', ['A']);
   const result = await applyPick(ctx(), member, message, toggle(message, 'B'), allow);
-  assert.equal(result.ok, true);
-  assert.equal(result.added.length, 1);
-  assert.equal(result.removed.length, 1);
-  assert.equal(member.calls.length, 2);
-  assert.deepEqual(member.calls[0], ['remove', ['A']]);
-  assert.deepEqual(member.calls[1], ['add', ['B']]);
-  assert.equal(member.roles.cache.has('A'), false);
-  assert.equal(member.roles.cache.has('B'), true);
+  assert.deepEqual([result.ok, result.added, result.removed], [true, ['B'], ['A']]);
+  assert.deepEqual(heldRoles(member), ['B']);
+  // Single-role calls, the add before the remove so a failure never leaves the member with nothing.
+  assert.deepEqual(member.calls, [['put', 'B'], ['delete', 'A']]);
+});
+
+test('a mixed menu submission applies every add and every remove', async () => {
+  const message = await seed('normal');
+  const member = fakeMember('u1', ['A', 'B']);
+  const result = await applyPick(ctx(), member, message, { kind: 'menu', roleIds: ['A', 'C'] }, allow);
+  assert.deepEqual([result.ok, result.added, result.removed], [true, ['C'], ['B']]);
+  assert.deepEqual(heldRoles(member), ['A', 'C']);
+});
+
+// T3#3: a swap that fails halfway is undone, so the member never ends with no role.
+test('a unique swap whose add fails keeps the old role', async () => {
+  const message = await seed('unique');
+  const member = fakeMember('u1', ['A']);
+  member.failOn.add('put');
+  const result = await quiet(() => applyPick(ctx(), member, message, toggle(message, 'B'), allow));
+  assert.deepEqual([result.ok, result.reason], [false, 'discord_failed']);
+  assert.deepEqual(heldRoles(member), ['A']);
+});
+
+test('a unique swap whose remove fails is rolled back to the old role', async () => {
+  const message = await seed('unique');
+  const member = fakeMember('u1', ['A']);
+  member.failOn.add('delete:A');
+  const result = await quiet(() => applyPick(ctx(), member, message, toggle(message, 'B'), allow));
+  assert.deepEqual([result.ok, result.reason], [false, 'discord_failed']);
+  assert.deepEqual(heldRoles(member), ['A']);
+  assert.deepEqual(member.calls, [['put', 'B'], ['delete', 'A'], ['delete', 'B']]);
 });
 
 test('refuses a role deleted from the guild with role_missing and changes nothing', async () => {
@@ -87,16 +106,47 @@ test('refuses a role deleted from the guild with role_missing and changes nothin
 test('refuses with cannot_give when botCanGive is false at pick time', async () => {
   const message = await seed('normal');
   const member = fakeMember('u1');
-  const result = await applyPick(ctx(), member, message, toggle(message, 'A'), { botCanGive: () => false });
+  const result = await applyPick(ctx(), member, message, toggle(message, 'A'), { botCanGive: () => false, alert: async () => {} });
   assert.equal(result.reason, 'cannot_give');
   assert.equal(member.calls.length, 0);
+});
+
+// I1: a role that gained a staff permission after setup is no longer handed out.
+test('a role that has since gained Administrator is refused with cannot_give and alerted', async () => {
+  const message = await seed('normal');
+  const member = fakeMember('u1');
+  member.guild.roles.cache.set('A', { id: 'A', permissions: { has: (p) => p === 'Administrator' } });
+  const alerts = [];
+  const result = await applyPick(ctx(), member, message, toggle(message, 'A'), {
+    ...allow, alert: async (c, g, m, role) => { alerts.push(role.id); },
+  });
+  assert.deepEqual([result.ok, result.reason], [false, 'cannot_give']);
+  assert.deepEqual(alerts, ['A']);
+  assert.equal(member.calls.length, 0);
+});
+
+// I3: a refusal decided after the rules clears the reaction of an entry add, so no reaction sits without a role.
+test('role_missing, cannot_give and discord_failed on an entry add ask to clear the reaction', async () => {
+  const message = await seed('normal');
+  const missing = fakeMember('u1');
+  missing.guild.roles.cache.delete('A');
+  const cannot = fakeMember('u2');
+  const failed = fakeMember('u3');
+  failed.failOn.add('put');
+  const results = await quiet(async () => [
+    await applyPick(ctx(), missing, message, addEntryPick(message, 'A'), allow),
+    await applyPick(ctx(), cannot, message, addEntryPick(message, 'A'), { botCanGive: () => false, alert: async () => {} }),
+    await applyPick(ctx(), failed, message, addEntryPick(message, 'A'), allow),
+  ]);
+  assert.deepEqual(results.map((r) => [r.reason, r.clearReaction]),
+    [['role_missing', true], ['cannot_give', true], ['discord_failed', true]]);
 });
 
 test('a Discord error from roles.add yields discord_failed and never throws', async () => {
   const message = await seed('normal');
   const member = fakeMember('u1');
-  member.roles.add = async () => { throw new Error('Missing Permissions'); };
-  const result = await applyPick(ctx(), member, message, toggle(message, 'A'), allow);
+  member.failOn.add('put');
+  const result = await quiet(() => applyPick(ctx(), member, message, toggle(message, 'A'), allow));
   assert.equal(result.reason, 'discord_failed');
 });
 
@@ -104,10 +154,11 @@ test('a binding pick is stored and a second pick returns bound', async () => {
   const message = await seed('binding');
   const member = fakeMember('u1');
   assert.equal((await applyPick(ctx(), member, message, addEntryPick(message, 'A'), allow)).ok, true);
-  member.roles.cache.delete('A');
+  member.server.delete('A');
   assert.equal((await applyPick(ctx(), member, message, addEntryPick(message, 'B'), allow)).reason, 'bound');
 });
 
+// C2: the per-member lock only helps if each pick decides on Discord's current roles, not the stale cache.
 test('two simultaneous picks on a unique message leave exactly one role (per-member lock)', async () => {
   const message = await seed('unique');
   const member = fakeMember('u1');
@@ -115,8 +166,66 @@ test('two simultaneous picks on a unique message leave exactly one role (per-mem
     applyPick(ctx(), member, message, addEntryPick(message, 'A'), allow),
     applyPick(ctx(), member, message, addEntryPick(message, 'B'), allow),
   ]);
-  const held = ['A', 'B', 'C'].filter((id) => member.roles.cache.has(id));
-  assert.equal(held.length, 1);
+  assert.equal(heldRoles(member).length, 1);
+});
+
+test('two simultaneous picks on a limit-1 message: the second is refused with limit', async () => {
+  await seed('normal');
+  await updateMessage(db, 'm1', { limit: 1 });
+  const message = await getMessage(db, 'm1');
+  const member = fakeMember('u1');
+  const results = await Promise.all([
+    applyPick(ctx(), member, message, addEntryPick(message, 'A'), allow),
+    applyPick(ctx(), member, message, addEntryPick(message, 'B'), allow),
+  ]);
+  assert.deepEqual(results.map((r) => (r.ok ? 'ok' : r.reason)), ['ok', 'limit']);
+  assert.deepEqual(heldRoles(member), ['A']);
+});
+
+test('the decision uses a forced fetch of the member, not the cached roles', async () => {
+  const message = await seed('normal');
+  const member = fakeMember('u1');
+  member.server.add('A'); // Discord has A; the gateway has not told the cache yet
+  const result = await applyPick(ctx(), member, message, toggle(message, 'A'), allow);
+  assert.deepEqual([result.ok, result.removed], [true, ['A']]);
+  assert.deepEqual(member.guild.members.fetches, [{ user: 'u1', force: true }]);
+  assert.deepEqual(heldRoles(member), []);
+});
+
+test('a failed member fetch refuses with discord_failed and changes nothing', async () => {
+  const message = await seed('normal');
+  const member = fakeMember('u1');
+  member.guild.members.failFetch = true;
+  const result = await quiet(() => applyPick(ctx(), member, message, addEntryPick(message, 'A'), allow));
+  assert.deepEqual([result.ok, result.reason], [false, 'discord_failed']);
+  assert.equal(member.calls.length, 0);
+});
+
+// M1: on a reversed message an unexpected failure must keep the reaction: its removal would grant the role.
+test('an unexpected failure keeps the reaction on a reversed message and clears it elsewhere', async () => {
+  const reversed = await seed('reversed', 'm1');
+  const normal = await seed('normal', 'm2');
+  const boom = { botCanGive: () => { throw new Error('boom'); } };
+  const r = await quiet(() => applyPick(ctx(), fakeMember('u1'), reversed, { kind: 'entry', entry: reversed.entries[0], action: 'remove' }, boom));
+  const n = await quiet(() => applyPick(ctx(), fakeMember('u1'), normal, addEntryPick(normal, 'A'), boom));
+  assert.deepEqual([r.reason, r.clearReaction], ['discord_failed', false]);
+  assert.deepEqual([n.reason, n.clearReaction], ['discord_failed', true]);
+});
+
+test('a failed member fetch on a reversed message keeps the reaction', async () => {
+  const message = await seed('reversed');
+  const member = fakeMember('u1');
+  member.guild.members.failFetch = true;
+  const result = await quiet(() => applyPick(ctx(), member, message, addEntryPick(message, 'A'), allow));
+  assert.deepEqual([result.reason, result.clearReaction], ['discord_failed', false]);
+});
+
+test('the binding table is read only for a binding message', async () => {
+  const message = await seed('normal');
+  const member = fakeMember('u1');
+  const noDb = { db: { query: async () => { throw new Error('no query expected'); } } };
+  const result = await applyPick(noDb, member, message, addEntryPick(message, 'A'), allow);
+  assert.equal(result.ok, true);
 });
 
 test('two simultaneous picks for different members are not serialized against each other', async () => {
@@ -129,8 +238,8 @@ test('two simultaneous picks for different members are not serialized against ea
   ]);
   assert.equal(r1.ok, true);
   assert.equal(r2.ok, true);
-  assert.ok(m1.roles.cache.has('A'));
-  assert.ok(m2.roles.cache.has('A'));
+  assert.deepEqual(heldRoles(m1), ['A']);
+  assert.deepEqual(heldRoles(m2), ['A']);
 });
 
 // ── Ruling E: throttle test using an injectable log ───────────────────────────
@@ -199,8 +308,8 @@ test('a setBinding failure after a successful add rolls the role back', async ()
   } } };
   const result = await applyPick(flaky, member, message, addEntryPick(message, 'A'), allow);
   assert.deepEqual([result.ok, result.reason], [false, 'discord_failed']);
-  assert.equal(member.roles.cache.has('A'), false);
-  assert.deepEqual(member.calls.map((c) => c[0]), ['add', 'remove']);
+  assert.deepEqual(heldRoles(member), []);
+  assert.deepEqual(member.calls, [['put', 'A'], ['delete', 'A']]);
 });
 
 test('logRoleDanger puts the message id and role mention into the localized text', async () => {

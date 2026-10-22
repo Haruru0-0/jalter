@@ -6,7 +6,8 @@ import { resetDb } from '../../src/db/index.js';
 import { setFeature } from '../../src/db/settings.js';
 import { createEvents } from '../../src/features/reactionroles/events.js';
 import { handle } from '../../src/features/reactionroles/components.js';
-import { createMessage, addEntry, getMessage, getBinding, setBinding } from '../../src/features/reactionroles/store.js';
+import { createMessage, addEntry, getMessage, getBinding, setBinding, updateMessage } from '../../src/features/reactionroles/store.js';
+import { fakeDiscordMember, heldRoles } from '../helpers/discord-member.js';
 
 let db;
 before(async () => {
@@ -32,38 +33,27 @@ function fakeGuild() {
   };
 }
 
-// A member whose role changes are recorded; `held` are the role ids they start with.
+// A member that behaves like discord.js (see test/helpers/discord-member.js); `held` are the role ids they start with.
 function fakeMember(guild, held = [], id = 'u1') {
-  const cache = new Map(held.map((r) => [r, {}]));
-  const calls = [];
-  const member = {
-    id,
-    guild,
-    calls,
-    roles: {
-      cache,
-      async add(ids) { calls.push(['add', ids]); for (const r of ids) cache.set(r, {}); },
-      async remove(ids) { calls.push(['remove', ids]); for (const r of ids) cache.delete(r); },
-    },
-  };
-  guild.members.fetch = async (uid) => {
-    if (uid !== id) throw new Error('unknown member');
-    return member;
-  };
-  return member;
+  return fakeDiscordMember(guild, { id, held });
 }
 
-function fakeReaction(guild, { messageId = 'm1', emoji = { id: null, name: '🅰️' }, partial = false, failFetch = false, others = {} } = {}) {
+// `fetched` records every REST fetch of the reaction or its message (partials are fetched before use).
+function fakeReaction(guild, { messageId = 'm1', emoji = { id: null, name: '🅰️' }, partial = false, messagePartial = false, failFetch = false, others = {} } = {}) {
   const removed = [];
+  const fetched = [];
   const makeReaction = (e) => ({ emoji: e, users: { remove: async (uid) => { removed.push([e.id ?? e.name, uid]); } } });
   const cache = new Map(Object.entries(others).map(([key, e]) => [key, makeReaction(e)]));
   const reaction = {
     ...makeReaction(emoji),
     partial,
-    fetch: async () => { if (failFetch) throw new Error('gone'); reaction.partial = false; },
-    message: { id: messageId, guild, partial: false, fetch: async () => {}, reactions: { cache } },
+    fetch: async () => { fetched.push('reaction'); if (failFetch) throw new Error('gone'); reaction.partial = false; },
+    message: {
+      id: messageId, guildId: guild.id, guild, partial: messagePartial, reactions: { cache },
+      fetch: async () => { fetched.push('message'); reaction.message.partial = false; },
+    },
   };
-  return { reaction, removed, cache };
+  return { reaction, removed, cache, fetched };
 }
 
 const ctx = () => ({ db, client: { user: { id: 'bot' } } });
@@ -91,7 +81,7 @@ test('reaction add grants the role through applyPick and keeps the reaction', as
   const member = fakeMember(guild);
   const { reaction, removed } = fakeReaction(guild);
   await handler(createEvents(), Events.MessageReactionAdd)(ctx(), reaction, user());
-  assert.deepEqual(member.calls, [['add', ['A']]]);
+  assert.deepEqual(member.calls, [['put', 'A']]);
   assert.deepEqual(removed, []);
 });
 
@@ -101,7 +91,7 @@ test('reaction remove takes the role back', async () => {
   const member = fakeMember(guild, ['A']);
   const { reaction, removed } = fakeReaction(guild);
   await handler(createEvents(), Events.MessageReactionRemove)(ctx(), reaction, user());
-  assert.deepEqual(member.calls, [['remove', ['A']]]);
+  assert.deepEqual(member.calls, [['delete', 'A']]);
   assert.deepEqual(removed, []);
 });
 
@@ -111,7 +101,7 @@ test('verify message grants the role and removes the reaction', async () => {
   const member = fakeMember(guild);
   const { reaction, removed } = fakeReaction(guild);
   await handler(createEvents(), Events.MessageReactionAdd)(ctx(), reaction, user());
-  assert.deepEqual(member.calls, [['add', ['A']]]);
+  assert.deepEqual(member.calls, [['put', 'A']]);
   assert.deepEqual(removed, [['🅰️', 'u1']]);
 });
 
@@ -131,7 +121,7 @@ test('a unique pick removes the reactions of the roles it replaced, but not the 
   const member = fakeMember(guild, ['B']);
   const { reaction, removed } = fakeReaction(guild, { others: { '🅱️': { id: null, name: '🅱️' }, '🅰️': { id: null, name: '🅰️' } } });
   await handler(createEvents(), Events.MessageReactionAdd)(ctx(), reaction, user());
-  assert.deepEqual(member.calls, [['remove', ['B']], ['add', ['A']]]);
+  assert.deepEqual(member.calls, [['put', 'A'], ['delete', 'B']]);
   assert.deepEqual(removed, [['🅱️', 'u1']]);
 });
 
@@ -145,7 +135,7 @@ test('reversed: reacting without the role changes nothing; removing the reaction
   assert.deepEqual([member.calls, add.removed], [[], []]);
   const remove = fakeReaction(guild);
   await handler(events, Events.MessageReactionRemove)(ctx(), remove.reaction, user());
-  assert.deepEqual(member.calls, [['add', ['A']]]);
+  assert.deepEqual(member.calls, [['put', 'A']]);
   assert.deepEqual(remove.removed, []);
 });
 
@@ -160,7 +150,7 @@ for (const type of ['normal', 'unique']) {
     assert.deepEqual([member.calls, add.removed], [[], []]);
     const remove = fakeReaction(guild);
     await handler(events, Events.MessageReactionRemove)(ctx(), remove.reaction, user());
-    assert.deepEqual(member.calls, [['remove', ['A']]]);
+    assert.deepEqual(member.calls, [['delete', 'A']]);
     assert.deepEqual(remove.removed, []);
   });
 }
@@ -171,7 +161,7 @@ test('a custom emoji matches its entry by id', async () => {
   const member = fakeMember(guild);
   const { reaction } = fakeReaction(guild, { emoji: { id: '123456789012345678', name: 'wave' } });
   await handler(createEvents(), Events.MessageReactionAdd)(ctx(), reaction, user());
-  assert.deepEqual(member.calls, [['add', ['A']]]);
+  assert.deepEqual(member.calls, [['put', 'A']]);
 });
 
 test('a stray emoji on a role message is removed on add only', async () => {
@@ -237,7 +227,7 @@ test('a partial reaction is fetched before use', async () => {
   const member = fakeMember(guild);
   const { reaction } = fakeReaction(guild, { partial: true });
   await handler(createEvents(), Events.MessageReactionAdd)(ctx(), reaction, user());
-  assert.deepEqual(member.calls, [['add', ['A']]]);
+  assert.deepEqual(member.calls, [['put', 'A']]);
 });
 
 test('a partial reaction or user that fails to fetch is ignored without throwing', async () => {
@@ -344,7 +334,7 @@ test('a button click replies ephemerally with the added role name', async () => 
   const member = fakeMember(guild);
   const i = fakeInteraction(guild, member, `reactionroles:btn:m1:${message.entries[0].id}`);
   await handle(i, ctx());
-  assert.deepEqual(member.calls, [['add', ['A']]]);
+  assert.deepEqual(member.calls, [['put', 'A']]);
   assert.deepEqual(i.replies, [{ content: 'You now have Alpha.', flags: MessageFlags.Ephemeral }]);
 });
 
@@ -354,7 +344,7 @@ test('a second button click removes the role and says so', async () => {
   const member = fakeMember(guild, ['A']);
   const i = fakeInteraction(guild, member, `reactionroles:btn:m1:${message.entries[0].id}`);
   await handle(i, ctx());
-  assert.deepEqual(member.calls, [['remove', ['A']]]);
+  assert.deepEqual(member.calls, [['delete', 'A']]);
   assert.deepEqual(i.replies, [{ content: 'Alpha was removed.', flags: MessageFlags.Ephemeral }]);
 });
 
@@ -411,7 +401,7 @@ test('a menu selection adds the chosen roles and removes the unchosen ones', asy
   const member = fakeMember(guild, ['B']);
   const i = fakeInteraction(guild, member, 'reactionroles:menu:m1', { values: ['A'] });
   await handle(i, ctx());
-  assert.deepEqual(member.calls, [['remove', ['B']], ['add', ['A']]]);
+  assert.deepEqual(member.calls, [['put', 'A'], ['delete', 'B']]);
   assert.deepEqual(i.replies, [{ content: 'You now have Alpha.\nBeta was removed.', flags: MessageFlags.Ephemeral }]);
 });
 
@@ -431,7 +421,7 @@ test('a member missing from the interaction cache is fetched', async () => {
   const member = fakeMember(guild);
   const i = fakeInteraction(guild, { id: 'u1' }, `reactionroles:btn:m1:${message.entries[0].id}`);
   await handle(i, ctx());
-  assert.deepEqual(member.calls, [['add', ['A']]]);
+  assert.deepEqual(member.calls, [['put', 'A']]);
 });
 
 test('a foreign prefix or a DM is ignored', async () => {
