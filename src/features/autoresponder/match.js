@@ -53,6 +53,23 @@ export function matchRule(rule, text) {
   }
 }
 
+/**
+ * The original text after the trigger for startswith/includes rules, else null.
+ * Case-insensitive search (first occurrence for includes); message trimmed at the start.
+ */
+export function triggerRemainder(rule, text) {
+  if (typeof text !== 'string' || !rule || typeof rule.trigger !== 'string') return null;
+  if (rule.matchMode !== 'startswith' && rule.matchMode !== 'includes') return null;
+  const trig = norm(rule.trigger);
+  if (!trig) return null;
+  const body = text.trimStart();
+  const at = rule.matchMode === 'startswith'
+    ? (body.toLowerCase().startsWith(trig) ? 0 : -1)
+    : body.toLowerCase().indexOf(trig);
+  if (at < 0) return null;
+  return body.slice(at + trig.length);
+}
+
 /** Best matching enabled rule: non-regex first, then longest trigger, then lowest id. */
 export function chooseRule(rules, text) {
   let best = null;

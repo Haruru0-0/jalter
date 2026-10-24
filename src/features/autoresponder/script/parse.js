@@ -4,6 +4,26 @@
 
 export const PARSE_ERROR_CODES = ['UNBALANCED_BRACE', 'EMPTY_NAME', 'BAD_NAME', 'TRAILING_BACKSLASH'];
 
+// Private-use stand-in for an escaped `\[` inside call arguments, so later rendering
+// can tell `\[$1]` (literal) from `[$1]` (a token).
+export const ESCAPED_BRACKET = '';
+
+const TOKEN_RE = /^\[(?:\$([1-9]|1\d|20)(?:(\+)|-([1-9]|1\d|20))?|(range|choice|lockedchoice)([2-4])?)\]/;
+
+function matchToken(src, i) {
+  const m = TOKEN_RE.exec(src.slice(i, i + 24));
+  if (!m) return null;
+  if (m[4]) return { t: 'rand', kind: m[4], n: m[5] ? Number(m[5]) : 1, pos: i, raw: m[0] };
+  const from = Number(m[1]);
+  let to = from;
+  if (m[2]) to = 'end';
+  else if (m[3]) {
+    to = Number(m[3]);
+    if (to < from) return null;
+  }
+  return { t: 'arg', from, to, pos: i, raw: m[0] };
+}
+
 const ESCAPABLE = new Set(['{', '[', '|', '\\']);
 const NAME_RE = /^[A-Za-z0-9_]+$/;
 
@@ -35,6 +55,15 @@ export function parseScript(source) {
       }
       continue;
     }
+    if (ch === '[') {
+      const tok = matchToken(src, i);
+      if (tok) {
+        flush();
+        nodes.push(tok);
+        i += tok.raw.length;
+        continue;
+      }
+    }
     if (ch !== '{') {
       text += ch;
       i++;
@@ -57,7 +86,8 @@ export function parseScript(source) {
           errors.push({ code: 'TRAILING_BACKSLASH', pos: i });
           i++;
         } else if (ESCAPABLE.has(src[i + 1])) {
-          if (hasColon) cur += src[i + 1];
+          // The sentinel is only needed where an unescaped bracket would have formed a token.
+          if (hasColon) cur += src[i + 1] === '[' && matchToken(src, i + 1) ? ESCAPED_BRACKET : src[i + 1];
           else name += src[i + 1]; // an escaped char in a name is invalid anyway
           i += 2;
         } else {
