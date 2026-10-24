@@ -28,11 +28,11 @@
 
 ## Review Focus
 
-1. A member clicking another member's panel, a non-manager with a copied or forged id, or the feature switched off mid-session: refused, nothing changes (Task 4).
-2. A click on an expired, replaced or restarted panel (unknown panel id): the expired reply, no throw (Task 4).
-3. Save with an invalid draft stores nothing, writes no log line, keeps the draft and shows the localized errors; the 101st rule replies `autoresponder.full`; pressing Save twice at once creates one rule (Task 4).
+1. A member clicking another member's panel, a non-manager with a copied or forged id, or the feature switched off mid-session: refused, nothing changes (Task 2).
+2. A click on an expired, replaced or restarted panel (unknown panel id): the expired reply, no throw (Task 2).
+3. Save with an invalid draft stores nothing, writes no log line, keeps the draft and shows the localized errors; the 101st rule replies `autoresponder.full`; pressing Save twice at once creates one rule (Task 2).
 4. Reply text with braces, placeholders, a trailing backslash, and a nickname containing `|` or `\`: the generated script compiles to what the panel shows, never silently different (Task 1).
-5. Discord limits: a server with more than 25 stored embeds or more than 25 roles-worth of choices, a long summary, the longest custom id (Tasks 4 to 7).
+5. Discord limits: a server with more than 25 stored embeds or more than 25 roles-worth of choices, a long summary, the longest custom id (Tasks 2 to 4).
 
 ---
 
@@ -50,13 +50,15 @@
 
 ---
 
-### Task 1: Draft model and script generator
+### Task 1: Pure core - draft model, generator, store and shared dry run
+
+**Tier:** sonnet - pure logic, an in-memory store with a save lock, and a no-behaviour-change refactor
+
+#### Part A: Draft model and script generator
 
 **Files:**
 - Create: `src/features/autoresponder/builder/draft.js`, `src/features/autoresponder/builder/generate.js`
 - Test: `test/features/autoresponder-builder-draft.test.js`
-
-**Tier:** sonnet - pure logic, many output-format cases the tests pin
 
 **Interfaces:**
 - Produces in `draft.js`:
@@ -72,13 +74,11 @@
 
 ---
 
-### Task 2: Draft store
+#### Part B: Draft store
 
 **Files:**
 - Create: `src/features/autoresponder/builder/drafts.js`
 - Test: `test/features/autoresponder-builder-drafts.test.js`
-
-**Tier:** sonnet - bounded in-memory store with expiry and a save lock
 
 **Interfaces:**
 - Consumes: `newDraft` (Task 1).
@@ -89,14 +89,12 @@
 
 ---
 
-### Task 3: Shared dry run
+#### Part C: Shared dry run
 
 **Files:**
 - Create: `src/features/autoresponder/dryrun.js`
 - Modify: `src/features/autoresponder/commands.js` (use it; keep every reply identical)
 - Test: `test/features/autoresponder-dryrun.test.js`; the existing `autoresponder-testcmd.test.js` must pass unchanged
-
-**Tier:** sonnet - a refactor with existing tests as the net, no behaviour change allowed
 
 **Interfaces:**
 - Consumes: the current `gateLines`, `actionLines`, `evaluate`, `buildScriptVars` code inside `commands.js` (`dryRun`, `pickRule`, `gateLines`, `actionLines`).
@@ -107,7 +105,7 @@
 
 ---
 
-### Task 4: Builder core - command, panel shell, Basics, Reply, Review, Save
+### Task 2: Builder core - command, panel shell, Basics, Reply, Review, Save
 
 **Files:**
 - Create: `src/features/autoresponder/builder/summary.js`, `builder/panel.js`, `builder/handlers.js`
@@ -117,10 +115,10 @@
 **Tier:** sonnet - security-relevant checks on every interaction plus the Save path; reviewer should be opus
 
 **Interfaces:**
-- Consumes: Tasks 1 to 3; `guard`, `ephemeral`, `fitLines`, `checkTrigger`, `MATCH_MODES`, `compileScript`, `createRule` (returns `'full'` at the cap), `invalidate`, `logAutoresponder` through the existing `log` helper in `commands.js` (action `add`, detail = the trigger plus the builder note key `autoresponder.builder.logDetail`), `errorLines(lang, errors)` (export it from `commands.js`).
+- Consumes: Task 1 (Parts A to C); `guard`, `ephemeral`, `fitLines`, `checkTrigger`, `MATCH_MODES`, `compileScript`, `createRule` (returns `'full'` at the cap), `invalidate`, `logAutoresponder` through the existing `log` helper in `commands.js` (action `add`, detail = the trigger plus the builder note key `autoresponder.builder.logDetail`), `errorLines(lang, errors)` (export it from `commands.js`).
 - Produces in `panel.js`: `builderId(action, userId, panelId, extra?): string`; `parseBuilderId(customId): { action, userId, panelId, extra } | null`; `PAGES` (array of page keys: `basics`, `reply`, `review` for now; later tasks append); `panelPayload(lang, entry): { content, components, allowedMentions }`. Rows: row 1 is always the page select (`nav`, options from `PAGES`); the rest per page: **basics** (a Trigger button opening modal `mtrigger` with one `trigger` input max `MAX_TRIGGER_LENGTH`; a match-mode string select `mode` from `MATCH_MODES`); **reply** (an Edit reply button opening modal `mtext` with a paragraph `text` input max 2000; destination select `dest`: reply in place, DM, channel; a `channel` ChannelSelect, text channels only, shown only when `dest` is `channel`; toggle buttons `delete` (delete the trigger message) and `silent`); **review** (the summary, Save, Cancel).
 - Produces in `summary.js`: `summaryLines(lang, draft): string[]` - trigger and mode, then one readable line per reply setting, gate and action using keys `autoresponder.builder.sum.<fn>` with `{value}` (define the keys for every stage 1 function now so later tasks only add controls), and a note line when `deleteTrigger` is set together with a `react` action.
-- Produces in `handlers.js`: `openBuilder(interaction, ctx, lang)` (the `builder` subcommand: `drafts.open(...)`, ephemeral reply with `panelPayload`) and `handleBuilder(interaction, ctx)` (the router). For every interaction it: parses the id (unparseable -> ignore), refuses a different user with `autoresponder.builder.notYours`, runs `guard` (refusal replies are the guard's own), looks up the entry with `drafts.get` (missing -> `autoresponder.builder.expired`), then dispatches by action: `nav`, `mode`, `dest`, `channel`, `delete`, `silent` (each applies the change to the draft, regenerates the script, runs `compileScript`; on errors the change is reverted and the errors are sent as an ephemeral follow-up using `errorLines`; on success the panel is re-rendered with `interaction.update`), `trigger` and `text` (open modals; the modal submit applies the value the same way, `checkTrigger` first for the trigger with `autoresponder.badTrigger.<code>`), `cancel` (drops the entry, replaces the panel with the cancelled text, components removed), `save` (below). Slow work calls `deferUpdate` first.
+- Produces in `handlers.js`: `tryChange(interaction, ctx, lang, entry, nextDraft, rerender)` (exported; applies `nextDraft` tentatively: regenerate the script, `compileScript` with the pressing member as writer; on errors send an ephemeral follow-up with `errorLines` and leave the entry unchanged; on success store the draft with `drafts.update` and call `rerender`) - every later control uses it. `PAGES` is an ordered array with `review` always last; later tasks insert their pages before it. Transient views (a pending condition kind, the embed picker) live in `entry.page` / `entry.pending` and fall back to their owning nav page on `nav`. Also: `openBuilder(interaction, ctx, lang)` (the `builder` subcommand: `drafts.open(...)`, ephemeral reply with `panelPayload`) and `handleBuilder(interaction, ctx)` (the router). For every interaction it: parses the id (unparseable -> ignore), refuses a different user with `autoresponder.builder.notYours`, runs `guard` (refusal replies are the guard's own), looks up the entry with `drafts.get` (missing -> `autoresponder.builder.expired`), then dispatches by action: `nav`, `mode`, `dest`, `channel`, `delete`, `silent` (each applies the change to the draft, regenerates the script, runs `compileScript`; on errors the change is reverted and the errors are sent as an ephemeral follow-up using `errorLines`; on success the panel is re-rendered with `interaction.update`), `trigger` and `text` (open modals; the modal submit applies the value the same way, `checkTrigger` first for the trigger with `autoresponder.badTrigger.<code>`), `cancel` (drops the entry, replaces the panel with the cancelled text, components removed), `save` (below). Slow work calls `deferUpdate` first.
 - Save: `drafts.beginSave` (null -> expired reply), `checkTrigger` (bad -> `badTrigger` reply, `endSave(false)`), `compileScript(generateScript(draft), { db, guild, writer: interaction.member })` (errors -> `errorLines` reply, `endSave(false)`, draft kept), `createRule` (`'full'` -> `autoresponder.full`, `endSave(false)`), then `invalidate`, one log line, `endSave(true)`, panel replaced by the created text with the rule id and no components.
 - i18n keys added here (en, fr, ar): `builder.*` panel texts (`head`, page names, button and select labels, `notYours`, `expired`, `cancelled`, `saved`, `logDetail`, `modal.trigger`, `modal.text`, input labels at most 45 characters) and all `builder.sum.*` keys.
 
@@ -131,16 +129,18 @@
 
 ---
 
-### Task 5: Conditions page
+### Task 3: Conditions and actions pages
+
+**Tier:** sonnet - several pickers sharing one pending-kind flow, role-safety cases
+
+#### Part A: Conditions page
 
 **Files:**
 - Modify: `src/features/autoresponder/builder/panel.js`, `builder/handlers.js`, `src/i18n/{en,fr,ar}.json`
 - Test: `test/features/autoresponder-builder-conditions.test.js`
 
-**Tier:** sonnet - several pickers with one pending-kind flow
-
 **Interfaces:**
-- Consumes: Task 4's router, `addGate`/`removeGate` (Task 1), `entry.pending` (Task 2), compile-and-revert helper from Task 4 (export it from `handlers.js` as `tryChange(interaction, ctx, lang, entry, nextDraft, rerender)` if it is not already shared).
+- Consumes: Task 2's router, `addGate`/`removeGate` (Task 1 Part A), `entry.pending` (Task 1 Part B), `tryChange` from Task 2.
 - Produces: `PAGES` gains `conditions`. The page has: a `cond` string select with the eight kinds (`cooldown`, `requirerole`, `denyrole`, `requireperm`, `denyperm`, `requirechannel`, `denychannel`, `requireuser`) that sets `entry.pending`; then exactly one input row for the pending kind: `cooldown` -> a button opening modal `mcooldown` (one `seconds` input); role kinds -> RoleSelect, 1 to 10 values; permission kinds -> a string select of the 25 most used permission names (`ManageMessages`, `ManageRoles`, `ManageChannels`, `ManageGuild`, `ManageNicknames`, `KickMembers`, `BanMembers`, `ModerateMembers`, `Administrator`, `MentionEveryone`, `SendMessages`, `AttachFiles`, `EmbedLinks`, `AddReactions`, `UseExternalEmojis`, `ViewChannel`, `Connect`, `Speak`, `ReadMessageHistory`, `ManageThreads`, `ManageEvents`, `ManageWebhooks`, `CreateInstantInvite`, at most 25 options and no duplicates) plus an Other button opening modal `mperm` (one `perm` input); channel kinds -> ChannelSelect (text, 1 to 10); `requireuser` -> UserSelect (1 to 10); and a `rmgate` string select listing the draft's gates (hidden when none; labels from `summaryLines`). A picked value applies through compile-and-revert and clears `pending`.
 - i18n: `builder.cond.*` labels (kind names, placeholders, modal titles/labels at most 45 characters).
 
@@ -149,16 +149,14 @@
 
 ---
 
-### Task 6: Actions page
+#### Part B: Actions page
 
 **Files:**
 - Modify: `src/features/autoresponder/builder/panel.js`, `builder/handlers.js`, `src/i18n/{en,fr,ar}.json`
 - Test: `test/features/autoresponder-builder-actions.test.js`
 
-**Tier:** sonnet - same pattern as Task 5 with role-safety cases
-
 **Interfaces:**
-- Consumes: Task 5's pending-kind flow, `addAction`/`removeAction`.
+- Consumes: Part A's pending-kind flow, `addAction`/`removeAction`.
 - Produces: `PAGES` gains `actions`. A `act` string select with `addrole`, `removerole`, `setnick`, `react`, `reactreply` sets `entry.pending`; then one input row: role kinds -> RoleSelect (exactly 1); `setnick` -> a button opening modal `mnick` (one `nick` input, max 32); reactions -> a button opening modal `memoji` (one `emoji` input, max 64). An `rmact` select lists existing actions (hidden when none). Compile-and-revert gives the language's own refusals (`TOO_MANY_ROLE_ACTIONS`, `TOO_MANY_REACTIONS`, `ROLE_ABOVE_BOT`, `ROLE_ABOVE_YOU`, `ROLE_DANGEROUS`, `INVALID_EMOJI`, `NICK_TOO_LONG`).
 
 - [ ] **Step 1: Write failing tests:** page row and id limits; `addrole` with a normal role adds `{addrole:<@&id>}`; a role above the bot -> `ROLE_ABOVE_BOT`, above the writer -> `ROLE_ABOVE_YOU`, Administrator -> `ROLE_DANGEROUS`, each reverted; a fourth role/nickname action -> `TOO_MANY_ROLE_ACTIONS`; `removerole` works; `setnick` with `Mr. {x}`-free text adds it, a 33-character nickname -> `NICK_TOO_LONG`, and a nickname containing `|` and `\` is escaped and compiles to the same text (assert `compiled.actions[0].text`); `react` with `🔥` adds, a sixth reaction (mix of `react` and `reactreply`) -> `TOO_MANY_REACTIONS`, a custom emoji of another server -> `INVALID_EMOJI`; removing an action removes exactly that one; Save stores `compiled.actions` matching the draft; i18n keys in en, fr and ar.
@@ -166,16 +164,18 @@
 
 ---
 
-### Task 7: Embed and cleanup options on the Reply page
+### Task 4: Reply options, Try it and script mode
+
+**Tier:** sonnet - embed picker with the 25-option limit, a side-effect-free dry run, a one-way mode switch
+
+#### Part A: Embed and cleanup options on the Reply page
 
 **Files:**
 - Modify: `src/features/autoresponder/builder/panel.js`, `builder/handlers.js`, `src/i18n/{en,fr,ar}.json`
 - Test: `test/features/autoresponder-builder-reply.test.js`
 
-**Tier:** sonnet - embed picker with the 25-option limit
-
 **Interfaces:**
-- Consumes: `listEmbeds(db, guildId): Promise<string[]>` from `src/features/embeds/store.js`; Task 4's reply page (its button row has room for two more buttons: five buttons maximum in a row).
+- Consumes: `listEmbeds(db, guildId): Promise<string[]>` from `src/features/embeds/store.js`; Task 2's reply page (its button row has room for two more buttons: five buttons maximum in a row).
 - Produces: on the Reply page an Embed button and a Delete-reply button. Embed opens a view with a string select `embed` of: no embed, plain colour (opens modal `mcolor`, one `color` input, `#rrggbb` or empty), and up to 24 named embeds from `listEmbeds` (a note line when there are more); picking applies through compile-and-revert (`{embed}`, `{embed:#rrggbb}`, `{embed:<name>}`; a name deleted since the list was read -> `EMBED_NOT_FOUND`, reverted). Delete-reply opens modal `mdelreply` (one `seconds` input, empty clears it; `DELETE_REPLY_RANGE` outside 1 to 300).
 
 - [ ] **Step 1: Write failing tests:** with 30 stored embeds the select has at most 25 options and the note line appears; picking a named embed adds `{embed:name}`; **an embed deleted between listing and picking is refused with `EMBED_NOT_FOUND` and reverted**; a plain colour with `#ec948a` and with `ec948a` (`BAD_ARGUMENT`); no embed clears it; delete-reply `10` adds `{delete_reply:10}`, `0` and `301` are refused, empty clears; the Reply page still has at most 5 rows and 5 buttons per row; Save stores `compiled.flags.embed` and `deleteReplyAfter`; i18n in en, fr and ar.
@@ -183,16 +183,14 @@
 
 ---
 
-### Task 8: Try it
+#### Part B: Try it
 
 **Files:**
 - Modify: `src/features/autoresponder/builder/panel.js`, `builder/handlers.js`, `src/i18n/{en,fr,ar}.json`
 - Test: `test/features/autoresponder-builder-try.test.js`
 
-**Tier:** sonnet - reuses `describeRun`, must stay side-effect free
-
 **Interfaces:**
-- Consumes: `describeRun` (Task 3), `matchRule` and `checkTrigger` (`match.js`), `compileScript`.
+- Consumes: `describeRun` (Task 1 Part C), `matchRule` and `checkTrigger` (`match.js`), `compileScript`.
 - Produces: a Try it button on the Review page opening modal `mtry` (one `sample` input, paragraph, max 1000). On submit: compile the generated script (errors -> `errorLines`), build the rule view `{ trigger, matchMode, enabled: true }`, print whether the sample matches the draft trigger (`builder.try.match` / `builder.try.nomatch`), and, when it matches or even when it does not (show it anyway under a "would run if matched" line), the `describeRun` lines for the pressing member in the current channel. Reply is ephemeral and the panel stays. It never writes the database, never sends, changes no role, writes no cooldown and no log line.
 
 - [ ] **Step 1: Write failing tests:** a matching sample shows the match line, the gates, the rendered text with the member's placeholders and the action list; a non-matching sample shows `try.nomatch`; a failing `requirerole` shows `gate.fail`; a draft that does not compile replies with the errors; **no `INSERT`/`UPDATE`/`DELETE` reaches `db.query` (spy) and the fake member/channel throw on every write method**; output at most 2000 characters; expired panel -> `expired`; i18n in en, fr and ar.
@@ -200,16 +198,14 @@
 
 ---
 
-### Task 9: Edit script text and script mode
+#### Part C: Edit script text and script mode
 
 **Files:**
 - Modify: `src/features/autoresponder/builder/panel.js`, `builder/handlers.js`, `src/i18n/{en,fr,ar}.json`
 - Test: `test/features/autoresponder-builder-script.test.js`
 
-**Tier:** sonnet - one-way mode switch with a compile gate
-
 **Interfaces:**
-- Consumes: `modalFor`-style script modal (reuse the field limits `MAX_SCRIPT` 4000), `toScriptMode` (Task 1), `compileScript`.
+- Consumes: `modalFor`-style script modal (reuse the field limits `MAX_SCRIPT` 4000), `toScriptMode` (Task 1 Part A), `compileScript`.
 - Produces: an Edit script text button on the Review page. It opens modal `mscript` with one paragraph input `script` (max 4000) prefilled with `generateScript(draft)` (clipped by Discord's own limit; if the generated text is over 4000 the prefill is empty and a note says so). Cancelling the modal changes nothing. On submit: compile; errors -> `errorLines` and the draft is unchanged; success -> `toScriptMode(draft, script)` and the panel re-renders in script mode: the nav select is replaced by nothing (only Review is available), the summary is replaced by the script text in a code block (clipped with `fitLines`-style handling to fit 2000 characters, with a note when clipped), and only Try it, Edit script text (to edit the text again), Save and Cancel remain. Trigger and mode stay editable in script mode through a Basics button. There is no way back to guided mode for that draft.
 
 - [ ] **Step 1: Write failing tests:** the modal is prefilled with the generated script; submitting a valid edited script switches to script mode and Save stores exactly that text; submitting an invalid script keeps guided mode and the draft unchanged and lists the errors; closing the modal (no submit) changes nothing (assert the entry); in script mode the nav select is gone and the summary is the code block; Edit script text again works and keeps script mode; Try it and Save work in script mode; the trigger can still be changed; a 4000-character script is accepted and a 4001-character one is refused with `SCRIPT_TOO_LONG` (Discord caps the input; test through the handler with a fake field); i18n in en, fr and ar.
@@ -217,13 +213,15 @@
 
 ---
 
-### Task 10: Docs, help and wiring check
+### Task 5: Docs, wiring check and final verification
+
+**Tier:** sonnet - cross-cutting docs that must match the code, then run-and-report
+
+#### Part A: Docs, help and wiring check
 
 **Files:**
 - Modify: `README.md`, `docs/testing-checklist.md` (section 16), `docs/memory/{features-built,architecture,decisions,gotchas,index}.md`, `test/features/autoresponder-wiring.test.js` (add assertions)
 - Test: `test/features/autoresponder-wiring.test.js`, `test/features/help.test.js`
-
-**Tier:** sonnet - cross-cutting docs that must match the code
 
 **Interfaces:** none new.
 
@@ -233,11 +231,9 @@
 
 ---
 
-### Task 11: Final verification
+#### Part B: Final verification (run after Part A is committed; commit nothing here)
 
 **Files:** none changed.
-
-**Tier:** haiku - run commands and report
 
 **Interfaces:** none.
 
