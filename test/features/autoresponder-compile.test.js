@@ -56,7 +56,7 @@ test('plain text compiles to a single text part', async () => {
   const r = await compileScript('hello there', env());
   assert.equal(r.ok, true);
   assert.deepEqual(r.compiled.template, [{ t: 'text', v: 'hello there' }]);
-  assert.equal(r.compiled.version, 1);
+  assert.equal(r.compiled.version, 2);
   assert.deepEqual(r.compiled.flags, {
     silent: false, dm: false, delete: false, embed: null, sendTo: null, deleteReplyAfter: null,
   });
@@ -130,13 +130,13 @@ test('server owner may give a role below the bot', async () => {
   const g = makeGuild();
   const r = await compileScript('{addrole:Mid}', { db, guild: g, writer: writerOf(0, g.ownerId) });
   assert.equal(r.ok, true);
-  assert.deepEqual(r.compiled.actions, [{ fn: 'addrole', roleId: id(7), raw: 'Mid' }]);
+  assert.deepEqual(r.compiled.actions, [{ fn: 'addrole', roleId: id(7), raw: 'Mid', target: null }]);
 });
 
-test('removerole compiles; a target argument is not allowed yet', async () => {
+test('removerole compiles; a typed target is refused', async () => {
   const r = await compileScript('{removerole:Red}', env());
-  assert.deepEqual(r.compiled.actions, [{ fn: 'removerole', roleId: id(2), raw: 'Red' }]);
-  assert.deepEqual(codes(await compileScript('{addrole:Red|@sam}', env())), ['TARGET_NOT_ALLOWED_YET']);
+  assert.deepEqual(r.compiled.actions, [{ fn: 'removerole', roleId: id(2), raw: 'Red', target: null }]);
+  assert.deepEqual(codes(await compileScript('{addrole:Red|@sam}', env())), ['TARGET_NOT_CHECKED_USER']);
 });
 
 test('a fourth role or nick action is refused', async () => {

@@ -5,6 +5,8 @@ import { PermissionsBitField } from 'discord.js';
 import { parseEmoji } from '../../reactionroles/config.js';
 import { isDangerousRole, botCanGive, callerCanGive } from '../../../core/role-safety.js';
 import { getEmbed, normalizeEmbedName } from '../../embeds/store.js';
+import { ESCAPED_BRACKET } from './parse.js';
+import { MAX_ARG_INDEX } from './args.js';
 
 export const MAX_COOLDOWN = 604800;
 export const MAX_DELETE_REPLY = 300;
@@ -12,6 +14,16 @@ export const MAX_REACTIONS = 5;
 export const MAX_ROLE_ACTIONS = 3;
 export const MAX_NICK = 32;
 export const MAX_LIST = 10;
+export const MAX_RANDOM = 4;
+export const MAX_CHOICES = 25;
+export const MAX_RANGE_VALUE = 1_000_000_000;
+export const ARG_TYPES = ['user', 'channel', 'color', 'role', 'number'];
+// Modes whose rules have no words after the trigger.
+export const WORD_MODES = new Set(['startswith', 'includes']);
+
+// The sentinel marks an escaped `\[`; arguments that are resolved at save time see a plain `[`.
+const unescape = (s) => s.replaceAll(ESCAPED_BRACKET, '[');
+const TARGET_RE = /^\[\$([1-9]|1\d|20)\]$/;
 
 const SNOWFLAKE = /^\d{17,20}$/;
 const HEX = /^#([0-9a-f]{6})$/i;
@@ -113,17 +125,25 @@ const boolFlag = (name) => ({
 const roleAction = (fn) => ({
   min: 1,
   max: 2,
+  keepEscapes: true,
   check(args, { guild, writer }, acc) {
-    if (args.length > 1) return [{ code: 'TARGET_NOT_ALLOWED_YET', detail: args[1] }];
     if (acc.roleActions >= MAX_ROLE_ACTIONS) return [{ code: 'TOO_MANY_ROLE_ACTIONS' }];
     acc.roleActions++;
-    const r = resolveRole(guild, args[0]);
+    const roleArg = unescape(args[0]);
+    const r = resolveRole(guild, roleArg);
     if (r.error) return [r.error];
     const { role } = r;
     if (isDangerousRole(role)) return [{ code: 'ROLE_DANGEROUS', detail: role.name }];
     if (!botCanGive(guild, role)) return [{ code: 'ROLE_ABOVE_BOT', detail: role.name }];
     if (!callerCanGive(guild, writer, role)) return [{ code: 'ROLE_ABOVE_YOU', detail: role.name }];
-    acc.actions.push({ fn, roleId: role.id, raw: args[0] });
+    let target = null;
+    if (args.length > 1) {
+      const m = TARGET_RE.exec(args[1]);
+      if (!m) return [{ code: 'TARGET_NOT_CHECKED_USER', detail: unescape(args[1]) }];
+      target = Number(m[1]);
+      acc.targets.push({ n: target, pos: acc.pos });
+    }
+    acc.actions.push({ fn, roleId: role.id, raw: roleArg, target });
     return [];
   },
 });
@@ -141,7 +161,84 @@ const reactAction = (fn) => ({
   },
 });
 
+const RANGE_RE = /^(-?\d+)-(-?\d+)$/;
+const WEIGHT_RE = /^(\d+(?:\.\d+)?)%$/;
+const ARG_N_RE = /^(?:[1-9]|1\d|20)$/;
+
+const emptyOption = (args) => args.some((a) => a === '');
+
 export const FUNCTIONS = {
+  range: {
+    min: 1,
+    max: 1,
+    check(args, _env, acc) {
+      const m = RANGE_RE.exec(args[0]);
+      const min = m ? Number(m[1]) : NaN;
+      const max = m ? Number(m[2]) : NaN;
+      if (!m || Math.abs(min) > MAX_RANGE_VALUE || Math.abs(max) > MAX_RANGE_VALUE || max < min) {
+        return [{ code: 'RANGE_INVALID', detail: args[0] }];
+      }
+      if (acc.random.ranges.length >= MAX_RANDOM) return [{ code: 'TOO_MANY_RANDOM' }];
+      acc.random.ranges.push({ min, max });
+      return [];
+    },
+  },
+  choose: {
+    min: 1,
+    max: MAX_CHOICES,
+    keepEscapes: true,
+    check(args, _env, acc) {
+      if (emptyOption(args)) return [{ code: 'BAD_ARGUMENT', detail: '' }];
+      if (acc.random.choosers.length >= MAX_RANDOM) return [{ code: 'TOO_MANY_RANDOM' }];
+      acc.random.choosers.push({ kind: 'choose', options: [...args] });
+      return [];
+    },
+  },
+  weightedchoose: {
+    min: 1,
+    max: MAX_CHOICES,
+    check(args, _env, acc) {
+      const weights = [];
+      const errors = [];
+      for (const a of args) {
+        const m = WEIGHT_RE.exec(a);
+        const w = m ? Number(m[1]) : NaN;
+        if (Number.isFinite(w)) weights.push(w);
+        else errors.push({ code: 'WEIGHT_INVALID', detail: a });
+      }
+      if (errors.length) return errors;
+      if (!(weights.reduce((x, y) => x + y, 0) > 0)) return [{ code: 'WEIGHT_INVALID', detail: args.join('|') }];
+      if (acc.random.choosers.length >= MAX_RANDOM) return [{ code: 'TOO_MANY_RANDOM' }];
+      acc.random.choosers.push({ kind: 'weighted', weights });
+      return [];
+    },
+  },
+  lockedchoose: {
+    min: 1,
+    max: MAX_CHOICES,
+    keepEscapes: true,
+    check(args, _env, acc) {
+      if (emptyOption(args)) return [{ code: 'BAD_ARGUMENT', detail: '' }];
+      if (acc.random.locked.length >= MAX_RANDOM) return [{ code: 'TOO_MANY_RANDOM' }];
+      acc.random.locked.push([...args]);
+      acc.lockedPos.push(acc.pos);
+      return [];
+    },
+  },
+  requirearg: {
+    min: 1,
+    max: 2,
+    check(args, { matchMode }, acc) {
+      if (!ARG_N_RE.test(args[0]) || Number(args[0]) > MAX_ARG_INDEX) return [{ code: 'ARG_INDEX_INVALID', detail: args[0] }];
+      const n = Number(args[0]);
+      const type = args.length > 1 ? args[1].toLowerCase() : null;
+      if (type !== null && !ARG_TYPES.includes(type)) return [{ code: 'ARG_TYPE_INVALID', detail: args[1] }];
+      if (matchMode && !WORD_MODES.has(matchMode)) return [{ code: 'NO_ARGUMENTS_IN_MODE', detail: matchMode }];
+      if (acc.argChecks.some((c) => c.n === n)) return [{ code: 'DUPLICATE_FUNCTION', detail: `requirearg:${n}` }];
+      acc.argChecks.push({ n, type });
+      return [];
+    },
+  },
   cooldown: {
     min: 1,
     max: 1,
@@ -181,6 +278,7 @@ export const FUNCTIONS = {
   setnick: {
     min: 1,
     max: 1,
+    keepEscapes: true,
     check(args, _env, acc) {
       if (acc.roleActions >= MAX_ROLE_ACTIONS) return [{ code: 'TOO_MANY_ROLE_ACTIONS' }];
       acc.roleActions++;

@@ -86,10 +86,13 @@ async function editmatchmode(interaction, ctx, lang) {
   const mode = interaction.options.getString('match');
   const verdict = checkTrigger(rule.trigger, mode);
   if (!verdict.ok) return interaction.reply(ephemeral(t(lang, `autoresponder.badTrigger.${verdict.code}`)));
+  // The stored script must still be valid under the new mode (for example no {requirearg} without words).
+  const result = await compileScript(rule.script, { db: ctx.db, guild: interaction.guild, writer: interaction.member, matchMode: mode });
+  if (!result.ok) return interaction.reply(ephemeral(failureText(lang, result.errors)));
   await updateRule(ctx.db, interaction.guildId, rule.id, { matchMode: mode });
   invalidate(interaction.guildId);
   await log(ctx, interaction, lang, 'editmatchmode', rule.id, mode);
-  return interaction.reply(ephemeral(t(lang, 'autoresponder.matchChanged', { id: rule.id, mode })));
+  return interaction.reply(ephemeral(withWarnings(lang, t(lang, 'autoresponder.matchChanged', { id: rule.id, mode }), result.warnings)));
 }
 
 async function toggle(interaction, ctx, lang) {
@@ -168,6 +171,15 @@ export function errorLines(lang, errors) {
   });
 }
 
+const failureText = (lang, errors) =>
+  fitLines(lang, [t(lang, 'autoresponder.errors.head'), ...errorLines(lang, errors)], MAX_REPLY);
+
+// Warnings go after the success text, one line each, without repeating a code.
+function withWarnings(lang, text, warnings = []) {
+  const codes = [...new Set(warnings.map((w) => w.code))];
+  return [text, ...codes.map((c) => t(lang, `autoresponder.warning.${c}`))].join('\n');
+}
+
 // Saves the modal: validates the trigger and compiles the script as the submitting member.
 async function submitModal(interaction, ctx, lang, kind, arg) {
   const trigger = interaction.fields.getTextInputValue('trigger');
@@ -181,18 +193,15 @@ async function submitModal(interaction, ctx, lang, kind, arg) {
   }
   const verdict = checkTrigger(trigger, matchMode);
   if (!verdict.ok) return interaction.reply(ephemeral(t(lang, `autoresponder.badTrigger.${verdict.code}`)));
-  const result = await compileScript(script, { db: ctx.db, guild: interaction.guild, writer: interaction.member });
-  if (!result.ok) {
-    const lines = [t(lang, 'autoresponder.errors.head'), ...errorLines(lang, result.errors)];
-    return interaction.reply(ephemeral(fitLines(lang, lines, MAX_REPLY)));
-  }
+  const result = await compileScript(script, { db: ctx.db, guild: interaction.guild, writer: interaction.member, matchMode });
+  if (!result.ok) return interaction.reply(ephemeral(failureText(lang, result.errors)));
   const detail = oneLine(trigger).slice(0, 100);
   if (kind === 'edit') {
     await updateRule(ctx.db, interaction.guildId, rule.id, { trigger, script, compiled: result.compiled });
     await clearRuleCooldowns(ctx.db, rule.id);
     invalidate(interaction.guildId);
     await log(ctx, interaction, lang, 'edit', rule.id, detail);
-    return interaction.reply(ephemeral(t(lang, 'autoresponder.updated', { id: rule.id })));
+    return interaction.reply(ephemeral(withWarnings(lang, t(lang, 'autoresponder.updated', { id: rule.id }), result.warnings)));
   }
   const created = await createRule(ctx.db, {
     guildId: interaction.guildId, trigger, matchMode, script, compiled: result.compiled, createdBy: interaction.user.id,
@@ -200,7 +209,7 @@ async function submitModal(interaction, ctx, lang, kind, arg) {
   if (created === 'full') return interaction.reply(ephemeral(t(lang, 'autoresponder.full')));
   invalidate(interaction.guildId);
   await log(ctx, interaction, lang, 'add', created.id, detail);
-  return interaction.reply(ephemeral(t(lang, 'autoresponder.created', { id: created.id })));
+  return interaction.reply(ephemeral(withWarnings(lang, t(lang, 'autoresponder.created', { id: created.id }), result.warnings)));
 }
 
 /** Routes every `autoresponder:*` component: the add and edit modal submissions. */

@@ -40,7 +40,7 @@ async function sideMessage(interaction, text) {
  * stored and `rerender(entry)` redraws the panel. Returns true when the change was applied.
  */
 export async function tryChange(interaction, ctx, lang, entry, nextDraft, rerender) {
-  const result = await compileScript(generateScript(nextDraft), { db: ctx.db, guild: interaction.guild, writer: interaction.member });
+  const result = await compileScript(generateScript(nextDraft), { db: ctx.db, guild: interaction.guild, writer: interaction.member, matchMode: nextDraft.matchMode });
   if (!result.ok) {
     await sideMessage(interaction, fitLines(lang, [t(lang, key('refused')), ...errorLines(lang, result.errors)], MAX_REPLY));
     return false;
@@ -400,7 +400,7 @@ async function save(interaction, ctx, lang, entry) {
     if (!verdict.ok) return await interaction.followUp(ephemeral(t(lang, `autoresponder.badTrigger.${verdict.code}`)));
     if (needsChannel(draft)) return await interaction.followUp(ephemeral(t(lang, key('needChannel'))));
     const script = generateScript(draft);
-    const result = await compileScript(script, { db: ctx.db, guild: interaction.guild, writer: interaction.member });
+    const result = await compileScript(script, { db: ctx.db, guild: interaction.guild, writer: interaction.member, matchMode: draft.matchMode });
     if (!result.ok) {
       const lines = [t(lang, 'autoresponder.errors.head'), ...errorLines(lang, result.errors)];
       return await interaction.followUp(ephemeral(fitLines(lang, lines, MAX_REPLY)));
