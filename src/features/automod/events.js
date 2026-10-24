@@ -1,6 +1,7 @@
 // Auto-mod message events: one shared engine and one prune sweep per process.
 import { Events } from 'discord.js';
 import { safe } from '../logging/send-log.js';
+import { beginOutcome, finishOutcome } from '../../core/message-outcome.js';
 import { createEngine } from './pipeline.js';
 import { createNativeHandler } from './native.js';
 
@@ -31,8 +32,14 @@ export function stopAutomodSweep() {
 /** Builds the event list around an engine (tests pass a fake one). */
 export function createEvents(engine, native = createNativeHandler({ strikes: engine.strikes })) {
   const onCreate = safe('automodMessageCreate', async (ctx, message) => {
-    startAutomodSweep(engine);
-    await engine.handleMessage(ctx, message, { edited: false });
+    // Must stay the first statement (before any await): the autoresponder listener runs later and waits on it.
+    beginOutcome(message.id);
+    try {
+      startAutomodSweep(engine);
+      await engine.handleMessage(ctx, message, { edited: false });
+    } finally {
+      finishOutcome(message.id);
+    }
   });
 
   const onUpdate = safe('automodMessageUpdate', async (ctx, oldMessage, newMessage) => {

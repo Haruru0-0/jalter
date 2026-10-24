@@ -94,3 +94,18 @@ test('registry lists automod with command automod', () => {
   assert.equal(f.enableCommand, 'automod enable');
   assert.equal(f.phase, 2);
 });
+
+test('messageCreate begins the outcome before the first await and finishes it even when the engine throws', async () => {
+  const { outcomeSize, markActed, awaitOutcome } = await import('../../src/core/message-outcome.js');
+  const engine = {
+    strikes: {},
+    handleMessage: async (ctx, message) => { markActed(message.id); throw new Error('boom'); },
+    prune() {},
+  };
+  const create = find(createEvents(engine), Events.MessageCreate);
+  const before = outcomeSize();
+  const pending = create.execute({}, { id: 'outcome-1', guildId: 'g', author: { bot: false } });
+  assert.equal(outcomeSize(), before + 1, 'beginOutcome ran synchronously');
+  await pending;
+  assert.equal(await awaitOutcome('outcome-1', 50), 'acted');
+});

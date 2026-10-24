@@ -116,3 +116,13 @@ test('enforce skips a finding whose rule is not configured', async () => {
   await s.run(null, [{ rule: 'nope', reason: 'x' }, { rule: 'words', reason: 'y' }]);
   assert.deepEqual((await listHistory(db, G))[0].rules, ['words']);
 });
+
+test('enforce marks the message acted before it deletes it', async () => {
+  const { beginOutcome, finishOutcome, awaitOutcome } = await import('../../src/core/message-outcome.js');
+  const s = setup();
+  beginOutcome('mark-1');
+  let seen = null;
+  const del = async () => { finishOutcome('mark-1'); seen = await awaitOutcome('mark-1', 50); };
+  await s.run({ id: 'mark-1', channelId: 'c1', delete: del });
+  assert.equal(seen, 'acted');
+});

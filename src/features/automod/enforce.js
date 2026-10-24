@@ -5,6 +5,7 @@ import { sendLog as realSendLog } from '../logging/send-log.js';
 import { addHistory as realAddHistory } from './history.js';
 import { stepReached, isTopStep } from './strikes.js';
 import { grantTimedRole } from './role-effect.js';
+import { markActed } from '../../core/message-outcome.js';
 
 const UNKNOWN_MESSAGE = 10008;
 const DEFAULT_TIMEOUT_SECONDS = 600;
@@ -36,6 +37,8 @@ export async function enforce(ctx, { guild, member, message, channelId, messageI
     // A finding for a rule missing from the config is skipped, not fatal.
     const tripped = findings.map((f) => f.rule).filter((rule) => rules[rule]);
     if (!tripped.length) return;
+    // Tell the autoresponder this message was moderated, before anything is deleted or done.
+    if (message) markActed(message.id);
     const logChannelId = message?.channelId ?? channelId ?? null;
     const actions = [];
     let caseNumber = null;
