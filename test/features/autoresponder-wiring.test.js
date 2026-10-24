@@ -42,3 +42,24 @@ test('help lists the autoresponder command and gives it a page', () => {
 test('the housekeeping list prunes the cooldowns', () => {
   assert.ok(collectModules(modules).housekeeping.includes(pruneCooldowns));
 });
+
+test('the autoresponder command lists builder together with every older subcommand', () => {
+  const { commands } = collectModules(modules);
+  const names = commands.get('autoresponder').data.toJSON().options.map((o) => o.name);
+  for (const sub of ['builder', 'enable', 'disable', 'add', 'edit', 'editmatchmode', 'toggle', 'remove', 'list', 'show', 'test']) {
+    assert.ok(names.includes(sub), `missing subcommand ${sub}`);
+  }
+  assert.equal(new Set(names).size, names.length);
+});
+
+test('help lists the autoresponder builder subcommand', () => {
+  const { commands } = collectModules(modules);
+  const page = buildHelp('en', new Map(), commands, 'autoresponder');
+  assert.match(page.description, /`\/autoresponder builder`: .+/);
+});
+
+test('the autoresponder component prefix is registered exactly once', () => {
+  const owners = modules.flatMap((m) => m.commands ?? []).filter((c) => c.components?.prefix === 'autoresponder');
+  assert.equal(owners.length, 1);
+  assert.equal(collectModules(modules).components.get('autoresponder'), owners[0].components);
+});
