@@ -93,3 +93,21 @@ test('2000 characters / 500 words is fast', () => {
   assert.equal(w.list.length, 500);
   assert.ok(performance.now() - t < 50);
 });
+
+test('triggerRemainder survives case-folding length changes', () => {
+  assert.equal(triggerRemainder(rule('hug', 'includes'), 'İİİ hug sam'), ' sam');
+  assert.equal(triggerRemainder(rule('hi', 'includes'), 'İhi there'), ' there');
+  assert.equal(triggerRemainder(rule('İhi', 'startswith'), 'İHI there'), ' there');
+  assert.equal(triggerRemainder(rule('hug', 'includes'), 'İİİ HUG sam'), ' sam');
+  assert.equal(triggerRemainder(rule('hug', 'includes'), 'ß ẞ hug sam'), ' sam');
+  assert.equal(triggerRemainder(rule('!say', 'startswith'), '!SAY  Hello'), '  Hello');
+  assert.equal(triggerRemainder(rule('hug', 'includes'), 'oh HUG you'), ' you');
+});
+
+test('triggerRemainder on 2000 characters / 500 words is quick', () => {
+  const msg = '!say ' + 'abc '.repeat(499);
+  const t = performance.now();
+  const r = triggerRemainder(rule('!say', 'startswith'), msg);
+  assert.equal(parseWords(r).list.length, 499);
+  assert.ok(performance.now() - t < 200);
+});

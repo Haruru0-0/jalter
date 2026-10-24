@@ -63,11 +63,23 @@ export function triggerRemainder(rule, text) {
   const trig = norm(rule.trigger);
   if (!trig) return null;
   const body = text.trimStart();
+  // Fold per code point and remember each folded unit's original offset, so characters whose
+  // lowercase form has a different length (e.g. U+0130) cannot shift the slice.
+  let folded = '';
+  const offsets = [];
+  let pos = 0;
+  for (const ch of body) {
+    const lower = ch.toLowerCase();
+    for (let k = 0; k < lower.length; k++) offsets.push(pos);
+    folded += lower;
+    pos += ch.length;
+  }
+  offsets.push(body.length);
   const at = rule.matchMode === 'startswith'
-    ? (body.toLowerCase().startsWith(trig) ? 0 : -1)
-    : body.toLowerCase().indexOf(trig);
+    ? (folded.startsWith(trig) ? 0 : -1)
+    : folded.indexOf(trig);
   if (at < 0) return null;
-  return body.slice(at + trig.length);
+  return body.slice(offsets[at + trig.length]);
 }
 
 /** Best matching enabled rule: non-regex first, then longest trigger, then lowest id. */
