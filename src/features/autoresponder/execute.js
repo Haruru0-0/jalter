@@ -8,7 +8,7 @@ import { getEmbed } from '../embeds/store.js';
 import { t } from '../../i18n/index.js';
 
 export const RUN_ERROR_CODES = [
-  'ROLE_MISSING', 'ROLE_UNSAFE', 'CANNOT_MANAGE_NICK', 'NICK_TOO_LONG', 'NICK_EMPTY', 'CANNOT_DELETE', 'CANNOT_REACT',
+  'ROLE_MISSING', 'ROLE_UNSAFE', 'ROLE_FAILED', 'CANNOT_MANAGE_NICK', 'NICK_TOO_LONG', 'NICK_EMPTY', 'CANNOT_DELETE', 'CANNOT_REACT',
   'CANNOT_DM', 'CANNOT_SEND', 'RENDERED_TOO_LONG', 'EMBED_FAILED',
 ];
 
@@ -67,7 +67,8 @@ async function changeRole(a, { guild, member, deps, errors }) {
       await member.roles.remove(a.roleId, REASON);
     }
   } catch (err) {
-    fail(errors, 'ROLE_UNSAFE', a.fn, String(err?.code ?? err?.message ?? ''));
+    // The call itself failed (often Discord 50013, missing Manage Roles): not a safety refusal.
+    fail(errors, 'ROLE_FAILED', a.fn, `${a.roleId} (${err?.code ?? err?.message ?? 'unknown'})`);
   }
 }
 

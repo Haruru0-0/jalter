@@ -105,8 +105,16 @@ export function parseScript(source) {
   }
 
   if (errors.length) {
-    errors.sort((a, b) => a.pos - b.pos);
-    return { ok: false, errors };
+    // `{{` reports the abandoned outer call and the unclosed inner one at the same brace: keep one.
+    const seen = new Set();
+    const unique = errors.filter((e) => {
+      const key = `${e.code}:${e.pos}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    unique.sort((a, b) => a.pos - b.pos);
+    return { ok: false, errors: unique };
   }
   flush();
   return { ok: true, nodes };

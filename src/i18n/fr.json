@@ -807,6 +807,7 @@
   "autoresponder.log.error": "Échec d'une règle de réponse automatique",
   "autoresponder.run.ROLE_MISSING": "Un rôle utilisé par la règle n'existe plus.",
   "autoresponder.run.ROLE_UNSAFE": "Un rôle n'a pas pu être modifié : il a des permissions de staff ou se trouve au-dessus du bot.",
+  "autoresponder.run.ROLE_FAILED": "Un rôle n'a pas pu être modifié (il manque peut-être au bot la permission Gérer les rôles).",
   "autoresponder.run.CANNOT_MANAGE_NICK": "Le bot ne peut pas changer le pseudo de ce membre.",
   "autoresponder.run.NICK_TOO_LONG": "Le pseudo dépasse 32 caractères une fois complété.",
   "autoresponder.run.NICK_EMPTY": "Le pseudo est vide une fois complété.",

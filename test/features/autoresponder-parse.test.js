@@ -93,6 +93,14 @@ test('nested braces are UNBALANCED_BRACE at the inner brace', () => {
   assert.deepEqual(bad('{sendto:{user}}'), [{ code: 'UNBALANCED_BRACE', pos: 8 }]);
 });
 
+test('{{ reports one UNBALANCED_BRACE at the inner brace, not the same error twice', () => {
+  // The outer call is abandoned at the inner brace (as in the nested case) and the inner one never
+  // closes: both point at position 1, so they are one error.
+  assert.deepEqual(bad('{{'), [{ code: 'UNBALANCED_BRACE', pos: 1 }]);
+  assert.deepEqual(bad('{{{'), [{ code: 'UNBALANCED_BRACE', pos: 1 }, { code: 'UNBALANCED_BRACE', pos: 2 }]);
+  assert.deepEqual(bad('hi {{user'), [{ code: 'UNBALANCED_BRACE', pos: 4 }]);
+});
+
 test('4000 chars of text parses fast', () => {
   const t = Date.now();
   const n = ok('x'.repeat(4000));

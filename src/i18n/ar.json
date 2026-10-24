@@ -807,6 +807,7 @@
   "autoresponder.log.error": "فشلت قاعدة رد تلقائي",
   "autoresponder.run.ROLE_MISSING": "رتبة تستخدمها القاعدة لم تعد موجودة.",
   "autoresponder.run.ROLE_UNSAFE": "تعذّر تغيير رتبة: لها صلاحيات إشرافية أو تقع فوق رتبة البوت.",
+  "autoresponder.run.ROLE_FAILED": "تعذّر تغيير رتبة (قد تنقص البوت صلاحية إدارة الرتب).",
   "autoresponder.run.CANNOT_MANAGE_NICK": "لا يستطيع البوت تغيير لقب هذا العضو.",
   "autoresponder.run.NICK_TOO_LONG": "اللقب يتجاوز 32 حرفًا بعد التعبئة.",
   "autoresponder.run.NICK_EMPTY": "اللقب فارغ بعد التعبئة.",

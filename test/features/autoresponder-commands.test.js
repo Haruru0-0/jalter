@@ -153,9 +153,19 @@ test('a script with two errors stores nothing, logs nothing and lists both with 
   const out = text(i);
   assert.match(out, new RegExp(t('en', 'autoresponder.error.UNKNOWN_FUNCTION', { detail: '"foo"' }).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   assert.ok(out.includes('"bar"'));
-  assert.ok(out.includes('At character 2'));
-  assert.ok(out.includes('At character 10'));
+  // Positions are shown counting from 1: the braces sit at offsets 2 and 10.
+  assert.ok(out.includes('At character 3:'));
+  assert.ok(out.includes('At character 11:'));
+  assert.ok(!out.includes('At character 2:'));
   assert.ok(out.length <= 2000);
+});
+
+test('an error on the first character is shown as character 1, never 0', async () => {
+  const env = setup();
+  await on();
+  const out = text(await send(env, 'autoresponder:m:add:exact', { trigger: 'x', script: '{foo}' }));
+  assert.ok(out.includes('At character 1:'));
+  assert.ok(!out.includes('At character 0'));
 });
 
 test('more than ten errors show ten lines, fitted to 2000 characters', async () => {

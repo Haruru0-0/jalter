@@ -807,6 +807,7 @@
   "autoresponder.log.error": "Autoresponder rule failed",
   "autoresponder.run.ROLE_MISSING": "A role used by the rule no longer exists.",
   "autoresponder.run.ROLE_UNSAFE": "A role could not be changed: it has staff permissions or sits above the bot.",
+  "autoresponder.run.ROLE_FAILED": "A role could not be changed (the bot may be missing the Manage Roles permission).",
   "autoresponder.run.CANNOT_MANAGE_NICK": "The bot cannot change this member's nickname.",
   "autoresponder.run.NICK_TOO_LONG": "The nickname is longer than 32 characters once filled in.",
   "autoresponder.run.NICK_EMPTY": "The nickname is empty once filled in.",

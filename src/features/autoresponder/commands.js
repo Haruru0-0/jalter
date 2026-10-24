@@ -209,7 +209,8 @@ function errorLines(lang, errors) {
   return errors.slice(0, MAX_ERROR_LINES).map((e) => {
     const detail = e.detail ? `"${e.detail}"` : '';
     const text = t(lang, `autoresponder.error.${e.code}`, { detail }).trim();
-    return t(lang, 'autoresponder.errors.line', { pos: e.pos ?? 0, text });
+    // e.pos is a zero-based offset; people count characters from 1.
+    return t(lang, 'autoresponder.errors.line', { pos: (e.pos ?? 0) + 1, text });
   });
 }
 

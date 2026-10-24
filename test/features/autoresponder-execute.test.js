@@ -103,6 +103,23 @@ test('role the bot cannot give -> ROLE_UNSAFE', async () => {
   assert.ok(!s.calls.includes('role'));
 });
 
+test('a role add the API refuses -> ROLE_FAILED with the error code, other actions still run', async () => {
+  const s = setup({ roles: { r1: {} } });
+  s.member.roles.add = async () => { throw Object.assign(new Error('Missing Permissions'), { code: 50013 }); };
+  const res = await s.run(plan({ actions: [{ fn: 'addrole', roleId: 'r1', raw: 'r1' }, { fn: 'react', emoji: 'a' }] }));
+  assert.deepEqual(res.errors, [{ code: 'ROLE_FAILED', action: 'addrole', detail: 'r1 (50013)' }]);
+  assert.ok(s.calls.includes('react'));
+  assert.ok(s.calls.includes('reply'));
+});
+
+test('a role remove the API refuses -> ROLE_FAILED, not ROLE_UNSAFE', async () => {
+  const s = setup({ roles: { r1: {} }, memberRoles: ['r1'] });
+  s.member.roles.remove = async () => { throw Object.assign(new Error('Missing Permissions'), { code: 50013 }); };
+  const res = await s.run(plan({ actions: [{ fn: 'removerole', roleId: 'r1', raw: 'r1' }] }));
+  assert.deepEqual(res.errors, [{ code: 'ROLE_FAILED', action: 'removerole', detail: 'r1 (50013)' }]);
+  assert.ok(RUN_ERROR_CODES.includes('ROLE_FAILED'));
+});
+
 test('removerole of a role the member lacks is not an error', async () => {
   const s = setup({ roles: { r1: {} }, memberRoles: [] });
   const res = await s.run(plan({ actions: [{ fn: 'removerole', roleId: 'r1', raw: 'r1' }] }));
