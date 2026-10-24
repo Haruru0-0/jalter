@@ -33,7 +33,8 @@ export function stopAutomodSweep() {
 export function createEvents(engine, native = createNativeHandler({ strikes: engine.strikes })) {
   const onCreate = safe('automodMessageCreate', async (ctx, message) => {
     // Must stay the first statement (before any await): the autoresponder listener runs later and waits on it.
-    beginOutcome(message.id);
+    // Messages the autoresponder ignores (bots, webhooks, system, DMs) need no entry.
+    if (message.guildId && !message.author?.bot && !message.webhookId && !message.system) beginOutcome(message.id);
     try {
       startAutomodSweep(engine);
       await engine.handleMessage(ctx, message, { edited: false });

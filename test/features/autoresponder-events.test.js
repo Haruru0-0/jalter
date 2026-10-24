@@ -145,6 +145,20 @@ test('a message auto-mod acted on is not answered', async () => {
   assert.equal(h.calls.exec.length, 0);
 });
 
+test('a message auto-mod acted on is not answered while enforcement is still running', async () => {
+  await enable();
+  await createRule(db, base);
+  const h = build();
+  const msg = fakeMessage();
+  beginOutcome(msg.id);
+  markActed(msg.id); // the delete, action, log and history may take far longer than 3 s
+  const started = Date.now();
+  await h.run(msg);
+  assert.equal(h.calls.exec.length, 0);
+  assert.ok(Date.now() - started < 2000);
+  finishOutcome(msg.id);
+});
+
 test('a message auto-mod left clean is answered', async () => {
   await enable();
   await createRule(db, base);

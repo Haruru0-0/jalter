@@ -109,3 +109,20 @@ test('messageCreate begins the outcome before the first await and finishes it ev
   await pending;
   assert.equal(await awaitOutcome('outcome-1', 50), 'acted');
 });
+
+test('messageCreate tracks no outcome for messages the autoresponder ignores anyway', async () => {
+  const { outcomeSize } = await import('../../src/core/message-outcome.js');
+  const create = find(createEvents(fakeEngine()), Events.MessageCreate);
+  const ignored = [
+    { id: 'skip-bot', guildId: 'g', author: { bot: true } },
+    { id: 'skip-hook', guildId: 'g', webhookId: 'w', author: { bot: false } },
+    { id: 'skip-system', guildId: 'g', system: true, author: { bot: false } },
+    { id: 'skip-dm', guildId: null, author: { bot: false } },
+  ];
+  for (const message of ignored) {
+    const before = outcomeSize();
+    const pending = create.execute({}, message);
+    assert.equal(outcomeSize(), before, message.id);
+    await pending;
+  }
+});
