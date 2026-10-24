@@ -10,12 +10,12 @@ import { invalidate } from '../cache.js';
 import { checkTrigger, MATCH_MODES, MAX_TRIGGER_LENGTH } from '../match.js';
 import { compileScript } from '../script/compile.js';
 import { errorLines, log } from '../commands.js';
-import { addGate, newDraft, patch, removeGate, setTrigger } from './draft.js';
+import { addAction, addGate, newDraft, patch, removeAction, removeGate, setTrigger } from './draft.js';
 import { generateScript } from './generate.js';
 import { drafts } from './drafts.js';
 import {
   builderId, parseBuilderId, panelPayload, PAGES, DESTINATIONS,
-  GATE_KINDS, ROLE_GATES, PERM_GATES, CHANNEL_GATES, MAX_PICK, MAX_GATES, PERMISSIONS,
+  GATE_KINDS, ACTION_KINDS, ROLE_ACTIONS, REACT_ACTIONS, ROLE_GATES, PERM_GATES, CHANNEL_GATES, MAX_PICK, MAX_GATES, PERMISSIONS,
 } from './panel.js';
 
 const MAX_REPLY = 2000;
@@ -184,6 +184,10 @@ function submitPerm(interaction, ctx, lang, entry) {
 }
 
 function pickRole(interaction, ctx, lang, entry) {
+  if (ROLE_ACTIONS.includes(entry.pending)) {
+    const ids = pickedIds(interaction, 1);
+    return ids ? applyAction(interaction, ctx, lang, entry, { fn: entry.pending, id: ids[0] }) : noop(interaction, lang, entry);
+  }
   if (!ROLE_GATES.includes(entry.pending)) return noop(interaction, lang, entry);
   const ids = pickedIds(interaction, MAX_PICK);
   return ids ? applyGate(interaction, ctx, lang, entry, { fn: entry.pending, ids }) : noop(interaction, lang, entry);
@@ -212,6 +216,53 @@ function removeGateAt(interaction, ctx, lang, entry) {
   const index = /^\d{1,3}$/.test(raw ?? '') ? Number(raw) : -1;
   if (index < 0 || index >= entry.draft.gates.length) return noop(interaction, lang, entry);
   return tryChange(interaction, ctx, lang, entry, removeGate(entry.draft, index), redraw(interaction, lang));
+}
+
+// ---- actions ----
+
+const applyAction = (interaction, ctx, lang, entry, action) =>
+  tryChange(interaction, ctx, lang, entry, addAction(entry.draft, action), clearPending(interaction, lang));
+
+function act(interaction, ctx, lang, entry) {
+  const value = interaction.values?.[0];
+  if (!ACTION_KINDS.includes(value)) return noop(interaction, lang, entry);
+  const fresh = drafts.update(entry.panelId, { pending: value });
+  return fresh ? interaction.update(panelPayload(lang, fresh)) : refuse(interaction, lang, key('expired'));
+}
+
+function nickButton(interaction, ctx, lang, entry) {
+  if (entry.pending !== 'setnick') return noop(interaction, lang, entry);
+  return interaction.showModal(textModal(lang, builderId('mnick', entry.userId, entry.panelId), {
+    name: 'nick', title: 'act.modal.nick', label: 'act.input.nick', style: TextInputStyle.Short, max: 32, required: true,
+  }));
+}
+
+function emojiButton(interaction, ctx, lang, entry) {
+  if (!REACT_ACTIONS.includes(entry.pending)) return noop(interaction, lang, entry);
+  return interaction.showModal(textModal(lang, builderId('memoji', entry.userId, entry.panelId), {
+    name: 'emoji', title: 'act.modal.emoji', label: 'act.input.emoji', style: TextInputStyle.Short, max: 64, required: true,
+  }));
+}
+
+function submitNick(interaction, ctx, lang, entry) {
+  if (entry.pending !== 'setnick') return refuse(interaction, lang, key('expired'));
+  const text = interaction.fields.getTextInputValue('nick').trim();
+  if (hasBrace(text)) return refuse(interaction, lang, key('noBrace'));
+  return applyAction(interaction, ctx, lang, entry, { fn: 'setnick', text });
+}
+
+function submitEmoji(interaction, ctx, lang, entry) {
+  if (!REACT_ACTIONS.includes(entry.pending)) return refuse(interaction, lang, key('expired'));
+  const emoji = interaction.fields.getTextInputValue('emoji').trim();
+  if (hasBrace(emoji)) return refuse(interaction, lang, key('noBrace'));
+  return applyAction(interaction, ctx, lang, entry, { fn: entry.pending, emoji });
+}
+
+function removeActionAt(interaction, ctx, lang, entry) {
+  const raw = interaction.values?.[0];
+  const index = /^\d{1,3}$/.test(raw ?? '') ? Number(raw) : -1;
+  if (index < 0 || index >= entry.draft.actions.length) return noop(interaction, lang, entry);
+  return tryChange(interaction, ctx, lang, entry, removeAction(entry.draft, index), redraw(interaction, lang));
 }
 
 function cancel(interaction, ctx, lang, entry) {
@@ -256,6 +307,7 @@ const ACTIONS = {
   trigger: triggerButton, text: textButton, mtrigger: submitTrigger, mtext: submitText, cancel, save,
   cond, bcool: coolButton, bperm: permButton, mcooldown: modalOnly(submitCooldown), mperm: modalOnly(submitPerm),
   prole: pickRole, pperm: pickPerm, pchan: pickChannel, puser: pickUser, rmgate: removeGateAt,
+  act, bnick: nickButton, bemoji: emojiButton, mnick: modalOnly(submitNick), memoji: modalOnly(submitEmoji), rmact: removeActionAt,
 };
 
 /** `/autoresponder builder`: opens a fresh panel for the caller (replacing any earlier one). */

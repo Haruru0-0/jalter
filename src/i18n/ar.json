@@ -971,5 +971,20 @@
   "autoresponder.builder.cond.modal.cooldown": "مهلة الانتظار",
   "autoresponder.builder.cond.modal.perm": "صلاحية أخرى",
   "autoresponder.builder.cond.input.seconds": "الثواني (من 1 إلى 604800)",
-  "autoresponder.builder.cond.input.perm": "اسم الصلاحية مثل ManageMessages"
+  "autoresponder.builder.cond.input.perm": "اسم الصلاحية مثل ManageMessages",
+  "autoresponder.builder.page.actions": "الإجراءات",
+  "autoresponder.builder.act.kind.addrole": "منح رتبة",
+  "autoresponder.builder.act.kind.removerole": "إزالة رتبة",
+  "autoresponder.builder.act.kind.setnick": "تغيير اللقب",
+  "autoresponder.builder.act.kind.react": "التفاعل مع الرسالة",
+  "autoresponder.builder.act.kind.reactreply": "التفاعل مع الرد",
+  "autoresponder.builder.act.ph.kind": "أضف إجراءً",
+  "autoresponder.builder.act.ph.role": "اختر رتبة",
+  "autoresponder.builder.act.ph.remove": "احذف إجراءً",
+  "autoresponder.builder.act.btn.nick": "حدد اللقب",
+  "autoresponder.builder.act.btn.emoji": "حدد الإيموجي",
+  "autoresponder.builder.act.modal.nick": "اللقب",
+  "autoresponder.builder.act.modal.emoji": "الإيموجي",
+  "autoresponder.builder.act.input.nick": "اللقب الجديد (32 حرفاً كحد أقصى)",
+  "autoresponder.builder.act.input.emoji": "إيموجي أو إيموجي مخصص من هذا الخادم"
 }

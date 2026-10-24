@@ -13,13 +13,16 @@ const CONTENT_LIMIT = 2000;
 const key = (k) => `autoresponder.builder.${k}`;
 
 // Later tasks insert their pages before `review`, which stays last.
-export const PAGES = ['basics', 'reply', 'conditions', 'review'];
+export const PAGES = ['basics', 'reply', 'conditions', 'actions', 'review'];
 export const DESTINATIONS = ['reply', 'dm', 'channel'];
 
 export const GATE_KINDS = ['cooldown', 'requirerole', 'denyrole', 'requireperm', 'denyperm', 'requirechannel', 'denychannel', 'requireuser'];
 export const ROLE_GATES = ['requirerole', 'denyrole'];
 export const PERM_GATES = ['requireperm', 'denyperm'];
 export const CHANNEL_GATES = ['requirechannel', 'denychannel'];
+export const ACTION_KINDS = ['addrole', 'removerole', 'setnick', 'react', 'reactreply'];
+export const ROLE_ACTIONS = ['addrole', 'removerole'];
+export const REACT_ACTIONS = ['react', 'reactreply'];
 export const MAX_PICK = 10;
 export const MAX_GATES = 25;
 export const PERMISSIONS = [
@@ -88,6 +91,21 @@ function conditionRows(lang, entry) {
   return rows;
 }
 
+function actionRows(lang, entry) {
+  const { userId, panelId, draft } = entry;
+  const id = (action) => builderId(action, userId, panelId);
+  const kind = ACTION_KINDS.includes(entry.pending) ? entry.pending : null;
+  const rows = [row(pick(lang, id('act'), 'act.ph.kind',
+    ACTION_KINDS.map((k) => ({ label: t(lang, key(`act.kind.${k}`)), value: k })), kind))];
+  if (ROLE_ACTIONS.includes(kind)) {
+    rows.push(row(new RoleSelectMenuBuilder().setCustomId(id('prole')).setPlaceholder(t(lang, key('act.ph.role')))
+      .setMinValues(1).setMaxValues(1)));
+  } else if (kind === 'setnick') rows.push(row(btn(lang, id('bnick'), 'act.btn.nick', ButtonStyle.Primary)));
+  else if (REACT_ACTIONS.includes(kind)) rows.push(row(btn(lang, id('bemoji'), 'act.btn.emoji', ButtonStyle.Primary)));
+  if (draft.actions.length) rows.push(row(pick(lang, id('rmact'), 'act.ph.remove', removeOptions(lang, 'actions', draft.actions))));
+  return rows;
+}
+
 function pageRows(lang, entry, page) {
   const { userId, panelId, draft } = entry;
   const id = (action) => builderId(action, userId, panelId);
@@ -112,6 +130,7 @@ function pageRows(lang, entry, page) {
     return rows;
   }
   if (page === 'conditions') return conditionRows(lang, entry);
+  if (page === 'actions') return actionRows(lang, entry);
   return [row(button(lang, id('save'), 'save', ButtonStyle.Success), button(lang, id('cancel'), 'cancel', ButtonStyle.Danger))];
 }
 

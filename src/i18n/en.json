@@ -971,5 +971,20 @@
   "autoresponder.builder.cond.modal.cooldown": "Cooldown",
   "autoresponder.builder.cond.modal.perm": "Other permission",
   "autoresponder.builder.cond.input.seconds": "Seconds (1 to 604800)",
-  "autoresponder.builder.cond.input.perm": "Permission name, e.g. ManageMessages"
+  "autoresponder.builder.cond.input.perm": "Permission name, e.g. ManageMessages",
+  "autoresponder.builder.page.actions": "Actions",
+  "autoresponder.builder.act.kind.addrole": "Give a role",
+  "autoresponder.builder.act.kind.removerole": "Remove a role",
+  "autoresponder.builder.act.kind.setnick": "Change the nickname",
+  "autoresponder.builder.act.kind.react": "React to the message",
+  "autoresponder.builder.act.kind.reactreply": "React to the reply",
+  "autoresponder.builder.act.ph.kind": "Add an action",
+  "autoresponder.builder.act.ph.role": "Pick a role",
+  "autoresponder.builder.act.ph.remove": "Remove an action",
+  "autoresponder.builder.act.btn.nick": "Set nickname",
+  "autoresponder.builder.act.btn.emoji": "Set emoji",
+  "autoresponder.builder.act.modal.nick": "Nickname",
+  "autoresponder.builder.act.modal.emoji": "Emoji",
+  "autoresponder.builder.act.input.nick": "New nickname (32 characters at most)",
+  "autoresponder.builder.act.input.emoji": "An emoji, or a custom one from this server"
 }

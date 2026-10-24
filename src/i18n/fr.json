@@ -971,5 +971,20 @@
   "autoresponder.builder.cond.modal.cooldown": "Délai d'attente",
   "autoresponder.builder.cond.modal.perm": "Autre permission",
   "autoresponder.builder.cond.input.seconds": "Secondes (1 à 604800)",
-  "autoresponder.builder.cond.input.perm": "Nom de la permission, ex. ManageMessages"
+  "autoresponder.builder.cond.input.perm": "Nom de la permission, ex. ManageMessages",
+  "autoresponder.builder.page.actions": "Actions",
+  "autoresponder.builder.act.kind.addrole": "Donner un rôle",
+  "autoresponder.builder.act.kind.removerole": "Retirer un rôle",
+  "autoresponder.builder.act.kind.setnick": "Changer le pseudo",
+  "autoresponder.builder.act.kind.react": "Réagir au message",
+  "autoresponder.builder.act.kind.reactreply": "Réagir à la réponse",
+  "autoresponder.builder.act.ph.kind": "Ajouter une action",
+  "autoresponder.builder.act.ph.role": "Choisissez un rôle",
+  "autoresponder.builder.act.ph.remove": "Retirer une action",
+  "autoresponder.builder.act.btn.nick": "Définir le pseudo",
+  "autoresponder.builder.act.btn.emoji": "Définir l'émoji",
+  "autoresponder.builder.act.modal.nick": "Pseudo",
+  "autoresponder.builder.act.modal.emoji": "Émoji",
+  "autoresponder.builder.act.input.nick": "Nouveau pseudo (32 caractères max.)",
+  "autoresponder.builder.act.input.emoji": "Un émoji, ou un émoji de ce serveur"
 }
