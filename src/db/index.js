@@ -36,6 +36,6 @@ export async function openDb(databaseUrl) {
 
 export async function resetDb(pool) {
   await pool.query(
-    'TRUNCATE guild_settings, embeds, media_items, remembered_roles, scheduled_jobs, mod_cases, mod_counters, automod_history, verification_overwrites, reaction_role_messages, reaction_role_entries, reaction_role_bindings RESTART IDENTITY',
+    'TRUNCATE guild_settings, embeds, media_items, remembered_roles, scheduled_jobs, mod_cases, mod_counters, automod_history, verification_overwrites, reaction_role_messages, reaction_role_entries, reaction_role_bindings, autoresponder_rules, autoresponder_cooldowns RESTART IDENTITY',
   );
 }
