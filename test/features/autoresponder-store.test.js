@@ -150,3 +150,33 @@ test('invalidate makes the next call re-read', async () => {
     spy.restore();
   }
 });
+
+test('an invalidate that lands while a load is in flight is not overwritten by the stale load', async () => {
+  await setFeature(db, 'g1', 'autoresponder', { enabled: true });
+  await createRule(db, base);
+  const original = db.query.bind(db);
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  let first = true;
+  db.query = async (...args) => {
+    const result = await original(...args);
+    if (first && String(args[0]).includes('FROM autoresponder_rules')) {
+      first = false;
+      await gate;
+    }
+    return result;
+  };
+  let pending;
+  try {
+    pending = getRules(db, 'g1');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await createRule(db, { ...base, trigger: 'new' });
+    invalidate('g1');
+    release();
+    assert.equal((await pending).length, 1);
+  } finally {
+    release();
+    db.query = original;
+  }
+  assert.equal((await getRules(db, 'g1')).length, 2);
+});
