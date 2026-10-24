@@ -7,7 +7,7 @@ import { isDangerousRole, botCanGive, callerCanGive } from '../../../core/role-s
 import { getEmbed, normalizeEmbedName } from '../../embeds/store.js';
 
 export const MAX_COOLDOWN = 604800;
-export const MAX_DELETE_REPLY = 3600;
+export const MAX_DELETE_REPLY = 300;
 export const MAX_REACTIONS = 5;
 export const MAX_ROLE_ACTIONS = 3;
 export const MAX_NICK = 32;

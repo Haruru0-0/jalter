@@ -209,6 +209,8 @@ test('flags: dm, delete, silent, delete_reply', async () => {
     silent: true, dm: true, delete: true, embed: null, sendTo: null, deleteReplyAfter: 10,
   });
   assert.deepEqual(codes(await compileScript('{delete_reply:0}', env())), ['DELETE_REPLY_RANGE']);
+  assert.deepEqual(codes(await compileScript('{delete_reply:301}', env())), ['DELETE_REPLY_RANGE']);
+  assert.equal((await compileScript('{delete_reply:300}', env())).compiled.flags.deleteReplyAfter, 300);
   assert.deepEqual(codes(await compileScript('{delete_reply:x}', env())), ['BAD_ARGUMENT']);
 });
 
@@ -267,6 +269,11 @@ test('buildScriptVars covers every placeholder name', () => {
   for (const n of PLACEHOLDER_NAMES) assert.ok(Object.hasOwn(vars, n), n);
   assert.equal(vars.user_joindate, '<t:1710000000:D>');
   assert.equal(vars.user_boostsince, '');
+  assert.equal(vars.user_createdate, '<t:1700000000:D>');
+  const boosted = buildScriptVars({
+    message, member: { ...member, premiumSinceTimestamp: 1_720_000_000_000 }, guild,
+  });
+  assert.equal(boosted.user_boostsince, '<t:1720000000:D>');
   assert.equal(vars.channel, `<#${id(50)}>`);
   assert.equal(vars.user_nick, 'Samy');
   assert.equal(vars.server_boostlevel, 2);
