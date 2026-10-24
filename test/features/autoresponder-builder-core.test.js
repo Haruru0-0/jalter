@@ -96,7 +96,7 @@ test('builderId and parseBuilderId round trip, and reject foreign ids', () => {
 });
 
 test('PAGES has review last', () => {
-  assert.deepEqual(PAGES, ['basics', 'reply', 'review']);
+  assert.deepEqual(PAGES, ['basics', 'reply', 'conditions', 'review']);
 });
 
 test('every component and modal id of every page stays within 100 characters, in every language', () => {

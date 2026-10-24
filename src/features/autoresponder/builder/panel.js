@@ -1,18 +1,34 @@
 // The builder panel: custom ids and the message payload for each page.
 import {
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType, StringSelectMenuBuilder,
+  ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelSelectMenuBuilder, ChannelType, RoleSelectMenuBuilder,
+  StringSelectMenuBuilder, UserSelectMenuBuilder,
 } from 'discord.js';
 import { t } from '../../../i18n/index.js';
 import { fitLines } from '../../reactionroles/setup.js';
 import { MATCH_MODES } from '../match.js';
 import { summaryLines } from './summary.js';
+import { newDraft } from './draft.js';
 
 const CONTENT_LIMIT = 2000;
 const key = (k) => `autoresponder.builder.${k}`;
 
 // Later tasks insert their pages before `review`, which stays last.
-export const PAGES = ['basics', 'reply', 'review'];
+export const PAGES = ['basics', 'reply', 'conditions', 'review'];
 export const DESTINATIONS = ['reply', 'dm', 'channel'];
+
+export const GATE_KINDS = ['cooldown', 'requirerole', 'denyrole', 'requireperm', 'denyperm', 'requirechannel', 'denychannel', 'requireuser'];
+export const ROLE_GATES = ['requirerole', 'denyrole'];
+export const PERM_GATES = ['requireperm', 'denyperm'];
+export const CHANNEL_GATES = ['requirechannel', 'denychannel'];
+export const MAX_PICK = 10;
+export const MAX_GATES = 25;
+export const PERMISSIONS = [
+  'ManageMessages', 'ManageRoles', 'ManageChannels', 'ManageGuild', 'ManageNicknames', 'KickMembers', 'BanMembers',
+  'ModerateMembers', 'Administrator', 'MentionEveryone', 'SendMessages', 'AttachFiles', 'EmbedLinks', 'AddReactions',
+  'UseExternalEmojis', 'ViewChannel', 'Connect', 'Speak', 'ReadMessageHistory', 'ManageThreads', 'ManageEvents',
+  'ManageWebhooks', 'CreateInstantInvite',
+];
+const MAX_LABEL = 100;
 
 /** autoresponder:b:<action>:<userId>:<panelId>[:<extra>] (well under Discord's 100 characters). */
 export const builderId = (action, userId, panelId, extra) =>
@@ -32,6 +48,45 @@ const button = (lang, id, label, style = ButtonStyle.Secondary) =>
 const select = (lang, id, placeholder, options, current) =>
   new StringSelectMenuBuilder().setCustomId(id).setPlaceholder(t(lang, key(`ph.${placeholder}`)))
     .addOptions(options.map((o) => ({ ...o, default: o.value === current })));
+
+// Same shape as `select`, with full i18n keys (the conditions and actions pages keep their own namespaces).
+const pick = (lang, id, ph, options, current) =>
+  new StringSelectMenuBuilder().setCustomId(id).setPlaceholder(t(lang, key(ph)))
+    .addOptions(options.map((o) => ({ ...o, default: o.value === current })));
+const btn = (lang, id, label, style = ButtonStyle.Secondary) =>
+  new ButtonBuilder().setCustomId(id).setLabel(t(lang, key(label))).setStyle(style);
+
+/** One option per item, labelled with the summary line the item produces (the last line of a one-item draft). */
+function removeOptions(lang, field, items) {
+  return items.slice(0, MAX_GATES).map((item, index) => {
+    const lines = summaryLines(lang, { ...newDraft(), [field]: [item] });
+    return { label: lines.at(-1).slice(0, MAX_LABEL), value: String(index) };
+  });
+}
+
+function conditionRows(lang, entry) {
+  const { userId, panelId, draft } = entry;
+  const id = (action) => builderId(action, userId, panelId);
+  const kind = GATE_KINDS.includes(entry.pending) ? entry.pending : null;
+  const rows = [row(pick(lang, id('cond'), 'cond.ph.kind',
+    GATE_KINDS.map((k) => ({ label: t(lang, key(`cond.kind.${k}`)), value: k })), kind))];
+  if (kind === 'cooldown') rows.push(row(btn(lang, id('bcool'), 'cond.btn.cooldown', ButtonStyle.Primary)));
+  else if (ROLE_GATES.includes(kind)) {
+    rows.push(row(new RoleSelectMenuBuilder().setCustomId(id('prole')).setPlaceholder(t(lang, key('cond.ph.role')))
+      .setMinValues(1).setMaxValues(MAX_PICK)));
+  } else if (PERM_GATES.includes(kind)) {
+    rows.push(row(pick(lang, id('pperm'), 'cond.ph.perm', PERMISSIONS.map((p) => ({ label: p, value: p })))));
+    rows.push(row(btn(lang, id('bperm'), 'cond.btn.permOther')));
+  } else if (CHANNEL_GATES.includes(kind)) {
+    rows.push(row(new ChannelSelectMenuBuilder().setCustomId(id('pchan')).setPlaceholder(t(lang, key('cond.ph.channel')))
+      .setChannelTypes(ChannelType.GuildText).setMinValues(1).setMaxValues(MAX_PICK)));
+  } else if (kind === 'requireuser') {
+    rows.push(row(new UserSelectMenuBuilder().setCustomId(id('puser')).setPlaceholder(t(lang, key('cond.ph.user')))
+      .setMinValues(1).setMaxValues(MAX_PICK)));
+  }
+  if (draft.gates.length) rows.push(row(pick(lang, id('rmgate'), 'cond.ph.remove', removeOptions(lang, 'gates', draft.gates))));
+  return rows;
+}
 
 function pageRows(lang, entry, page) {
   const { userId, panelId, draft } = entry;
@@ -56,6 +111,7 @@ function pageRows(lang, entry, page) {
     }
     return rows;
   }
+  if (page === 'conditions') return conditionRows(lang, entry);
   return [row(button(lang, id('save'), 'save', ButtonStyle.Success), button(lang, id('cancel'), 'cancel', ButtonStyle.Danger))];
 }
 
