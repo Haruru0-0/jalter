@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { triggerRemainder } from '../../src/features/autoresponder/match.js';
+import { triggerRemainder, matchRule } from '../../src/features/autoresponder/match.js';
 import {
   MAX_ARG_INDEX, parseWords, renderArg, renderArgsInText, checkArgType,
 } from '../../src/features/autoresponder/script/args.js';
@@ -110,4 +110,28 @@ test('triggerRemainder on 2000 characters / 500 words is quick', () => {
   const r = triggerRemainder(rule('!say', 'startswith'), msg);
   assert.equal(parseWords(r).list.length, 499);
   assert.ok(performance.now() - t < 200);
+});
+
+test('triggerRemainder uses the same case fold as the match (final sigma)', () => {
+  assert.equal(triggerRemainder(rule('ΟΔΟΣ', 'startswith'), 'ΟΔΟΣ x'), ' x');
+  assert.equal(triggerRemainder(rule('ΟΔΟΣ', 'includes'), 'foo ΟΔΟΣ bar'), ' bar');
+  assert.equal(triggerRemainder(rule('hug', 'includes'), 'İİİ hug sam'), ' sam');
+  assert.equal(triggerRemainder(rule('hi', 'includes'), 'İhi there'), ' there');
+});
+
+test('matchRule true implies triggerRemainder non-null for startswith and includes', () => {
+  const pieces = ['İ', 'ß', 'ẞ', 'Σ', 'ς', 'σ', 'ŉ', '😀', 'a', 'A', ' '];
+  const texts = [];
+  for (const a of pieces) for (const b of pieces) texts.push(a + b, `${a} ${b}x`, `${a}${b} tail`);
+  const triggers = [...pieces.filter((p) => p !== ' '), 'ΟΔΟΣ', 'iσ', 'İa', 'ßσ'];
+  for (const mode of ['startswith', 'includes']) {
+    for (const trig of triggers) {
+      const r = rule(trig, mode);
+      for (const t of texts) {
+        if (matchRule(r, t)) {
+          assert.notEqual(triggerRemainder(r, t), null, `${mode} ${JSON.stringify(trig)} on ${JSON.stringify(t)}`);
+        }
+      }
+    }
+  }
 });

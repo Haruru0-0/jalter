@@ -63,23 +63,26 @@ export function triggerRemainder(rule, text) {
   const trig = norm(rule.trigger);
   if (!trig) return null;
   const body = text.trimStart();
-  // Fold per code point and remember each folded unit's original offset, so characters whose
-  // lowercase form has a different length (e.g. U+0130) cannot shift the slice.
-  let folded = '';
-  const offsets = [];
-  let pos = 0;
-  for (const ch of body) {
-    const lower = ch.toLowerCase();
-    for (let k = 0; k < lower.length; k++) offsets.push(pos);
-    folded += lower;
-    pos += ch.length;
-  }
-  offsets.push(body.length);
+  // Search the same whole-string fold the match uses (context-sensitive cases such as the
+  // Greek final sigma included), then map the folded index back to an original offset.
+  const folded = body.toLowerCase();
   const at = rule.matchMode === 'startswith'
     ? (folded.startsWith(trig) ? 0 : -1)
     : folded.indexOf(trig);
   if (at < 0) return null;
-  return body.slice(offsets[at + trig.length]);
+  const end = at + trig.length;
+  if (folded.length === body.length) return body.slice(end); // no length drift
+  // Some characters (e.g. U+0130) lowercase to a different length: map per code point.
+  const offsets = [];
+  let pos = 0;
+  for (const ch of body) {
+    const n = ch.toLowerCase().length;
+    for (let k = 0; k < n; k++) offsets.push(pos);
+    pos += ch.length;
+  }
+  offsets.push(body.length);
+  if (offsets.length - 1 !== folded.length) return body.slice(Math.min(end, body.length));
+  return body.slice(offsets[end]);
 }
 
 /** Best matching enabled rule: non-regex first, then longest trigger, then lowest id. */
