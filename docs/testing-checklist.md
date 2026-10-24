@@ -540,7 +540,30 @@ Use a fresh message per style (reactions, buttons, menu) with three roles A, B, 
 - [ ] Stop the bot, react (or un-react) on a reactions message, start the bot: the earlier reaction does not change any role (reactions made while the bot was offline are not replayed), and `fix` only re-adds the bot's own reactions. Buttons and menus keep working after the restart.
 - [ ] The console shows no unhandled errors.
 
-## 16. Permissions and robustness
+## 16. Autoresponder
+
+Run `npm run deploy` first (migration 010 runs on the next start). Use a test server, a normal member account, and a role the bot can give.
+
+- [ ] Before `/autoresponder enable`, a message that matches a rule gets no reply. `/autoresponder enable` turns it on; `/autoresponder disable` turns it off again and replies stop. A normal member cannot run any `/autoresponder` subcommand.
+- [ ] `/autoresponder add` opens a form (trigger and script). Save `hello` with the script `Hi {user_name}!`: the reply appears, mentions the sender by name, and does not reply to a bot or in DMs.
+- [ ] `/autoresponder list` and `/autoresponder show id:<id>` show the rule; `/autoresponder edit id:<id>` opens the form filled in and saves; `/autoresponder toggle id:<id>` stops and restarts the replies; `/autoresponder remove id:<id>` deletes the rule (an unknown id says it is gone).
+- [ ] Match modes (`/autoresponder add match:<mode>` and `/autoresponder editmatchmode`): `exact` answers only the whole message (case and outer spaces ignored); `startswith`, `endswith` and `includes` answer when the trigger is at the start, the end or anywhere; `regex` answers a pattern such as `^!h(elp)?$`. A message of more than 1000 characters never matches a regex rule.
+- [ ] A regex trigger the matcher cannot run safely is refused when you save it (add, edit and `editmatchmode`). A trigger of more than 100 characters is refused for a non-regex mode.
+- [ ] Two rules match one message: the longer trigger answers; a non-regex rule answers before a regex rule; only one reply is sent. When the winner fails a gate or its cooldown, no other rule answers.
+- [ ] Script errors: an unclosed `{`, an unknown function, a wrong number of arguments, an unknown role or channel, a bad emoji, a second `{cooldown}` and a script over 4000 characters are each listed at save time and nothing is saved. Check the list in English, French and Arabic (`/language set`).
+- [ ] Gates: `{requirerole:Member}`, `{denyrole:Muted}`, `{requireperm:ManageMessages}`, `{denyperm:Administrator}`, `{requirechannel:#general}`, `{denychannel:#general}` and `{requireuser:<id>}` each let the right member or channel through and block the others (several arguments: any one is enough for a require gate, a deny gate blocks on any one).
+- [ ] `{cooldown:30}`: the second use inside 30 seconds does not run and shows a short notice with the seconds left that deletes itself after about 8 seconds; the notice is not shown again for 30 seconds for the same member and rule; after the cooldown the rule runs again; another member is not affected. With `{silent}` in the script, no notice appears.
+- [ ] A failed `{requirerole}` gate shows a short role notice (throttled, deletes itself after about 8 seconds), not with `{silent}`; a failed deny, permission, channel or user gate is silent.
+- [ ] Actions: `{addrole:Role}` and `{removerole:Role}` change the sender's roles (a role already held or absent is skipped without error); `{setnick:New name}` renames the sender (a nickname over 32 characters is refused when you save); `{react:👍}` reacts on the message and `{reactreply:👍}` on the reply; at most 3 role or nickname changes and 5 reactions of each kind per script.
+- [ ] Role safety at save: a role with a staff permission (such as Administrator), a managed role, a role at or above the bot's top role, and a role at or above your own top role are each refused when you save the script. Give the role a staff permission after saving: the rule runs but does not give it, and staff get one mod-log line (at most one per rule per hour).
+- [ ] Mentions: a reply that holds `@everyone`, `@here` or a role mention does not ping; `{user}` pings the sender.
+- [ ] Reply options: `{embed}` and `{embed:#ff0000}` send the text as an embed; `{embed:name}` sends a stored embed (an unknown name is refused when you save); `{sendto:#channel}` answers in another channel; `{dm}` sends a DM (with DMs closed, the failure goes to the mod log, not the channel); `{delete}` removes the trigger message and the reply still goes to the channel; `{delete_reply:10}` deletes the reply after 10 seconds (lost on a bot restart).
+- [ ] Placeholders: `{user}`, `{user_name}`, `{server_name}`, `{server_membercount_ordinal}`, `{channel}`, `{channel_name}`, `{message_content}`, `{message_link}`, `{user_joindate}` and `{newline}` render real values.
+- [ ] `/autoresponder test message:hello` shows which rule would answer and the text it would send, and nothing is sent, deleted, granted or changed; it does not start a cooldown. A message no rule matches says so; a gate the sender fails is reported.
+- [ ] Turn on auto-mod's words rule and send a banned word that also matches a rule: auto-mod deletes the message and the autoresponder does not answer it.
+- [ ] Restart the bot: the rules and the cooldowns still work. Staff changes (add, edit, editmatchmode, toggle, remove) each write one line to the mod log.
+
+## 17. Permissions and robustness
 
 - [ ] Every setup reply is ephemeral (only you see it).
 - [ ] A normal member cannot run `/logging`, `/autorole`, `/set`, `/media` or `/moderation` setup commands.
