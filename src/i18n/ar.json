@@ -798,5 +798,22 @@
   "antiraid.start.ended": "تم إنهاء الحصار أثناء بدئه.",
   "antiraid.end.not_locked": "لا يوجد حصار جارٍ الآن.",
   "antiraid.end.done": "انتهى الحصار. تم إعادة ضبط إيقاف الدعوات وعدّاد الانضمامات.",
-  "antiraid.disable.ended": "انتهى الحصار وأُوقفت الحماية من الغارات الآن."
+  "antiraid.disable.ended": "انتهى الحصار وأُوقفت الحماية من الغارات الآن.",
+  "autoresponder.notice.cooldown": "على مهلك: يمكنك استخدام هذا مجددًا بعد {seconds} ثانية.",
+  "autoresponder.notice.role": "ليس لديك الرتبة اللازمة لهذا.",
+  "autoresponder.log.title": "الرد التلقائي: {action}",
+  "autoresponder.log.moderator": "المشرف",
+  "autoresponder.log.rule": "القاعدة",
+  "autoresponder.log.error": "فشلت قاعدة رد تلقائي",
+  "autoresponder.run.ROLE_MISSING": "رتبة تستخدمها القاعدة لم تعد موجودة.",
+  "autoresponder.run.ROLE_UNSAFE": "تعذّر تغيير رتبة: لها صلاحيات إشرافية أو تقع فوق رتبة البوت.",
+  "autoresponder.run.CANNOT_MANAGE_NICK": "لا يستطيع البوت تغيير لقب هذا العضو.",
+  "autoresponder.run.NICK_TOO_LONG": "اللقب يتجاوز 32 حرفًا بعد التعبئة.",
+  "autoresponder.run.NICK_EMPTY": "اللقب فارغ بعد التعبئة.",
+  "autoresponder.run.CANNOT_DELETE": "تعذّر على البوت حذف الرسالة.",
+  "autoresponder.run.CANNOT_REACT": "تعذّر على البوت إضافة التفاعل.",
+  "autoresponder.run.CANNOT_DM": "تعذّر على البوت إرسال رسالة خاصة (الرسائل الخاصة للعضو مغلقة).",
+  "autoresponder.run.CANNOT_SEND": "تعذّر على البوت إرسال الرسالة في تلك القناة.",
+  "autoresponder.run.RENDERED_TOO_LONG": "الرسالة تتجاوز 2000 حرف بعد التعبئة لذا لم تُرسل.",
+  "autoresponder.run.EMBED_FAILED": "تعذّر بناء الـ embed؛ أُرسل النص فقط."
 }

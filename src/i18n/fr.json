@@ -798,5 +798,22 @@
   "antiraid.start.ended": "Le confinement a été terminé pendant son démarrage.",
   "antiraid.end.not_locked": "Aucun confinement n'est en cours.",
   "antiraid.end.done": "Le confinement est terminé. La pause des invitations et le compteur de rejoints sont réinitialisés.",
-  "antiraid.disable.ended": "Le confinement est terminé et l'anti-raid est maintenant désactivé."
+  "antiraid.disable.ended": "Le confinement est terminé et l'anti-raid est maintenant désactivé.",
+  "autoresponder.notice.cooldown": "Doucement : vous pourrez réutiliser ceci dans {seconds} secondes.",
+  "autoresponder.notice.role": "Vous n'avez pas le rôle nécessaire pour cela.",
+  "autoresponder.log.title": "Réponse automatique : {action}",
+  "autoresponder.log.moderator": "Modérateur",
+  "autoresponder.log.rule": "Règle",
+  "autoresponder.log.error": "Échec d'une règle de réponse automatique",
+  "autoresponder.run.ROLE_MISSING": "Un rôle utilisé par la règle n'existe plus.",
+  "autoresponder.run.ROLE_UNSAFE": "Un rôle n'a pas pu être modifié : il a des permissions de staff ou se trouve au-dessus du bot.",
+  "autoresponder.run.CANNOT_MANAGE_NICK": "Le bot ne peut pas changer le pseudo de ce membre.",
+  "autoresponder.run.NICK_TOO_LONG": "Le pseudo dépasse 32 caractères une fois complété.",
+  "autoresponder.run.NICK_EMPTY": "Le pseudo est vide une fois complété.",
+  "autoresponder.run.CANNOT_DELETE": "Le bot n'a pas pu supprimer le message.",
+  "autoresponder.run.CANNOT_REACT": "Le bot n'a pas pu ajouter la réaction.",
+  "autoresponder.run.CANNOT_DM": "Le bot n'a pas pu envoyer de message privé (les MP du membre sont fermés).",
+  "autoresponder.run.CANNOT_SEND": "Le bot n'a pas pu envoyer le message dans ce salon.",
+  "autoresponder.run.RENDERED_TOO_LONG": "Le message dépasse 2000 caractères une fois complété, il n'a donc pas été envoyé.",
+  "autoresponder.run.EMBED_FAILED": "L'embed n'a pas pu être construit ; seul le texte a été envoyé."
 }

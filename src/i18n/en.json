@@ -798,5 +798,22 @@
   "antiraid.start.ended": "The lockdown was ended while it was starting.",
   "antiraid.end.not_locked": "There is no lockdown on right now.",
   "antiraid.end.done": "The lockdown is over. The invite pause and the join counter are reset.",
-  "antiraid.disable.ended": "The lockdown is over and anti-raid is now off."
+  "antiraid.disable.ended": "The lockdown is over and anti-raid is now off.",
+  "autoresponder.notice.cooldown": "Slow down: this can be used again in {seconds} seconds.",
+  "autoresponder.notice.role": "You do not have the role needed for this.",
+  "autoresponder.log.title": "Autoresponder: {action}",
+  "autoresponder.log.moderator": "Moderator",
+  "autoresponder.log.rule": "Rule",
+  "autoresponder.log.error": "Autoresponder rule failed",
+  "autoresponder.run.ROLE_MISSING": "A role used by the rule no longer exists.",
+  "autoresponder.run.ROLE_UNSAFE": "A role could not be changed: it has staff permissions or sits above the bot.",
+  "autoresponder.run.CANNOT_MANAGE_NICK": "The bot cannot change this member's nickname.",
+  "autoresponder.run.NICK_TOO_LONG": "The nickname is longer than 32 characters once filled in.",
+  "autoresponder.run.NICK_EMPTY": "The nickname is empty once filled in.",
+  "autoresponder.run.CANNOT_DELETE": "The bot could not delete the message.",
+  "autoresponder.run.CANNOT_REACT": "The bot could not add the reaction.",
+  "autoresponder.run.CANNOT_DM": "The bot could not send a direct message (the member's DMs are closed).",
+  "autoresponder.run.CANNOT_SEND": "The bot could not send the message in that channel.",
+  "autoresponder.run.RENDERED_TOO_LONG": "The message is longer than 2000 characters once filled in, so it was not sent.",
+  "autoresponder.run.EMBED_FAILED": "The embed could not be built; only the text was sent."
 }
