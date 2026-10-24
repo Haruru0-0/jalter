@@ -13,6 +13,7 @@ import { checkTrigger, chooseRule, MATCH_MODES, MAX_TRIGGER_LENGTH } from './mat
 import { compileScript, MAX_SCRIPT } from './script/compile.js';
 import { logAutoresponder } from './log.js';
 import { describeRun } from './dryrun.js';
+import { openBuilder, handleBuilder } from './builder/handlers.js';
 
 const PREFIX = 'autoresponder';
 const MAX_ERROR_LINES = 10;
@@ -40,7 +41,8 @@ export function buildData() {
     .addSubcommand((s) => s.setName('show').setDescription('Show one rule in detail').addIntegerOption(idOption))
     .addSubcommand((s) =>
       s.setName('test').setDescription('Try a message against the rules without sending anything')
-        .addStringOption((o) => o.setName('message').setDescription('What a member would type').setMaxLength(MAX_TEST_MESSAGE).setRequired(true)));
+        .addStringOption((o) => o.setName('message').setDescription('What a member would type').setMaxLength(MAX_TEST_MESSAGE).setRequired(true)))
+    .addSubcommand((s) => s.setName('builder').setDescription('Build a rule with buttons and menus'));
 }
 
 const state = (lang, enabled) => t(lang, enabled ? 'common.on' : 'common.off');
@@ -64,7 +66,7 @@ const modalFor = (lang, customId, { trigger = '', script = '' } = {}) => {
     .addComponents(new ActionRowBuilder().addComponents(trig), new ActionRowBuilder().addComponents(body));
 };
 
-const log = (ctx, interaction, lang, action, ruleId, detail) =>
+export const log = (ctx, interaction, lang, action, ruleId, detail) =>
   logAutoresponder(ctx, interaction.guild, lang, { action: t(lang, `autoresponder.action.${action}`), actorId: interaction.user.id, ruleId, detail });
 
 async function add(interaction, ctx, lang) {
@@ -155,9 +157,9 @@ async function dryRun(interaction, ctx, lang) {
   return interaction.reply(ephemeral(fitLines(lang, lines, MAX_REPLY)));
 }
 
-const HANDLERS = { add, edit, editmatchmode, toggle, remove, list, show, test: dryRun };
+const HANDLERS = { add, edit, editmatchmode, toggle, remove, list, show, test: dryRun, builder: openBuilder };
 
-function errorLines(lang, errors) {
+export function errorLines(lang, errors) {
   return errors.slice(0, MAX_ERROR_LINES).map((e) => {
     const detail = e.detail ? `"${e.detail}"` : '';
     const text = t(lang, `autoresponder.error.${e.code}`, { detail }).trim();
@@ -204,6 +206,7 @@ async function submitModal(interaction, ctx, lang, kind, arg) {
 /** Routes every `autoresponder:*` component: the add and edit modal submissions. */
 async function handle(interaction, ctx) {
   const [, kind, action, arg] = interaction.customId.split(':');
+  if (kind === 'b') return handleBuilder(interaction, ctx);
   if (kind !== 'm' || !interaction.isModalSubmit() || !['add', 'edit'].includes(action)) return;
   const lang = await guard(interaction, ctx, 'autoresponder');
   if (!lang) return;
