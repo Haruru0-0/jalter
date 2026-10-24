@@ -17,7 +17,7 @@ const ctx = (m = member(), over = {}) => ({ member: m, channelId: 'c1', vars: {}
 
 test('text-only script runs with its text', () => {
   const p = evaluate(comp(), ctx());
-  assert.deepEqual(p, { status: 'run', cooldown: null, text: 'hi', flags: flags(), actions: [] });
+  assert.deepEqual(p, { status: 'run', cooldown: null, text: 'hi', flags: flags(), actions: [], allowedUsers: [] });
 });
 
 test('ph parts render from vars; unknown key renders empty', () => {
@@ -92,4 +92,28 @@ test('does not mutate a deep-frozen compiled; actions and flags pass through', (
   assert.equal(p.status, 'run');
   assert.deepEqual(p.actions, actions);
   assert.deepEqual(p.flags, flags({ dm: true }));
+});
+
+const tpl = (...parts) => comp({ template: parts });
+
+test('allowedUsers holds the user mentions the script writer typed, once each', () => {
+  const p = evaluate(tpl({ t: 'text', v: 'hey <@456> and <@!789> and <@456> @everyone <@&555>' }), ctx());
+  assert.deepEqual(p.allowedUsers, ['456', '789']);
+});
+
+test('a mention inside {message_content} or a name placeholder is never allowed', () => {
+  const c = tpl({ t: 'ph', name: 'message_content' }, { t: 'text', v: ' by ' }, { t: 'ph', name: 'user_name' });
+  const p = evaluate(c, ctx(member(), { vars: { message_content: '<@123> <@!124> @everyone', user_name: '<@125>' } }));
+  assert.equal(p.text, '<@123> <@!124> @everyone by <@125>');
+  assert.deepEqual(p.allowedUsers, []);
+});
+
+test('{user} allows the triggering member', () => {
+  const p = evaluate(tpl({ t: 'text', v: 'hi ' }, { t: 'ph', name: 'user' }), ctx(member({ id: 'u7' }), { vars: { user: '<@u7>' } }));
+  assert.deepEqual(p.allowedUsers, ['u7']);
+});
+
+test('{server_owner} allows the owner the placeholder names, written by the script writer', () => {
+  const p = evaluate(tpl({ t: 'ph', name: 'server_owner' }), ctx(member(), { vars: { server_owner: '<@999>' } }));
+  assert.deepEqual(p.allowedUsers, ['999']);
 });

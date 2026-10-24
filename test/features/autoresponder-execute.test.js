@@ -190,14 +190,24 @@ test('falls back to a channel send when {delete} removed the trigger', async () 
   assert.ok(!s.calls.includes('reply'));
 });
 
-test('everyone, here and role mentions are never allowed; user mentions are', async () => {
+test('everyone, here and role mentions are never allowed; only the allowed users of the plan are', async () => {
   const s = setup();
-  await s.run(plan({ text: '@everyone @here <@&555> <@123> <@!456> <@123>' }));
+  // <@789> came from a member-controlled placeholder: it is in the text but not in allowedUsers.
+  await s.run(plan({ text: '@everyone @here <@&555> <@123> <@!456> <@789>', allowedUsers: ['123', '456'] }));
   const am = s.sent.reply.allowedMentions;
   assert.deepEqual(am.parse, []);
   assert.deepEqual(am.users, ['123', '456']);
   assert.equal(am.roles, undefined);
   assert.equal(am.everyone, undefined);
+  assert.equal(am.repliedUser, false);
+});
+
+test('a mention found only in the rendered text pings nobody', async () => {
+  const sentTo = [];
+  const channel = { id: 'c2', isTextBased: () => true, permissionsFor: () => ({ has: () => true }), send: async (p) => { sentTo.push(p); return { id: 'x', react: async () => {} }; } };
+  const s = setup({ sendToChannel: { id: 'c2', channel } });
+  await s.run(plan({ text: '<@123> look', allowedUsers: [], flags: flags({ sendTo: 'c2' }) }));
+  assert.deepEqual(sentTo[0].allowedMentions, { parse: [], users: [], repliedUser: false });
 });
 
 test('rendered text over 2000 characters -> RENDERED_TOO_LONG and nothing sent', async () => {

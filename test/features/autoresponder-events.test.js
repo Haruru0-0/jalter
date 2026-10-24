@@ -122,6 +122,18 @@ test('a matching rule runs executePlan once with the chosen rule and the evaluat
   assert.equal(args.lang, 'en');
 });
 
+test('a mention typed by the member and echoed by {message_content} is not an allowed ping', async () => {
+  await enable();
+  const template = [{ t: 'ph', name: 'message_content' }, { t: 'text', v: ' from ' }, { t: 'ph', name: 'user' }];
+  await createRule(db, { ...base, script: '{message_content} from {user}', compiled: compiled({ template }) });
+  const h = build();
+  await h.run(fakeMessage({ content: 'hello <@123> <@!124>' }));
+  assert.equal(h.calls.exec.length, 1);
+  const { plan } = h.calls.exec[0];
+  assert.equal(plan.text, 'hello <@123> <@!124> from <@u2>');
+  assert.deepEqual(plan.allowedUsers, ['u2']);
+});
+
 test('the longest trigger wins when two rules match', async () => {
   await enable();
   await createRule(db, base);

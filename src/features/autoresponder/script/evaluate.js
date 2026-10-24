@@ -25,7 +25,27 @@ function matchesAny(gate, { member, channelId }) {
   }
 }
 
-/** ctx = { member, channelId, vars }. Returns a skip Plan or a run Plan. */
+const USER_MENTION = /<@!?(\d+)>/g;
+
+// Who the reply may ping: only users the script writer chose. That is the user mentions typed in
+// the script's own text, the triggering member through {user}, and the owner through {server_owner}.
+// A mention inside a member-controlled value ({message_content}, a name...) never pings.
+function allowedUsers(template, { member, vars }) {
+  const ids = new Set();
+  for (const part of template) {
+    if (part.t === 'text') {
+      for (const m of part.v.matchAll(USER_MENTION)) ids.add(m[1]);
+    } else if (part.name === 'user' && member?.id) {
+      ids.add(member.id);
+    } else if (part.name === 'server_owner') {
+      const m = /^<@!?(\d+)>$/.exec(String(vars?.server_owner ?? ''));
+      if (m) ids.add(m[1]);
+    }
+  }
+  return [...ids];
+}
+
+/** ctx = { member, channelId, vars }. Returns a skip Plan or a run Plan (allowedUsers: ids the reply may ping). */
 export function evaluate(compiled, ctx) {
   let cooldown = null;
   for (const gate of compiled.gates) {
@@ -45,5 +65,8 @@ export function evaluate(compiled, ctx) {
     .map((part) => (part.t === 'text' ? part.v : String(ctx.vars?.[part.name] ?? '')))
     .join('')
     .trim();
-  return { status: 'run', cooldown, text, flags: compiled.flags, actions: compiled.actions };
+  return {
+    status: 'run', cooldown, text, flags: compiled.flags, actions: compiled.actions,
+    allowedUsers: allowedUsers(compiled.template, ctx),
+  };
 }

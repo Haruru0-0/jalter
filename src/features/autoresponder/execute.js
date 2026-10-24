@@ -47,13 +47,6 @@ export async function sendGateNotice(ctx, message, lang, { kind, seconds }, deps
   }
 }
 
-// Only user mentions found in the final text may ping; roles, everyone and here never do.
-function mentionedUsers(text) {
-  const ids = new Set();
-  for (const m of text.matchAll(/<@!?(\d+)>/g)) ids.add(m[1]);
-  return [...ids];
-}
-
 const fail = (errors, code, action, detail) => {
   errors.push(detail === undefined ? { code, action } : { code, action, detail });
 };
@@ -90,7 +83,8 @@ async function resolveChannel(guild, id) {
 // Builds the message payload; a named embed that cannot be built is reported and the text still goes out.
 async function buildPayload(ctx, { guild, plan, vars, deps, errors }) {
   const text = plan.text;
-  const payload = { allowedMentions: { parse: [], users: mentionedUsers(text), repliedUser: false } };
+  // Only the users evaluate allowed (chosen by the script writer) may ping; roles, everyone and here never do.
+  const payload = { allowedMentions: { parse: [], users: [...(plan.allowedUsers ?? [])], repliedUser: false } };
   const embed = plan.flags.embed;
   if (embed?.kind === 'plain') {
     payload.embeds = [{ description: text, ...(embed.color != null ? { color: embed.color } : {}) }];
