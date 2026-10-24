@@ -963,6 +963,7 @@
   "autoresponder.builder.page.conditions": "Conditions",
   "autoresponder.builder.noBrace": "That text cannot contain the character }. Remove it and try again.",
   "autoresponder.builder.noPipe": "A permission name cannot contain the character |. Type one permission at a time.",
+  "autoresponder.builder.noPipeList": "An option cannot contain the character |. Put each option on its own line.",
   "autoresponder.builder.needChannel": "Pick the channel to send to first.",
   "autoresponder.builder.tooMany": "A rule can have at most 25 conditions.",
   "autoresponder.builder.cond.kind.cooldown": "Cooldown",

@@ -186,7 +186,7 @@ test('mchoose adds one option per line; braces and pipes are refused; empty reve
   assert.deepEqual(rnd(panelId).choosers, [{ kind: 'choose', options: ['red', 'green', 'blue'] }]);
   assert.ok(script(panelId).includes('{choose:red|green|blue}'));
   said(await submit(env, panelId, 'mchoose', { options: 'a\nb}' }), t('en', 'autoresponder.builder.noBrace'));
-  said(await submit(env, panelId, 'mchoose', { options: 'a|b\nc' }), t('en', 'autoresponder.builder.noPipe'));
+  said(await submit(env, panelId, 'mchoose', { options: 'a|b\nc' }), t('en', 'autoresponder.builder.noPipeList'));
   await submit(env, panelId, 'mchoose', { options: '  \n ' });
   assert.equal(rnd(panelId).choosers.length, 1);
 });
@@ -522,4 +522,23 @@ test('every new i18n key exists in en, fr and ar, with short labels', () => {
     for (const key of short) assert.ok(t(lang, `autoresponder.builder.${key}`).length <= 45, `${lang} ${key}`);
   }
   assert.notEqual(t('fr', 'autoresponder.builder.page.random'), t('en', 'autoresponder.builder.page.random'));
+});
+
+test('a pipe in an option, weight or locked value gets the list message; the permission modal keeps its own', async () => {
+  const { env, panelId } = await start();
+  const list = t('en', 'autoresponder.builder.noPipeList');
+  said(await submit(env, panelId, 'mchoose', { options: 'a|b' }), list);
+  said(await submit(env, panelId, 'mweighted', { weights: '50%|50%' }), list);
+  await submit(env, panelId, 'mchoose', { options: 'a\nb' });
+  said(await submit(env, panelId, 'mlocked', { values: 'x|y\nz' }), list);
+  await press(env, panelId, 'cond', { values: ['requireperm'] });
+  const perm = await submit(env, panelId, 'mperm', { perm: 'A|B' });
+  assert.equal(last(perm)[1].content, t('en', 'autoresponder.builder.noPipe'));
+  assert.notEqual(list, t('en', 'autoresponder.builder.noPipe'));
+  for (const lang of ['en', 'fr', 'ar']) {
+    assert.notEqual(t(lang, 'autoresponder.builder.noPipeList'), 'autoresponder.builder.noPipeList');
+    assert.notEqual(t(lang, 'autoresponder.builder.noPipeList'), t(lang, 'autoresponder.builder.noPipe'));
+  }
+  assert.notEqual(t('fr', 'autoresponder.builder.noPipeList'), list);
+  assert.notEqual(t('ar', 'autoresponder.builder.noPipeList'), list);
 });

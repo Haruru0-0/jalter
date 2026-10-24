@@ -963,6 +963,7 @@
   "autoresponder.builder.page.conditions": "Conditions",
   "autoresponder.builder.noBrace": "Ce texte ne peut pas contenir le caractère }. Retirez-le et réessayez.",
   "autoresponder.builder.noPipe": "Un nom de permission ne peut pas contenir le caractère |. Saisissez une seule permission à la fois.",
+  "autoresponder.builder.noPipeList": "Une option ne peut pas contenir le caractère |. Mettez chaque option sur sa propre ligne.",
   "autoresponder.builder.needChannel": "Choisissez d'abord le salon où envoyer la réponse.",
   "autoresponder.builder.tooMany": "Une règle peut avoir 25 conditions au maximum.",
   "autoresponder.builder.cond.kind.cooldown": "Délai d'attente",

@@ -339,7 +339,7 @@ function submitRange(interaction, ctx, lang, entry) {
 function listFrom(interaction, lang, field) {
   const items = textLines(interaction.fields.getTextInputValue(field));
   if (items.some(hasBrace)) return { refusal: refuse(interaction, lang, key('noBrace')) };
-  if (items.some((l) => l.includes('|'))) return { refusal: refuse(interaction, lang, key('noPipe')) };
+  if (items.some((l) => l.includes('|'))) return { refusal: refuse(interaction, lang, key('noPipeList')) };
   return { items };
 }
 

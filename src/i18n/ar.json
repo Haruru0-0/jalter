@@ -963,6 +963,7 @@
   "autoresponder.builder.page.conditions": "الشروط",
   "autoresponder.builder.noBrace": "لا يمكن أن يحتوي هذا النص على الرمز }. احذفه وحاول مرة أخرى.",
   "autoresponder.builder.noPipe": "لا يمكن أن يحتوي اسم الصلاحية على الرمز |. اكتب صلاحية واحدة في كل مرة.",
+  "autoresponder.builder.noPipeList": "لا يمكن أن يحتوي الخيار على الرمز |. ضع كل خيار في سطر مستقل.",
   "autoresponder.builder.needChannel": "اختر أولاً القناة التي سيُرسل إليها الرد.",
   "autoresponder.builder.tooMany": "يمكن أن تحتوي القاعدة على 25 شرطاً كحد أقصى.",
   "autoresponder.builder.cond.kind.cooldown": "مهلة الانتظار",
