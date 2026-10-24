@@ -563,6 +563,25 @@ Run `npm run deploy` first (migration 010 runs on the next start). Use a test se
 - [ ] Turn on auto-mod's words rule and send a banned word that also matches a rule: auto-mod deletes the message and the autoresponder does not answer it.
 - [ ] Restart the bot: the rules and the cooldowns still work. Staff changes (add, edit, editmatchmode, toggle, remove) each write one line to the mod log.
 
+### Builder
+
+Run `npm run deploy` once first. Use a test server, a manager account and a normal member account.
+
+- [ ] `/autoresponder builder` as a normal member is refused. As a manager it opens a private panel on the Basics page; the menu at the top lists Basics, Reply, Conditions, Actions and Review.
+- [ ] Basics: Set trigger saves a trigger; the match menu changes the mode; a regex the matcher cannot run, or a non-regex trigger over 100 characters, is refused and the panel is unchanged.
+- [ ] Reply: Edit reply sets the text (placeholders such as `{user}` stay as typed); the destination menu offers reply, direct message and channel (a channel picker appears for channel); Delete trigger message and Silent toggle on and off; the Review page notes that reacting to a deleted trigger message has no effect.
+- [ ] Reply embed: Embed lists "No embed", "Plain embed with a colour" and the saved embeds (with more than 23 saved embeds the first 23 are listed with a note); a saved embed, a `#rrggbb` colour and an empty colour work; a bad colour is refused; Back returns to Reply. Delete reply takes 1 to 300 seconds or empty; 0 or 301 is refused.
+- [ ] Conditions: add each kind: cooldown (1 to 604800 seconds; adding a second replaces the first), needs a role, blocked by a role, needs a permission, blocked by a permission (menu and "Other permission" text), only in channels, not in channels, only for members; the summary shows each; Remove a condition removes the chosen one. A cooldown of 0 or text is refused. Picking an administrator role for a role condition is accepted. A 26th condition is refused.
+- [ ] Actions: give a role, remove a role, change the nickname, react to the message, react to the reply. A role with a staff permission, a managed role, and a role at or above the bot or yourself are refused; a nickname over 32 characters and a bad emoji are refused; more than 3 role or nickname changes or more than 5 reactions are refused. Remove an action works. In each refusal the panel keeps its earlier state.
+- [ ] A value containing `}` (nickname, emoji, colour, seconds, permission) is refused with a message about the character.
+- [ ] Try it: with a sample that matches the trigger it says so and lists which conditions pass or fail, the text and the actions; with a sample that does not match it says so and still shows what would happen. Nothing is sent, deleted, granted or changed, and no cooldown starts.
+- [ ] Edit script text: opens the generated script; saving valid text switches to script mode (only Review and Basics remain, with Try it, Edit script text, Save and Cancel; the menus are gone and cannot come back); an invalid script is refused and the panel stays as it was. A very long script is shown clipped with a note.
+- [ ] Save creates the rule and closes the panel; `/autoresponder list`, `show` and `edit` show it, it answers as built, and the mod log has one `add` line saying it was made with the builder. Pressing Save twice quickly makes one rule. Save with no trigger is refused.
+- [ ] Cancel closes the panel and saves nothing.
+- [ ] Expiry: a panel left for 16 minutes answers "expired"; one clicked every few minutes stays alive; opening `/autoresponder builder` again replaces the earlier panel (the old one says it expired); restarting the bot drops the open panel.
+- [ ] Another member pressing a button or menu on your panel is told it belongs to someone else. A member who lost Manage Server and the manager role is refused on their next click.
+- [ ] Check the panel in English, French and Arabic (`/language set`).
+
 ## 17. Permissions and robustness
 
 - [ ] Every setup reply is ephemeral (only you see it).
