@@ -26,7 +26,7 @@ export const FEATURES = [
   f('antiraid', 2, 'antiraid', { enableCommand: 'antiraid enable' }),
   f('verification', 2, 'verification', { enableCommand: 'verification enable' }),
   f('stickyroles', 2, null),
-  f('autoresponder', 3, null), f('reactionroles', 3, 'reactionroles', { enableCommand: 'reactionroles enable' }), f('quote', 3, null),
+  f('autoresponder', 3, 'autoresponder', { enableCommand: 'autoresponder enable' }), f('reactionroles', 3, 'reactionroles', { enableCommand: 'reactionroles enable' }), f('quote', 3, null),
   f('leveling', 4, null), f('tickets', 4, null), f('reminders', 4, null),
   f('birthdays', 4, null), f('confessions', 4, null), f('starboard', 4, null),
   f('afk', 4, null), f('statschannels', 4, null),

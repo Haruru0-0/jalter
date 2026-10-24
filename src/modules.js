@@ -13,5 +13,6 @@ import * as automod from './features/automod/index.js';
 import * as verification from './features/verification/index.js';
 import * as antiraid from './features/antiraid/index.js';
 import * as reactionroles from './features/reactionroles/index.js';
+import * as autoresponder from './features/autoresponder/index.js';
 
-export const modules = [panel, help, language, media, embeds, post, greet, autorole, logging, info, moderation, automod, verification, antiraid, reactionroles];
+export const modules = [panel, help, language, media, embeds, post, greet, autorole, logging, info, moderation, automod, verification, antiraid, reactionroles, autoresponder];
