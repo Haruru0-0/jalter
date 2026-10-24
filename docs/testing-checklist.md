@@ -480,7 +480,8 @@ Needs the bot to have Manage Roles, Add Reactions, Read Message History and Mana
 ### Setup and create
 
 - [ ] While the feature is off, every `/reactionroles` subcommand except `enable` and `disable` (`status`, `create`, `show` and the rest) is refused with the "off" reply. A normal member is refused on every subcommand, `enable` and `disable` included. Every reply is ephemeral.
-- [ ] `/reactionroles enable`, then `/reactionroles create embed:colors style:reactions` posts the embed in the current channel (the embed name autocompletes), replies with the new message id and writes one mod log line. `channel:<other>` posts there instead. An unknown embed name is refused.
+- [x] `/reactionroles enable`, then `/reactionroles create embed:colors style:reactions` (with `type:unique`) posts the embed in the current channel. Tested by hand 2026-10-22.
+- [ ] `create` also: the embed name autocompletes, the reply gives the new message id, one mod log line is written, `channel:<other>` posts there instead, and an unknown embed name is refused.
 - [ ] `create style:reactions type:reversed` works; `create style:buttons type:reversed` and `style:menu type:reversed` are refused (reversed needs reactions).
 - [ ] Take Add Reactions (or Manage Roles) from the bot and run `create style:reactions`: it is refused naming the missing permission and posts nothing. Every reactions message also needs Manage Messages, whatever its type: take it away and `create style:reactions` is refused naming it (a buttons or menu message does not need it). With Manage Messages removed, `/reactionroles type` on an existing reactions message is refused the same way and the type stays.
 
@@ -497,7 +498,8 @@ Needs the bot to have Manage Roles, Add Reactions, Read Message History and Mana
 - [ ] Add 20 roles to one message: a 21st is refused.
 - [ ] `/reactionroles remove message_id:<id> role:Red` takes the reaction, button or option off the message. A role that is not on the message says so.
 - [ ] `/reactionroles show` lists every role message (id, channel, style, type, number of roles); with `message_id` it also lists the roles, the limit and the lists. An id from another server or an unknown id says it is gone.
-- [ ] `/reactionroles builder message_id:<id>` opens a private panel: pick a role, press Add, fill the emoji and label in the form, and the role appears in the list and on the message. Add several, remove one from the remove menu, press Done. The same refusals as `add` appear as a reply.
+- [x] `/reactionroles builder message_id:<id>` opens a private panel: pick a role, press Add, fill the emoji and label in the form, and the role appears in the list and on the message. Add several. Tested by hand 2026-10-22 with colour roles on a reactions message.
+- [ ] Builder, the rest: remove one role from the remove menu, press Done, and the same refusals as `add` appear as a reply.
 - [ ] Another admin pressing the panel's controls is told it is not theirs. After 10 minutes the panel says it expired. Restart the bot with the panel open and use it again within 10 minutes: it still works.
 
 ### Types, with each style
@@ -505,7 +507,8 @@ Needs the bot to have Manage Roles, Add Reactions, Read Message History and Mana
 Use a fresh message per style (reactions, buttons, menu) with three roles A, B, C, and a normal test member. Change the type with `/reactionroles type`.
 
 - [ ] `normal`: reactions, adding gives the role and removing the reaction takes it; buttons, each press toggles with an ephemeral message; menu, the selection is the set of roles the member wants (selecting adds, deselecting removes).
-- [ ] `unique`: picking B while holding A swaps A for B (on reactions the bot also removes the member's old reaction; the menu allows one selection).
+- [x] `unique` on reactions: picking B while holding A swaps A for B (the bot also removes the member's old reaction), and removing the reaction takes the role back. Tested by hand 2026-10-22 with colour roles.
+- [ ] `unique` on buttons (a press swaps the role) and on the menu (only one selection is allowed).
 - [ ] `verify`: a pick only adds (a second pick does nothing); removing a reaction takes nothing away; on reactions the bot clears the member's reaction after the grant.
 - [ ] `drop`: a pick only removes the role (reaction cleared); a member without the role gets a "nothing to do" reply.
 - [ ] `reversed` (reactions only): reacting removes the role (when held), removing the reaction gives it back.
