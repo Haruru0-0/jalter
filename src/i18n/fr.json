@@ -998,5 +998,11 @@
   "autoresponder.builder.modal.color": "Couleur de l'embed",
   "autoresponder.builder.input.color": "Couleur #rrggbb, ou vide",
   "autoresponder.builder.modal.delreply": "Supprimer la réponse",
-  "autoresponder.builder.input.delreply": "Secondes (1 à 300), vide pour retirer"
+  "autoresponder.builder.input.delreply": "Secondes (1 à 300), vide pour retirer",
+  "autoresponder.builder.btn.try": "Essayer",
+  "autoresponder.builder.modal.try": "Essayer",
+  "autoresponder.builder.input.sample": "Un message à tester (rien n'est envoyé)",
+  "autoresponder.builder.try.match": "L'exemple correspond au déclencheur.",
+  "autoresponder.builder.try.nomatch": "L'exemple ne correspond pas au déclencheur.",
+  "autoresponder.builder.try.wouldRun": "Ce qu'il ferait s'il correspondait :"
 }

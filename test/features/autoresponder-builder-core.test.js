@@ -220,7 +220,7 @@ test('nav switches pages and the reply page shows its controls', async () => {
   const reply = updated(await press(env, panelId, 'nav', { values: ['reply'] }));
   assert.deepEqual(kinds(reply), ['nav', 'text', 'delete', 'silent', 'bembed', 'bdelreply', 'dest']);
   const review = updated(await press(env, panelId, 'nav', { values: ['review'] }));
-  assert.deepEqual(kinds(review), ['nav', 'save', 'cancel']);
+  assert.deepEqual(kinds(review), ['nav', 'btry', 'save', 'cancel']);
   const bogus = updated(await press(env, panelId, 'nav', { values: ['hax'] }));
   assert.equal(bogus, undefined);
   assert.equal(drafts.get(panelId).page, 'review');

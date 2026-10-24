@@ -8,7 +8,8 @@ import { fitLines } from '../../reactionroles/setup.js';
 import { createRule } from '../store.js';
 import { listEmbeds } from '../../embeds/store.js';
 import { invalidate } from '../cache.js';
-import { checkTrigger, MATCH_MODES, MAX_TRIGGER_LENGTH } from '../match.js';
+import { checkTrigger, matchRule, MATCH_MODES, MAX_TRIGGER_LENGTH } from '../match.js';
+import { describeRun } from '../dryrun.js';
 import { compileScript } from '../script/compile.js';
 import { errorLines, log } from '../commands.js';
 import { addAction, addGate, newDraft, patch, removeAction, removeGate, setTrigger } from './draft.js';
@@ -20,6 +21,7 @@ import {
 } from './panel.js';
 
 const MAX_REPLY = 2000;
+const MAX_SAMPLE = 1000;
 const LOG_DETAIL_MAX = 100;
 const key = (k) => `autoresponder.builder.${k}`;
 const oneLine = (s) => String(s).replace(/\s+/g, ' ');
@@ -322,6 +324,34 @@ function submitDelReply(interaction, ctx, lang, entry) {
   return tryChange(interaction, ctx, lang, entry, patch(entry.draft, { deleteReplyAfter: seconds || null }), redraw(interaction, lang));
 }
 
+// ---- Try it: a dry run of the draft against a sample message. Reads only; nothing is written or sent. ----
+
+function tryButton(interaction, ctx, lang, entry) {
+  return interaction.showModal(textModal(lang, builderId('mtry', entry.userId, entry.panelId), {
+    name: 'sample', title: 'modal.try', label: 'input.sample', style: TextInputStyle.Paragraph, max: MAX_SAMPLE, required: true,
+  }));
+}
+
+async function submitTry(interaction, ctx, lang, entry) {
+  const sample = interaction.fields.getTextInputValue('sample');
+  const { draft } = entry;
+  const script = generateScript(draft);
+  const result = await compileScript(script, { db: ctx.db, guild: interaction.guild, writer: interaction.member });
+  if (!result.ok) {
+    return interaction.reply(ephemeral(fitLines(lang, [t(lang, 'autoresponder.errors.head'), ...errorLines(lang, result.errors)], MAX_REPLY)));
+  }
+  const verdict = draft.trigger.trim() === '' ? { ok: true } : checkTrigger(draft.trigger, draft.matchMode);
+  if (!verdict.ok) return interaction.reply(ephemeral(t(lang, `autoresponder.badTrigger.${verdict.code}`)));
+  const matched = matchRule({ trigger: draft.trigger, matchMode: draft.matchMode, enabled: true }, sample);
+  const lines = [t(lang, key(matched ? 'try.match' : 'try.nomatch'))];
+  if (!matched) lines.push(t(lang, key('try.wouldRun')));
+  lines.push(...describeRun(lang, {
+    compiled: result.compiled, text: sample, member: interaction.member, guild: interaction.guild,
+    channel: interaction.channel, channelId: interaction.channelId, author: interaction.user,
+  }));
+  return interaction.reply(ephemeral({ content: fitLines(lang, lines, MAX_REPLY), allowedMentions: { parse: [] } }));
+}
+
 function cancel(interaction, ctx, lang, entry) {
   drafts.drop(entry.panelId);
   return interaction.update({ content: t(lang, key('cancelled')), components: [] });
@@ -365,6 +395,7 @@ const ACTIONS = {
   cond, bcool: coolButton, bperm: permButton, mcooldown: modalOnly(submitCooldown), mperm: modalOnly(submitPerm),
   prole: pickRole, pperm: pickPerm, pchan: pickChannel, puser: pickUser, rmgate: removeGateAt,
   bembed: embedButton, bback: back, embed: pickEmbed, mcolor: modalOnly(submitColor),
+  btry: tryButton, mtry: modalOnly(submitTry),
   bdelreply: delReplyButton, mdelreply: modalOnly(submitDelReply),
   act, bnick: nickButton, bemoji: emojiButton, mnick: modalOnly(submitNick), memoji: modalOnly(submitEmoji), rmact: removeActionAt,
 };

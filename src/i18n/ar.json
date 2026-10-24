@@ -998,5 +998,11 @@
   "autoresponder.builder.modal.color": "لون الإمبد",
   "autoresponder.builder.input.color": "اللون بصيغة #rrggbb أو فارغ",
   "autoresponder.builder.modal.delreply": "حذف الرد",
-  "autoresponder.builder.input.delreply": "ثوانٍ (من 1 إلى 300)، فارغ للإزالة"
+  "autoresponder.builder.input.delreply": "ثوانٍ (من 1 إلى 300)، فارغ للإزالة",
+  "autoresponder.builder.btn.try": "جرّبه",
+  "autoresponder.builder.modal.try": "جرّبه",
+  "autoresponder.builder.input.sample": "رسالة للتجربة (لا يُرسل شيء)",
+  "autoresponder.builder.try.match": "الرسالة تطابق المحفّز.",
+  "autoresponder.builder.try.nomatch": "الرسالة لا تطابق المحفّز.",
+  "autoresponder.builder.try.wouldRun": "ما كان سيفعله لو طابقت:"
 }

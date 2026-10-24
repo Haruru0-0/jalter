@@ -133,7 +133,10 @@ function pageRows(lang, entry, page) {
   }
   if (page === 'conditions') return conditionRows(lang, entry);
   if (page === 'actions') return actionRows(lang, entry);
-  return [row(button(lang, id('save'), 'save', ButtonStyle.Success), button(lang, id('cancel'), 'cancel', ButtonStyle.Danger))];
+  return [row(
+    button(lang, id('btry'), 'try'),
+    button(lang, id('save'), 'save', ButtonStyle.Success), button(lang, id('cancel'), 'cancel', ButtonStyle.Danger),
+  )];
 }
 
 // The embed picker: no embed, a plain colour, then saved embeds by index into entry.embedNames (the list read when the view opened).

@@ -998,5 +998,11 @@
   "autoresponder.builder.modal.color": "Embed colour",
   "autoresponder.builder.input.color": "Colour as #rrggbb, or empty",
   "autoresponder.builder.modal.delreply": "Delete the reply",
-  "autoresponder.builder.input.delreply": "Seconds (1 to 300), empty to clear"
+  "autoresponder.builder.input.delreply": "Seconds (1 to 300), empty to clear",
+  "autoresponder.builder.btn.try": "Try it",
+  "autoresponder.builder.modal.try": "Try it",
+  "autoresponder.builder.input.sample": "A message to test (nothing is sent)",
+  "autoresponder.builder.try.match": "The sample matches the trigger.",
+  "autoresponder.builder.try.nomatch": "The sample does not match the trigger.",
+  "autoresponder.builder.try.wouldRun": "What it would do if it matched:"
 }
