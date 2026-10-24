@@ -18,9 +18,15 @@ const GATE_ARGS = {
   requireuser: (g) => g.ids.map(user),
 };
 
+// A role action aimed at a typed word: {addrole:<@&id>|[$N]}.
+const roleTarget = (a) => (a.target ? `${role(a.id)}|[$${a.target}]` : role(a.id));
+
+// Weights are numbers (percent) or the typed text, so a bad one still reaches the compiler's WEIGHT_INVALID.
+const weight = (w) => (typeof w === 'number' ? `${w}%` : escapeArg(w));
+
 const ACTION_ARG = {
-  addrole: (a) => role(a.id),
-  removerole: (a) => role(a.id),
+  addrole: roleTarget,
+  removerole: roleTarget,
   setnick: (a) => escapeArg(a.text),
   react: (a) => escapeArg(a.emoji),
   reactreply: (a) => escapeArg(a.emoji),
@@ -40,5 +46,12 @@ export function generateScript(d) {
   if (d.deleteTrigger) calls.push('{delete}');
   if (d.deleteReplyAfter) calls.push(`{delete_reply:${d.deleteReplyAfter}}`);
   if (d.silent) calls.push('{silent}');
+  for (const r of d.random.ranges) calls.push(`{range:${r.min}-${r.max}}`);
+  for (const c of d.random.choosers) {
+    if (c.kind === 'weighted') calls.push(`{weightedchoose:${c.weights.map(weight).join('|')}}`);
+    else calls.push(`{choose:${c.options.map(escapeArg).join('|')}}`);
+  }
+  for (const values of d.random.locked) calls.push(`{lockedchoose:${values.map(escapeArg).join('|')}}`);
+  for (const c of d.argChecks) calls.push(c.type ? `{requirearg:${c.n}|${c.type}}` : `{requirearg:${c.n}}`);
   return [d.text, ...calls].join('\n');
 }

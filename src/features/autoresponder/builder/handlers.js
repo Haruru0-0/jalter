@@ -12,12 +12,15 @@ import { checkTrigger, matchRule, MATCH_MODES, MAX_TRIGGER_LENGTH } from '../mat
 import { describeRunFor } from '../dryrun.js';
 import { compileScript, MAX_SCRIPT } from '../script/compile.js';
 import { errorLines, log } from '../commands.js';
-import { addAction, addGate, newDraft, patch, removeAction, removeGate, setTrigger, toScriptMode } from './draft.js';
+import {
+  addAction, addArgCheck, addGate, addRandom, newDraft, patch, removeAction, removeArgCheck, removeGate, removeRandom, setArgType, setTrigger, toScriptMode,
+} from './draft.js';
 import { generateScript } from './generate.js';
 import { drafts } from './drafts.js';
 import {
   builderId, parseBuilderId, panelPayload, PAGES, DESTINATIONS,
   GATE_KINDS, ACTION_KINDS, ROLE_ACTIONS, REACT_ACTIONS, ROLE_GATES, PERM_GATES, CHANNEL_GATES, MAX_PICK, MAX_GATES, PERMISSIONS, MAX_EMBED_OPTIONS,
+  COND_KINDS, ARG_KIND, ARG_TYPE_CHOICES, ARGTYPE_PREFIX, RANDOM_KINDS, argTypeTarget, userArgNumbers,
 } from './panel.js';
 
 const MAX_REPLY = 2000;
@@ -69,7 +72,7 @@ const textModal = (lang, customId, { name, title, label, style, max, required, v
 function nav(interaction, ctx, lang, entry) {
   const page = interaction.values?.[0];
   if (!PAGES.includes(page)) return noop(interaction, lang, entry);
-  const fresh = drafts.update(entry.panelId, { page, pending: null });
+  const fresh = drafts.update(entry.panelId, { page, pending: null, target: null });
   return fresh ? interaction.update(panelPayload(lang, fresh)) : refuse(interaction, lang, key('expired'));
 }
 
@@ -134,7 +137,7 @@ const SNOWFLAKE = /^\d{17,20}$/;
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 const noop = (interaction, lang, entry) => interaction.update(panelPayload(lang, entry));
 const clearPending = (interaction, lang) => (entry) =>
-  interaction.update(panelPayload(lang, drafts.update(entry.panelId, { pending: null }) ?? entry));
+  interaction.update(panelPayload(lang, drafts.update(entry.panelId, { pending: null, target: null }) ?? entry));
 
 // A modal-only action reached any other way (a forged id) gets the expired answer, never an exception.
 const modalOnly = (fn) => (interaction, ctx, lang, entry) =>
@@ -157,7 +160,7 @@ async function applyGate(interaction, ctx, lang, entry, gate) {
 
 function cond(interaction, ctx, lang, entry) {
   const value = interaction.values?.[0];
-  if (!GATE_KINDS.includes(value)) return noop(interaction, lang, entry);
+  if (!COND_KINDS.includes(value)) return noop(interaction, lang, entry);
   const fresh = drafts.update(entry.panelId, { pending: value });
   return fresh ? interaction.update(panelPayload(lang, fresh)) : refuse(interaction, lang, key('expired'));
 }
@@ -196,7 +199,10 @@ function submitPerm(interaction, ctx, lang, entry) {
 function pickRole(interaction, ctx, lang, entry) {
   if (ROLE_ACTIONS.includes(entry.pending)) {
     const ids = pickedIds(interaction, 1);
-    return ids ? applyAction(interaction, ctx, lang, entry, { fn: entry.pending, id: ids[0] }) : noop(interaction, lang, entry);
+    if (!ids) return noop(interaction, lang, entry);
+    // The target is re-checked against the draft: only the N of a member argument can reach the script.
+    const target = userArgNumbers(entry.draft).includes(entry.target) ? { target: entry.target } : {};
+    return applyAction(interaction, ctx, lang, entry, { fn: entry.pending, id: ids[0], ...target });
   }
   if (!ROLE_GATES.includes(entry.pending)) return noop(interaction, lang, entry);
   const ids = pickedIds(interaction, MAX_PICK);
@@ -221,11 +227,150 @@ function pickUser(interaction, ctx, lang, entry) {
   return ids ? applyGate(interaction, ctx, lang, entry, { fn: 'requireuser', ids }) : noop(interaction, lang, entry);
 }
 
+// Gates are "0", "1", ...; argument checks share the select as "a0", "a1", ....
 function removeGateAt(interaction, ctx, lang, entry) {
-  const raw = interaction.values?.[0];
-  const index = /^\d{1,3}$/.test(raw ?? '') ? Number(raw) : -1;
-  if (index < 0 || index >= entry.draft.gates.length) return noop(interaction, lang, entry);
-  return tryChange(interaction, ctx, lang, entry, removeGate(entry.draft, index), redraw(interaction, lang));
+  const raw = interaction.values?.[0] ?? '';
+  const isCheck = raw.startsWith('a');
+  const digits = isCheck ? raw.slice(1) : raw;
+  const index = /^\d{1,3}$/.test(digits) ? Number(digits) : -1;
+  const list = isCheck ? entry.draft.argChecks : entry.draft.gates;
+  if (index < 0 || index >= list.length) return noop(interaction, lang, entry);
+  const next = isCheck ? removeArgCheck(entry.draft, index) : removeGate(entry.draft, index);
+  return tryChange(interaction, ctx, lang, entry, next, redraw(interaction, lang));
+}
+
+// ---- argument checks: the word number, then its type ----
+
+const inArgFlow = (entry) => entry.pending === ARG_KIND || argTypeTarget(entry) !== null;
+
+// A refusal for text that never reaches the compiler, in the same shape as the compiler's own.
+const badInput = (interaction, lang, code, detail) =>
+  interaction.reply(ephemeral(fitLines(lang, [t(lang, key('refused')), ...errorLines(lang, [{ code, detail, pos: 0 }])], MAX_REPLY)));
+
+function argNumberButton(interaction, ctx, lang, entry) {
+  if (!inArgFlow(entry)) return noop(interaction, lang, entry);
+  return interaction.showModal(textModal(lang, builderId('margn', entry.userId, entry.panelId), {
+    name: 'n', title: 'cond.modal.argn', label: 'cond.input.argn', style: TextInputStyle.Short, max: 3, required: true,
+  }));
+}
+
+function submitArgNumber(interaction, ctx, lang, entry) {
+  if (!inArgFlow(entry)) return refuse(interaction, lang, key('expired'));
+  const raw = interaction.fields.getTextInputValue('n').trim();
+  if (hasBrace(raw)) return refuse(interaction, lang, key('noBrace'));
+  if (!/^\d{1,3}$/.test(raw)) return badInput(interaction, lang, 'ARG_INDEX_INVALID', raw);
+  const n = Number(raw);
+  const toTypeStep = (fresh) =>
+    interaction.update(panelPayload(lang, drafts.update(fresh.panelId, { pending: `${ARGTYPE_PREFIX}${n}`, target: null }) ?? fresh));
+  return tryChange(interaction, ctx, lang, entry, addArgCheck(entry.draft, { n, type: null }), toTypeStep);
+}
+
+function pickArgType(interaction, ctx, lang, entry) {
+  const n = argTypeTarget(entry);
+  const value = interaction.values?.[0];
+  if (n === null || !ARG_TYPE_CHOICES.includes(value)) return noop(interaction, lang, entry);
+  return tryChange(interaction, ctx, lang, entry, setArgType(entry.draft, n, value === 'any' ? null : value), redraw(interaction, lang));
+}
+
+// ---- role target: a transient choice that the next role pick applies ----
+
+function pickTarget(interaction, ctx, lang, entry) {
+  if (!ROLE_ACTIONS.includes(entry.pending)) return noop(interaction, lang, entry);
+  const value = interaction.values?.[0];
+  let target = null;
+  if (value !== 'none') {
+    const n = /^\d{1,2}$/.test(value ?? '') ? Number(value) : -1;
+    if (!userArgNumbers(entry.draft).includes(n)) return noop(interaction, lang, entry);
+    target = n;
+  }
+  const fresh = drafts.update(entry.panelId, { target });
+  return fresh ? interaction.update(panelPayload(lang, fresh)) : refuse(interaction, lang, key('expired'));
+}
+
+// ---- random values ----
+
+const MAX_LIST_TEXT = 1000;
+const INTEGER = /^-?\d{1,12}$/;
+const WEIGHT = /^(\d{1,6}(?:\.\d{1,6})?)\s*%?$/;
+const textLines = (text) => String(text).split(/\r?\n/).map((l) => l.trim()).filter((l) => l !== '');
+
+const multiModal = (lang, customId, title, inputs) => {
+  const modal = new ModalBuilder().setCustomId(customId).setTitle(t(lang, key(title)));
+  for (const { name, label, style, max } of inputs) {
+    modal.addComponents(new ActionRowBuilder().addComponents(
+      new TextInputBuilder().setCustomId(name).setLabel(t(lang, key(label))).setStyle(style).setMaxLength(max).setRequired(true)));
+  }
+  return modal;
+};
+
+const listInput = (name, label) => ({ name, label, style: TextInputStyle.Paragraph, max: MAX_LIST_TEXT });
+const RANDOM_MODALS = {
+  range: {
+    id: 'mrange', title: 'random.modal.range',
+    inputs: [
+      { name: 'min', label: 'random.input.min', style: TextInputStyle.Short, max: 14 },
+      { name: 'max', label: 'random.input.max', style: TextInputStyle.Short, max: 14 },
+    ],
+  },
+  choose: { id: 'mchoose', title: 'random.modal.choose', inputs: [listInput('options', 'random.input.options')] },
+  weightedchoose: { id: 'mweighted', title: 'random.modal.weighted', inputs: [listInput('weights', 'random.input.weights')] },
+  lockedchoose: { id: 'mlocked', title: 'random.modal.locked', inputs: [listInput('values', 'random.input.values')] },
+};
+
+function pickRandomKind(interaction, ctx, lang, entry) {
+  const value = interaction.values?.[0];
+  if (!RANDOM_KINDS.includes(value)) return noop(interaction, lang, entry);
+  const spec = RANDOM_MODALS[value];
+  return interaction.showModal(multiModal(lang, builderId(spec.id, entry.userId, entry.panelId), spec.title, spec.inputs));
+}
+
+const applyRandom = (interaction, ctx, lang, entry, list, item) =>
+  tryChange(interaction, ctx, lang, entry, addRandom(entry.draft, list, item), redraw(interaction, lang));
+
+function submitRange(interaction, ctx, lang, entry) {
+  const min = interaction.fields.getTextInputValue('min').trim();
+  const max = interaction.fields.getTextInputValue('max').trim();
+  if (hasBrace(min) || hasBrace(max)) return refuse(interaction, lang, key('noBrace'));
+  if (!INTEGER.test(min) || !INTEGER.test(max)) return badInput(interaction, lang, 'RANGE_INVALID', `${min}-${max}`);
+  return applyRandom(interaction, ctx, lang, entry, 'range', { min: Number(min), max: Number(max) });
+}
+
+// One entry per line. The grammar has no escape for a closing brace, and the pipe separates the arguments.
+function listFrom(interaction, lang, field) {
+  const items = textLines(interaction.fields.getTextInputValue(field));
+  if (items.some(hasBrace)) return { refusal: refuse(interaction, lang, key('noBrace')) };
+  if (items.some((l) => l.includes('|'))) return { refusal: refuse(interaction, lang, key('noPipe')) };
+  return { items };
+}
+
+function submitChoose(interaction, ctx, lang, entry) {
+  const { items, refusal } = listFrom(interaction, lang, 'options');
+  if (refusal) return refusal;
+  return applyRandom(interaction, ctx, lang, entry, 'choose', { kind: 'choose', options: items });
+}
+
+function submitWeighted(interaction, ctx, lang, entry) {
+  const { items, refusal } = listFrom(interaction, lang, 'weights');
+  if (refusal) return refusal;
+  // "60" and "60%" both mean 60 percent; anything else goes through as typed and the compiler refuses it.
+  const weights = items.map((w) => { const m = WEIGHT.exec(w); return m ? Number(m[1]) : w; });
+  return applyRandom(interaction, ctx, lang, entry, 'weighted', { kind: 'weighted', weights });
+}
+
+function submitLocked(interaction, ctx, lang, entry) {
+  const { items, refusal } = listFrom(interaction, lang, 'values');
+  if (refusal) return refusal;
+  return applyRandom(interaction, ctx, lang, entry, 'locked', items);
+}
+
+// Values are "r<i>" (range), "c<i>" (choice or weighted choice) and "l<i>" (locked choice).
+const RANDOM_FIELDS = { r: 'ranges', c: 'choosers', l: 'locked' };
+
+function removeRandomAt(interaction, ctx, lang, entry) {
+  const m = /^([rcl])(\d{1,3})$/.exec(interaction.values?.[0] ?? '');
+  const field = m ? RANDOM_FIELDS[m[1]] : null;
+  if (!field || Number(m[2]) >= entry.draft.random[field].length) return noop(interaction, lang, entry);
+  return tryChange(interaction, ctx, lang, entry, removeRandom(entry.draft, field, Number(m[2])), redraw(interaction, lang));
 }
 
 // ---- actions ----
@@ -236,7 +381,7 @@ const applyAction = (interaction, ctx, lang, entry, action) =>
 function act(interaction, ctx, lang, entry) {
   const value = interaction.values?.[0];
   if (!ACTION_KINDS.includes(value)) return noop(interaction, lang, entry);
-  const fresh = drafts.update(entry.panelId, { pending: value });
+  const fresh = drafts.update(entry.panelId, { pending: value, target: null });
   return fresh ? interaction.update(panelPayload(lang, fresh)) : refuse(interaction, lang, key('expired'));
 }
 
@@ -429,6 +574,9 @@ const ACTIONS = {
   bembed: embedButton, bback: back, embed: pickEmbed, mcolor: modalOnly(submitColor),
   btry: tryButton, mtry: modalOnly(submitTry), bbasics: basicsButton, bscript: scriptButton, mscript: modalOnly(submitScript),
   bdelreply: delReplyButton, mdelreply: modalOnly(submitDelReply),
+  bargn: argNumberButton, margn: modalOnly(submitArgNumber), parg: pickArgType, tgt: pickTarget,
+  rnd: pickRandomKind, mrange: modalOnly(submitRange), mchoose: modalOnly(submitChoose), mweighted: modalOnly(submitWeighted),
+  mlocked: modalOnly(submitLocked), rmrnd: removeRandomAt,
   act, bnick: nickButton, bemoji: emojiButton, mnick: modalOnly(submitNick), memoji: modalOnly(submitEmoji), rmact: removeActionAt,
 };
 

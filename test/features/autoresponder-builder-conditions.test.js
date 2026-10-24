@@ -126,7 +126,7 @@ test('the page shows the kind select first, then the input that matches the pend
   assert.deepEqual(kinds(none), ['nav', 'cond']);
   const sel = flat(none.components)[1];
   assert.deepEqual(sel.options.map((o) => o.value),
-    ['cooldown', 'requirerole', 'denyrole', 'requireperm', 'denyperm', 'requirechannel', 'denychannel', 'requireuser']);
+    ['cooldown', 'requirerole', 'denyrole', 'requireperm', 'denyperm', 'requirechannel', 'denychannel', 'requireuser', 'requirearg']);
   const expect = {
     cooldown: [['nav', 'cond', 'bcool'], [SELECT, SELECT, BUTTON]],
     requirerole: [['nav', 'cond', 'prole'], [SELECT, SELECT, ROLE]],

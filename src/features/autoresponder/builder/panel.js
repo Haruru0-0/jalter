@@ -13,10 +13,15 @@ const CONTENT_LIMIT = 2000;
 const key = (k) => `autoresponder.builder.${k}`;
 
 // Later tasks insert their pages before `review`, which stays last.
-export const PAGES = ['basics', 'reply', 'conditions', 'actions', 'review'];
+export const PAGES = ['basics', 'reply', 'conditions', 'actions', 'random', 'review'];
 export const DESTINATIONS = ['reply', 'dm', 'channel'];
 
 export const GATE_KINDS = ['cooldown', 'requirerole', 'denyrole', 'requireperm', 'denyperm', 'requirechannel', 'denychannel', 'requireuser'];
+export const ARG_KIND = 'requirearg';
+export const COND_KINDS = [...GATE_KINDS, ARG_KIND];
+export const ARG_TYPE_CHOICES = ['any', 'user', 'channel', 'color', 'role', 'number'];
+export const RANDOM_KINDS = ['range', 'choose', 'weightedchoose', 'lockedchoose'];
+export const ARGTYPE_PREFIX = 'argtype:';
 export const ROLE_GATES = ['requirerole', 'denyrole'];
 export const PERM_GATES = ['requireperm', 'denyperm'];
 export const CHANNEL_GATES = ['requirechannel', 'denychannel'];
@@ -61,20 +66,43 @@ const btn = (lang, id, label, style = ButtonStyle.Secondary) =>
   new ButtonBuilder().setCustomId(id).setLabel(t(lang, key(label))).setStyle(style);
 
 /** One option per item, labelled with the summary line the item produces (the last line of a one-item draft). */
+const lineOf = (lang, partial) => summaryLines(lang, { ...newDraft(), ...partial }).at(-1).slice(0, MAX_LABEL);
+
 function removeOptions(lang, field, items) {
-  return items.slice(0, MAX_GATES).map((item, index) => {
-    const lines = summaryLines(lang, { ...newDraft(), [field]: [item] });
-    return { label: lines.at(-1).slice(0, MAX_LABEL), value: String(index) };
-  });
+  return items.slice(0, MAX_GATES).map((item, index) => ({ label: lineOf(lang, { [field]: [item] }), value: String(index) }));
+}
+
+// Conditions and argument checks share one remove select: gates are "0", "1", ..., argument checks "a0", "a1", ....
+function conditionRemoveOptions(lang, draft) {
+  const gates = removeOptions(lang, 'gates', draft.gates);
+  const checks = draft.argChecks.slice(0, MAX_GATES - gates.length)
+    .map((c, index) => ({ label: lineOf(lang, { argChecks: [c] }), value: `a${index}` }));
+  return [...gates, ...checks];
+}
+
+/** The N of every argument check that must be a member: the only valid role targets. */
+export const userArgNumbers = (draft) => draft.argChecks.filter((c) => c.type === 'user').map((c) => c.n);
+
+/** The N a pending "argtype:N" view is about, when the draft still has that check. */
+export function argTypeTarget(entry) {
+  if (typeof entry.pending !== 'string' || !entry.pending.startsWith(ARGTYPE_PREFIX)) return null;
+  const n = Number(entry.pending.slice(ARGTYPE_PREFIX.length));
+  return entry.draft.argChecks.some((c) => c.n === n) ? n : null;
 }
 
 function conditionRows(lang, entry) {
   const { userId, panelId, draft } = entry;
   const id = (action) => builderId(action, userId, panelId);
-  const kind = GATE_KINDS.includes(entry.pending) ? entry.pending : null;
+  const argN = argTypeTarget(entry);
+  const kind = COND_KINDS.includes(entry.pending) ? entry.pending : (argN === null ? null : ARG_KIND);
   const rows = [row(pick(lang, id('cond'), 'cond.ph.kind',
-    GATE_KINDS.map((k) => ({ label: t(lang, key(`cond.kind.${k}`)), value: k })), kind))];
-  if (kind === 'cooldown') rows.push(row(btn(lang, id('bcool'), 'cond.btn.cooldown', ButtonStyle.Primary)));
+    COND_KINDS.map((k) => ({ label: t(lang, key(`cond.kind.${k}`)), value: k })), kind))];
+  if (argN !== null) {
+    const current = entry.draft.argChecks.find((c) => c.n === argN).type ?? 'any';
+    rows.push(row(pick(lang, id('parg'), 'cond.ph.argtype',
+      ARG_TYPE_CHOICES.map((k) => ({ label: t(lang, key(`cond.argtype.${k}`)), value: k })), current)));
+  } else if (kind === ARG_KIND) rows.push(row(btn(lang, id('bargn'), 'cond.btn.argn', ButtonStyle.Primary)));
+  else if (kind === 'cooldown') rows.push(row(btn(lang, id('bcool'), 'cond.btn.cooldown', ButtonStyle.Primary)));
   else if (ROLE_GATES.includes(kind)) {
     rows.push(row(new RoleSelectMenuBuilder().setCustomId(id('prole')).setPlaceholder(t(lang, key('cond.ph.role')))
       .setMinValues(1).setMaxValues(MAX_PICK)));
@@ -88,7 +116,9 @@ function conditionRows(lang, entry) {
     rows.push(row(new UserSelectMenuBuilder().setCustomId(id('puser')).setPlaceholder(t(lang, key('cond.ph.user')))
       .setMinValues(1).setMaxValues(MAX_PICK)));
   }
-  if (draft.gates.length) rows.push(row(pick(lang, id('rmgate'), 'cond.ph.remove', removeOptions(lang, 'gates', draft.gates))));
+  if (draft.gates.length || draft.argChecks.length) {
+    rows.push(row(pick(lang, id('rmgate'), 'cond.ph.remove', conditionRemoveOptions(lang, draft))));
+  }
   return rows;
 }
 
@@ -101,10 +131,38 @@ function actionRows(lang, entry) {
   if (ROLE_ACTIONS.includes(kind)) {
     rows.push(row(new RoleSelectMenuBuilder().setCustomId(id('prole')).setPlaceholder(t(lang, key('act.ph.role')))
       .setMinValues(1).setMaxValues(1)));
+    const targets = userArgNumbers(draft);
+    if (targets.length) {
+      rows.push(row(pick(lang, id('tgt'), 'act.ph.target', [
+        { label: t(lang, key('act.target.none')), value: 'none' },
+        ...targets.map((n) => ({ label: t(lang, key('act.target.n'), { n }), value: String(n) })),
+      ], entry.target ? String(entry.target) : 'none')));
+    }
   } else if (kind === 'setnick') rows.push(row(btn(lang, id('bnick'), 'act.btn.nick', ButtonStyle.Primary)));
   else if (REACT_ACTIONS.includes(kind)) rows.push(row(btn(lang, id('bemoji'), 'act.btn.emoji', ButtonStyle.Primary)));
   if (draft.actions.length) rows.push(row(pick(lang, id('rmact'), 'act.ph.remove', removeOptions(lang, 'actions', draft.actions))));
   return rows;
+}
+
+function randomRows(lang, entry) {
+  const { userId, panelId, draft } = entry;
+  const id = (action) => builderId(action, userId, panelId);
+  const rows = [row(pick(lang, id('rnd'), 'random.ph.kind',
+    RANDOM_KINDS.map((k) => ({ label: t(lang, key(`random.kind.${k}`)), value: k }))))];
+  const { ranges, choosers, locked } = draft.random;
+  const options = [
+    ...ranges.map((r, i) => ({ label: lineOf(lang, { random: { ranges: [r], choosers: [], locked: [] } }), value: `r${i}` })),
+    ...choosers.map((c, i) => ({ label: lineOf(lang, { random: { ranges: [], choosers: [c], locked: [] } }), value: `c${i}` })),
+    ...locked.map((l, i) => ({ label: lineOf(lang, { random: { ranges: [], choosers: [], locked: [l] } }), value: `l${i}` })),
+  ];
+  if (options.length) rows.push(row(pick(lang, id('rmrnd'), 'random.ph.remove', options.slice(0, 25))));
+  return rows;
+}
+
+/** The tokens the reply text can use, numbered when there are several: [range], [range2], [choice], [lockedchoice]. */
+export function randomTokens(random) {
+  const list = (name, count) => Array.from({ length: count }, (_, i) => `[${name}${i === 0 ? '' : i + 1}]`);
+  return [...list('range', random.ranges.length), ...list('choice', random.choosers.length), ...list('lockedchoice', random.locked.length)];
 }
 
 function pageRows(lang, entry, page) {
@@ -133,6 +191,7 @@ function pageRows(lang, entry, page) {
   }
   if (page === 'conditions') return conditionRows(lang, entry);
   if (page === 'actions') return actionRows(lang, entry);
+  if (page === 'random') return randomRows(lang, entry);
   const tail = [button(lang, id('save'), 'save', ButtonStyle.Success), button(lang, id('cancel'), 'cancel', ButtonStyle.Danger)];
   const head = [button(lang, id('btry'), 'try'), button(lang, id('bscript'), 'script')];
   // Script mode keeps Basics reachable for the trigger and match mode.
@@ -176,6 +235,11 @@ function scriptPayload(lang, entry) {
   return { content, components: rows, allowedMentions: { parse: [] } };
 }
 
+function randomNote(lang, draft) {
+  const tokens = randomTokens(draft.random);
+  return tokens.length ? t(lang, key('random.note'), { tokens: tokens.join(', ') }) : t(lang, key('random.note.none'));
+}
+
 /** { content, components, allowedMentions } for the entry's current page. */
 export function panelPayload(lang, entry) {
   if (entry.draft.mode === 'script') return scriptPayload(lang, entry);
@@ -185,7 +249,7 @@ export function panelPayload(lang, entry) {
     PAGES.map((p) => ({ label: t(lang, key(`page.${p}`)), value: p })), page);
   const head = t(lang, key('head'), { page: t(lang, key(`page.${page}`)) });
   return {
-    content: fitLines(lang, [head, ...summaryLines(lang, entry.draft)], CONTENT_LIMIT),
+    content: fitLines(lang, [head, ...summaryLines(lang, entry.draft), ...(page === 'random' ? [randomNote(lang, entry.draft)] : [])], CONTENT_LIMIT),
     components: [row(nav), ...pageRows(lang, entry, page)],
     allowedMentions: { parse: [] },
   };

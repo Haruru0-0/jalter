@@ -18,7 +18,7 @@ function gateValue(g) {
 }
 
 function actionValue(a) {
-  if (a.id) return mention[a.fn](a.id);
+  if (a.id) return a.target ? `${mention[a.fn](a.id)} → [$${a.target}]` : mention[a.fn](a.id);
   return oneLine(a.emoji ?? a.text ?? '');
 }
 
@@ -43,6 +43,19 @@ export function summaryLines(lang, d) {
   if (d.silent) lines.push(t(lang, key('sum.silent')));
   for (const g of d.gates) lines.push(t(lang, key(`sum.${g.fn}`), { value: gateValue(g) }));
   for (const a of d.actions) lines.push(t(lang, key(`sum.${a.fn}`), { value: actionValue(a) }));
+  for (const c of d.argChecks ?? []) {
+    lines.push(c.type
+      ? t(lang, key('sum.requirearg'), { n: c.n, type: t(lang, key(`cond.argtype.${c.type}`)) })
+      : t(lang, key('sum.requirearg.any'), { n: c.n }));
+  }
+  const random = d.random ?? { ranges: [], choosers: [], locked: [] };
+  for (const r of random.ranges) lines.push(t(lang, key('sum.range'), { min: r.min, max: r.max }));
+  for (const c of random.choosers) {
+    lines.push(c.kind === 'weighted'
+      ? t(lang, key('sum.weighted'), { value: c.weights.map((w) => (typeof w === 'number' ? `${w}%` : oneLine(w))).join(', ') })
+      : t(lang, key('sum.choose'), { value: c.options.map(oneLine).join(', ') }));
+  }
+  for (const values of random.locked) lines.push(t(lang, key('sum.locked'), { value: values.map(oneLine).join(', ') }));
   if (d.deleteTrigger && d.actions.some((a) => a.fn === 'react')) lines.push(t(lang, key('sum.note.deleteReact')));
   return lines;
 }
