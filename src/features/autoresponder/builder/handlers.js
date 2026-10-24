@@ -6,6 +6,7 @@ import { ephemeral } from '../../../core/replies.js';
 import { getLang, t } from '../../../i18n/index.js';
 import { fitLines } from '../../reactionroles/setup.js';
 import { createRule } from '../store.js';
+import { listEmbeds } from '../../embeds/store.js';
 import { invalidate } from '../cache.js';
 import { checkTrigger, MATCH_MODES, MAX_TRIGGER_LENGTH } from '../match.js';
 import { compileScript } from '../script/compile.js';
@@ -15,7 +16,7 @@ import { generateScript } from './generate.js';
 import { drafts } from './drafts.js';
 import {
   builderId, parseBuilderId, panelPayload, PAGES, DESTINATIONS,
-  GATE_KINDS, ACTION_KINDS, ROLE_ACTIONS, REACT_ACTIONS, ROLE_GATES, PERM_GATES, CHANNEL_GATES, MAX_PICK, MAX_GATES, PERMISSIONS,
+  GATE_KINDS, ACTION_KINDS, ROLE_ACTIONS, REACT_ACTIONS, ROLE_GATES, PERM_GATES, CHANNEL_GATES, MAX_PICK, MAX_GATES, PERMISSIONS, MAX_EMBED_OPTIONS,
 } from './panel.js';
 
 const MAX_REPLY = 2000;
@@ -124,6 +125,7 @@ function submitText(interaction, ctx, lang, entry) {
 // ---- conditions ----
 
 const SNOWFLAKE = /^\d{17,20}$/;
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 const noop = (interaction, lang, entry) => interaction.update(panelPayload(lang, entry));
 const clearPending = (interaction, lang) => (entry) =>
   interaction.update(panelPayload(lang, drafts.update(entry.panelId, { pending: null }) ?? entry));
@@ -265,6 +267,61 @@ function removeActionAt(interaction, ctx, lang, entry) {
   return tryChange(interaction, ctx, lang, entry, removeAction(entry.draft, index), redraw(interaction, lang));
 }
 
+// ---- reply options: embed and delete-reply ----
+
+const toReplyPage = (interaction, lang) => (entry) =>
+  interaction.update(panelPayload(lang, drafts.update(entry.panelId, { page: 'reply', embedNames: null }) ?? entry));
+
+async function embedButton(interaction, ctx, lang, entry) {
+  const embedNames = await listEmbeds(ctx.db, interaction.guildId);
+  const fresh = drafts.update(entry.panelId, { page: 'embed', pending: null, embedNames });
+  return fresh ? interaction.update(panelPayload(lang, fresh)) : refuse(interaction, lang, key('expired'));
+}
+
+function back(interaction, ctx, lang, entry) {
+  const fresh = drafts.update(entry.panelId, { page: 'reply', embedNames: null });
+  return fresh ? interaction.update(panelPayload(lang, fresh)) : refuse(interaction, lang, key('expired'));
+}
+
+function pickEmbed(interaction, ctx, lang, entry) {
+  if (entry.page !== 'embed') return noop(interaction, lang, entry);
+  const value = interaction.values?.[0];
+  if (value === 'none') return tryChange(interaction, ctx, lang, entry, patch(entry.draft, { embed: null }), toReplyPage(interaction, lang));
+  if (value === 'plain') {
+    return interaction.showModal(textModal(lang, builderId('mcolor', entry.userId, entry.panelId), {
+      name: 'color', title: 'modal.color', label: 'input.color', style: TextInputStyle.Short, max: 7, required: false,
+      value: entry.draft.embed?.color ?? undefined,
+    }));
+  }
+  const index = /^n(\d{1,2})$/.exec(value ?? '') ? Number(value.slice(1)) : -1;
+  const name = index >= 0 && index < MAX_EMBED_OPTIONS ? entry.embedNames?.[index] : undefined;
+  if (!name) return noop(interaction, lang, entry);
+  return tryChange(interaction, ctx, lang, entry, patch(entry.draft, { embed: { kind: 'named', name } }), toReplyPage(interaction, lang));
+}
+
+function submitColor(interaction, ctx, lang, entry) {
+  const color = interaction.fields.getTextInputValue('color').trim();
+  if (hasBrace(color)) return refuse(interaction, lang, key('noBrace'));
+  // Without a leading # the compiler would read the text as an embed name, so the shape is checked here.
+  if (color !== '' && !HEX_COLOR.test(color)) {
+    return interaction.reply(ephemeral(fitLines(lang, [t(lang, key('refused')), ...errorLines(lang, [{ code: 'BAD_ARGUMENT', detail: color, pos: 0 }])], MAX_REPLY)));
+  }
+  return tryChange(interaction, ctx, lang, entry, patch(entry.draft, { embed: { kind: 'plain', color: color || null } }), toReplyPage(interaction, lang));
+}
+
+function delReplyButton(interaction, ctx, lang, entry) {
+  return interaction.showModal(textModal(lang, builderId('mdelreply', entry.userId, entry.panelId), {
+    name: 'seconds', title: 'modal.delreply', label: 'input.delreply', style: TextInputStyle.Short, max: 10, required: false,
+    value: entry.draft.deleteReplyAfter ? String(entry.draft.deleteReplyAfter) : undefined,
+  }));
+}
+
+function submitDelReply(interaction, ctx, lang, entry) {
+  const seconds = interaction.fields.getTextInputValue('seconds').trim();
+  if (hasBrace(seconds)) return refuse(interaction, lang, key('noBrace'));
+  return tryChange(interaction, ctx, lang, entry, patch(entry.draft, { deleteReplyAfter: seconds || null }), redraw(interaction, lang));
+}
+
 function cancel(interaction, ctx, lang, entry) {
   drafts.drop(entry.panelId);
   return interaction.update({ content: t(lang, key('cancelled')), components: [] });
@@ -307,6 +364,8 @@ const ACTIONS = {
   trigger: triggerButton, text: textButton, mtrigger: submitTrigger, mtext: submitText, cancel, save,
   cond, bcool: coolButton, bperm: permButton, mcooldown: modalOnly(submitCooldown), mperm: modalOnly(submitPerm),
   prole: pickRole, pperm: pickPerm, pchan: pickChannel, puser: pickUser, rmgate: removeGateAt,
+  bembed: embedButton, bback: back, embed: pickEmbed, mcolor: modalOnly(submitColor),
+  bdelreply: delReplyButton, mdelreply: modalOnly(submitDelReply),
   act, bnick: nickButton, bemoji: emojiButton, mnick: modalOnly(submitNick), memoji: modalOnly(submitEmoji), rmact: removeActionAt,
 };
 

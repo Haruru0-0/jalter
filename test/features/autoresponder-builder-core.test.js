@@ -218,7 +218,7 @@ test('nav switches pages and the reply page shows its controls', async () => {
   await on();
   const { panelId } = await open(env);
   const reply = updated(await press(env, panelId, 'nav', { values: ['reply'] }));
-  assert.deepEqual(kinds(reply), ['nav', 'text', 'delete', 'silent', 'dest']);
+  assert.deepEqual(kinds(reply), ['nav', 'text', 'delete', 'silent', 'bembed', 'bdelreply', 'dest']);
   const review = updated(await press(env, panelId, 'nav', { values: ['review'] }));
   assert.deepEqual(kinds(review), ['nav', 'save', 'cancel']);
   const bogus = updated(await press(env, panelId, 'nav', { values: ['hax'] }));
@@ -268,12 +268,12 @@ test('mode, destination and the channel select update the draft and re-render', 
   await press(env, panelId, 'nav', { values: ['reply'] });
   const d = await press(env, panelId, 'dest', { values: ['channel'] });
   assert.equal(drafts.get(panelId).draft.dest, 'channel');
-  assert.deepEqual(kinds(updated(d)), ['nav', 'text', 'delete', 'silent', 'dest', 'channel']);
+  assert.deepEqual(kinds(updated(d)), ['nav', 'text', 'delete', 'silent', 'bembed', 'bdelreply', 'dest', 'channel']);
   const c = await press(env, panelId, 'channel', { values: [CHAN] });
   assert.equal(drafts.get(panelId).draft.channelId, CHAN);
   assert.ok(updated(c).content.includes(`<#${CHAN}>`));
   const back = await press(env, panelId, 'dest', { values: ['dm'] });
-  assert.deepEqual(kinds(updated(back)), ['nav', 'text', 'delete', 'silent', 'dest']);
+  assert.deepEqual(kinds(updated(back)), ['nav', 'text', 'delete', 'silent', 'bembed', 'bdelreply', 'dest']);
   const bogus = await press(env, panelId, 'dest', { values: ['hax'] });
   assert.equal(updated(bogus), undefined);
   assert.equal(drafts.get(panelId).draft.dest, 'dm');

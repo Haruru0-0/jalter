@@ -986,5 +986,17 @@
   "autoresponder.builder.act.modal.nick": "Nickname",
   "autoresponder.builder.act.modal.emoji": "Emoji",
   "autoresponder.builder.act.input.nick": "New nickname (32 characters at most)",
-  "autoresponder.builder.act.input.emoji": "An emoji, or a custom one from this server"
+  "autoresponder.builder.act.input.emoji": "An emoji, or a custom one from this server",
+  "autoresponder.builder.btn.embed": "Embed",
+  "autoresponder.builder.btn.delreply": "Delete reply",
+  "autoresponder.builder.btn.back": "Back",
+  "autoresponder.builder.page.embed": "Embed",
+  "autoresponder.builder.ph.embed": "Choose an embed",
+  "autoresponder.builder.embed.none": "No embed",
+  "autoresponder.builder.embed.plain": "Plain embed with a colour",
+  "autoresponder.builder.embed.more": "Only the first {shown} of {total} saved embeds are listed.",
+  "autoresponder.builder.modal.color": "Embed colour",
+  "autoresponder.builder.input.color": "Colour as #rrggbb, or empty",
+  "autoresponder.builder.modal.delreply": "Delete the reply",
+  "autoresponder.builder.input.delreply": "Seconds (1 to 300), empty to clear"
 }

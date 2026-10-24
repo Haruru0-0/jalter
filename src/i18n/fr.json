@@ -986,5 +986,17 @@
   "autoresponder.builder.act.modal.nick": "Pseudo",
   "autoresponder.builder.act.modal.emoji": "Émoji",
   "autoresponder.builder.act.input.nick": "Nouveau pseudo (32 caractères max.)",
-  "autoresponder.builder.act.input.emoji": "Un émoji, ou un émoji de ce serveur"
+  "autoresponder.builder.act.input.emoji": "Un émoji, ou un émoji de ce serveur",
+  "autoresponder.builder.btn.embed": "Embed",
+  "autoresponder.builder.btn.delreply": "Supprimer la réponse",
+  "autoresponder.builder.btn.back": "Retour",
+  "autoresponder.builder.page.embed": "Embed",
+  "autoresponder.builder.ph.embed": "Choisir un embed",
+  "autoresponder.builder.embed.none": "Aucun embed",
+  "autoresponder.builder.embed.plain": "Embed simple avec une couleur",
+  "autoresponder.builder.embed.more": "Seuls les {shown} premiers des {total} embeds enregistrés sont listés.",
+  "autoresponder.builder.modal.color": "Couleur de l'embed",
+  "autoresponder.builder.input.color": "Couleur #rrggbb, ou vide",
+  "autoresponder.builder.modal.delreply": "Supprimer la réponse",
+  "autoresponder.builder.input.delreply": "Secondes (1 à 300), vide pour retirer"
 }

@@ -986,5 +986,17 @@
   "autoresponder.builder.act.modal.nick": "اللقب",
   "autoresponder.builder.act.modal.emoji": "الإيموجي",
   "autoresponder.builder.act.input.nick": "اللقب الجديد (32 حرفاً كحد أقصى)",
-  "autoresponder.builder.act.input.emoji": "إيموجي أو إيموجي مخصص من هذا الخادم"
+  "autoresponder.builder.act.input.emoji": "إيموجي أو إيموجي مخصص من هذا الخادم",
+  "autoresponder.builder.btn.embed": "إمبد",
+  "autoresponder.builder.btn.delreply": "حذف الرد",
+  "autoresponder.builder.btn.back": "رجوع",
+  "autoresponder.builder.page.embed": "إمبد",
+  "autoresponder.builder.ph.embed": "اختر إمبد",
+  "autoresponder.builder.embed.none": "بدون إمبد",
+  "autoresponder.builder.embed.plain": "إمبد بسيط بلون",
+  "autoresponder.builder.embed.more": "تظهر فقط أول {shown} من أصل {total} إمبد محفوظ.",
+  "autoresponder.builder.modal.color": "لون الإمبد",
+  "autoresponder.builder.input.color": "اللون بصيغة #rrggbb أو فارغ",
+  "autoresponder.builder.modal.delreply": "حذف الرد",
+  "autoresponder.builder.input.delreply": "ثوانٍ (من 1 إلى 300)، فارغ للإزالة"
 }

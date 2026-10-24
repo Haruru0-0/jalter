@@ -32,6 +32,7 @@ export const PERMISSIONS = [
   'ManageWebhooks', 'CreateInstantInvite',
 ];
 const MAX_LABEL = 100;
+export const MAX_EMBED_OPTIONS = 23; // the select holds 25: "no embed", "plain colour", then these
 
 /** autoresponder:b:<action>:<userId>:<panelId>[:<extra>] (well under Discord's 100 characters). */
 export const builderId = (action, userId, panelId, extra) =>
@@ -119,7 +120,8 @@ function pageRows(lang, entry, page) {
   if (page === 'reply') {
     const toggle = (action, on, label) => button(lang, id(action), label, on ? ButtonStyle.Success : ButtonStyle.Secondary);
     const rows = [
-      row(button(lang, id('text'), 'text', ButtonStyle.Primary), toggle('delete', draft.deleteTrigger, 'delete'), toggle('silent', draft.silent, 'silent')),
+      row(button(lang, id('text'), 'text', ButtonStyle.Primary), toggle('delete', draft.deleteTrigger, 'delete'), toggle('silent', draft.silent, 'silent'),
+        button(lang, id('bembed'), 'embed'), button(lang, id('bdelreply'), 'delreply')),
       row(select(lang, id('dest'), 'dest',
         DESTINATIONS.map((d) => ({ label: t(lang, key(`dest.${d}`)), value: d })), draft.dest)),
     ];
@@ -134,8 +136,27 @@ function pageRows(lang, entry, page) {
   return [row(button(lang, id('save'), 'save', ButtonStyle.Success), button(lang, id('cancel'), 'cancel', ButtonStyle.Danger))];
 }
 
+// The embed picker: no embed, a plain colour, then saved embeds by index into entry.embedNames (the list read when the view opened).
+function embedView(lang, entry) {
+  const id = (action, extra) => builderId(action, entry.userId, entry.panelId, extra);
+  const names = entry.embedNames ?? [];
+  const options = [
+    { label: t(lang, key('embed.none')), value: 'none' },
+    { label: t(lang, key('embed.plain')), value: 'plain' },
+    ...names.slice(0, MAX_EMBED_OPTIONS).map((name, index) => ({ label: name.slice(0, MAX_LABEL), value: `n${index}` })),
+  ];
+  const lines = [t(lang, key('head'), { page: t(lang, key('page.embed')) }), ...summaryLines(lang, entry.draft)];
+  if (names.length > MAX_EMBED_OPTIONS) lines.push(t(lang, key('embed.more'), { shown: MAX_EMBED_OPTIONS, total: names.length }));
+  return {
+    content: fitLines(lang, lines, CONTENT_LIMIT),
+    components: [row(pick(lang, id('embed'), 'ph.embed', options)), row(btn(lang, id('bback', 'reply'), 'btn.back'))],
+    allowedMentions: { parse: [] },
+  };
+}
+
 /** { content, components, allowedMentions } for the entry's current page. */
 export function panelPayload(lang, entry) {
+  if (entry.page === 'embed') return embedView(lang, entry);
   const page = pageOf(entry);
   const nav = select(lang, builderId('nav', entry.userId, entry.panelId), 'nav',
     PAGES.map((p) => ({ label: t(lang, key(`page.${p}`)), value: p })), page);
