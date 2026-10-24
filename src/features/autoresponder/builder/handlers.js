@@ -10,9 +10,9 @@ import { listEmbeds } from '../../embeds/store.js';
 import { invalidate } from '../cache.js';
 import { checkTrigger, matchRule, MATCH_MODES, MAX_TRIGGER_LENGTH } from '../match.js';
 import { describeRun } from '../dryrun.js';
-import { compileScript } from '../script/compile.js';
+import { compileScript, MAX_SCRIPT } from '../script/compile.js';
 import { errorLines, log } from '../commands.js';
-import { addAction, addGate, newDraft, patch, removeAction, removeGate, setTrigger } from './draft.js';
+import { addAction, addGate, newDraft, patch, removeAction, removeGate, setTrigger, toScriptMode } from './draft.js';
 import { generateScript } from './generate.js';
 import { drafts } from './drafts.js';
 import {
@@ -56,10 +56,11 @@ export async function tryChange(interaction, ctx, lang, entry, nextDraft, rerend
 
 const redraw = (interaction, lang) => (entry) => interaction.update(panelPayload(lang, entry));
 
-const textModal = (lang, customId, { name, title, label, style, max, required, value }) => {
+const textModal = (lang, customId, { name, title, label, style, max, required, value, placeholder }) => {
   const input = new TextInputBuilder().setCustomId(name).setLabel(t(lang, key(label))).setStyle(style)
     .setMaxLength(max).setRequired(required);
   if (value) input.setValue(value);
+  if (placeholder) input.setPlaceholder(placeholder);
   return new ModalBuilder().setCustomId(customId).setTitle(t(lang, key(title))).addComponents(new ActionRowBuilder().addComponents(input));
 };
 
@@ -281,7 +282,8 @@ async function embedButton(interaction, ctx, lang, entry) {
 }
 
 function back(interaction, ctx, lang, entry) {
-  const fresh = drafts.update(entry.panelId, { page: 'reply', embedNames: null });
+  const to = interaction.customId.split(':')[5] === 'review' ? 'review' : 'reply';
+  const fresh = drafts.update(entry.panelId, { page: to, embedNames: null });
   return fresh ? interaction.update(panelPayload(lang, fresh)) : refuse(interaction, lang, key('expired'));
 }
 
@@ -352,6 +354,29 @@ async function submitTry(interaction, ctx, lang, entry) {
   return interaction.reply(ephemeral({ content: fitLines(lang, lines, MAX_REPLY), allowedMentions: { parse: [] } }));
 }
 
+// ---- script text: the one-way switch to script mode ----
+
+function basicsButton(interaction, ctx, lang, entry) {
+  const fresh = drafts.update(entry.panelId, { page: 'basics', pending: null });
+  return fresh ? interaction.update(panelPayload(lang, fresh)) : refuse(interaction, lang, key('expired'));
+}
+
+function scriptButton(interaction, ctx, lang, entry) {
+  const script = generateScript(entry.draft);
+  const fits = script.length <= MAX_SCRIPT;
+  return interaction.showModal(textModal(lang, builderId('mscript', entry.userId, entry.panelId), {
+    name: 'script', title: 'modal.script', label: 'input.script', style: TextInputStyle.Paragraph, max: MAX_SCRIPT, required: true,
+    value: fits ? script : undefined, placeholder: fits ? undefined : t(lang, key('script.tooLong')),
+  }));
+}
+
+// Compiles the edited text as the writer; on success the draft becomes a script-mode draft and stays one.
+function submitScript(interaction, ctx, lang, entry) {
+  const script = interaction.fields.getTextInputValue('script');
+  const toReview = (fresh) => interaction.update(panelPayload(lang, drafts.update(fresh.panelId, { page: 'review', pending: null }) ?? fresh));
+  return tryChange(interaction, ctx, lang, entry, toScriptMode(entry.draft, script), toReview);
+}
+
 function cancel(interaction, ctx, lang, entry) {
   drafts.drop(entry.panelId);
   return interaction.update({ content: t(lang, key('cancelled')), components: [] });
@@ -395,10 +420,12 @@ const ACTIONS = {
   cond, bcool: coolButton, bperm: permButton, mcooldown: modalOnly(submitCooldown), mperm: modalOnly(submitPerm),
   prole: pickRole, pperm: pickPerm, pchan: pickChannel, puser: pickUser, rmgate: removeGateAt,
   bembed: embedButton, bback: back, embed: pickEmbed, mcolor: modalOnly(submitColor),
-  btry: tryButton, mtry: modalOnly(submitTry),
+  btry: tryButton, mtry: modalOnly(submitTry), bbasics: basicsButton, bscript: scriptButton, mscript: modalOnly(submitScript),
   bdelreply: delReplyButton, mdelreply: modalOnly(submitDelReply),
   act, bnick: nickButton, bemoji: emojiButton, mnick: modalOnly(submitNick), memoji: modalOnly(submitEmoji), rmact: removeActionAt,
 };
+
+const SCRIPT_MODE_ACTIONS = new Set(['trigger', 'mtrigger', 'mode', 'bbasics', 'bback', 'btry', 'mtry', 'bscript', 'mscript', 'save', 'cancel']);
 
 /** `/autoresponder builder`: opens a fresh panel for the caller (replacing any earlier one). */
 export async function openBuilder(interaction, ctx, lang) {
@@ -419,5 +446,7 @@ export async function handleBuilder(interaction, ctx) {
     return refuse(interaction, lang, key('expired'));
   }
   const action = Object.hasOwn(ACTIONS, ids.action) ? ACTIONS[ids.action] : null;
+  // A script-mode draft has no guided controls: anything outside this set (a forged id) just redraws the panel.
+  if (entry.draft.mode === 'script' && !SCRIPT_MODE_ACTIONS.has(ids.action)) return action ? noop(interaction, lang, entry) : undefined;
   return action?.(interaction, ctx, lang, entry);
 }

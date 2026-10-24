@@ -1004,5 +1004,10 @@
   "autoresponder.builder.input.sample": "Un message à tester (rien n'est envoyé)",
   "autoresponder.builder.try.match": "L'exemple correspond au déclencheur.",
   "autoresponder.builder.try.nomatch": "L'exemple ne correspond pas au déclencheur.",
-  "autoresponder.builder.try.wouldRun": "Ce qu'il ferait s'il correspondait :"
+  "autoresponder.builder.try.wouldRun": "Ce qu'il ferait s'il correspondait :",
+  "autoresponder.builder.btn.script": "Modifier le texte du script",
+  "autoresponder.builder.modal.script": "Texte du script",
+  "autoresponder.builder.input.script": "Script (4000 caractères max.)",
+  "autoresponder.builder.script.tooLong": "Le script généré dépasse 4000 caractères, il n'est donc pas prérempli.",
+  "autoresponder.builder.sum.scriptClipped": "(Le script est trop long pour ce message, il est donc tronqué.)"
 }

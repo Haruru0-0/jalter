@@ -1004,5 +1004,10 @@
   "autoresponder.builder.input.sample": "رسالة للتجربة (لا يُرسل شيء)",
   "autoresponder.builder.try.match": "الرسالة تطابق المحفّز.",
   "autoresponder.builder.try.nomatch": "الرسالة لا تطابق المحفّز.",
-  "autoresponder.builder.try.wouldRun": "ما كان سيفعله لو طابقت:"
+  "autoresponder.builder.try.wouldRun": "ما كان سيفعله لو طابقت:",
+  "autoresponder.builder.btn.script": "تعديل نص السكربت",
+  "autoresponder.builder.modal.script": "نص السكربت",
+  "autoresponder.builder.input.script": "السكربت (4000 حرف كحد أقصى)",
+  "autoresponder.builder.script.tooLong": "السكربت المُولَّد أطول من 4000 حرف، لذلك لم يُملأ مسبقاً.",
+  "autoresponder.builder.sum.scriptClipped": "(السكربت أطول من أن تعرضه هذه الرسالة، لذلك تم اقتطاعه.)"
 }

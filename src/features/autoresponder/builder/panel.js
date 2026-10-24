@@ -133,10 +133,10 @@ function pageRows(lang, entry, page) {
   }
   if (page === 'conditions') return conditionRows(lang, entry);
   if (page === 'actions') return actionRows(lang, entry);
-  return [row(
-    button(lang, id('btry'), 'try'),
-    button(lang, id('save'), 'save', ButtonStyle.Success), button(lang, id('cancel'), 'cancel', ButtonStyle.Danger),
-  )];
+  const tail = [button(lang, id('save'), 'save', ButtonStyle.Success), button(lang, id('cancel'), 'cancel', ButtonStyle.Danger)];
+  const head = [button(lang, id('btry'), 'try'), button(lang, id('bscript'), 'script')];
+  // Script mode keeps Basics reachable for the trigger and match mode.
+  return [row(...head, ...(draft.mode === 'script' ? [btn(lang, id('bbasics'), 'page.basics')] : []), ...tail)];
 }
 
 // The embed picker: no embed, a plain colour, then saved embeds by index into entry.embedNames (the list read when the view opened).
@@ -157,8 +157,28 @@ function embedView(lang, entry) {
   };
 }
 
+// Script mode: only Review (and Basics for the trigger) exist; the summary is the script in a code block that is
+// clipped, with a note, so the whole message fits.
+function scriptPayload(lang, entry) {
+  const page = entry.page === 'basics' ? 'basics' : 'review';
+  const [triggerLine, label] = summaryLines(lang, entry.draft);
+  const fixed = [t(lang, key('head'), { page: t(lang, key(`page.${page}`)) }), triggerLine, label].join('\n');
+  const code = String(entry.draft.scriptText).replace(/`/g, "'");
+  const block = (text) => `\n\`\`\`\n${text}\n\`\`\``;
+  let content = fixed + block(code);
+  if (content.length > CONTENT_LIMIT) {
+    const note = t(lang, key('sum.scriptClipped'));
+    const room = CONTENT_LIMIT - fixed.length - block('').length - note.length - 1;
+    content = `${fixed}${block(`${code.slice(0, Math.max(0, room - 1))}…`)}\n${note}`;
+  }
+  const rows = pageRows(lang, entry, page);
+  if (page === 'basics') rows.push(row(btn(lang, builderId('bback', entry.userId, entry.panelId, 'review'), 'btn.back')));
+  return { content, components: rows, allowedMentions: { parse: [] } };
+}
+
 /** { content, components, allowedMentions } for the entry's current page. */
 export function panelPayload(lang, entry) {
+  if (entry.draft.mode === 'script') return scriptPayload(lang, entry);
   if (entry.page === 'embed') return embedView(lang, entry);
   const page = pageOf(entry);
   const nav = select(lang, builderId('nav', entry.userId, entry.panelId), 'nav',

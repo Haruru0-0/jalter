@@ -1004,5 +1004,10 @@
   "autoresponder.builder.input.sample": "A message to test (nothing is sent)",
   "autoresponder.builder.try.match": "The sample matches the trigger.",
   "autoresponder.builder.try.nomatch": "The sample does not match the trigger.",
-  "autoresponder.builder.try.wouldRun": "What it would do if it matched:"
+  "autoresponder.builder.try.wouldRun": "What it would do if it matched:",
+  "autoresponder.builder.btn.script": "Edit script text",
+  "autoresponder.builder.modal.script": "Script text",
+  "autoresponder.builder.input.script": "Script (4000 characters at most)",
+  "autoresponder.builder.script.tooLong": "The generated script is over 4000 characters, so it is not prefilled.",
+  "autoresponder.builder.sum.scriptClipped": "(The script is longer than this message can show, so it is cut short.)"
 }
