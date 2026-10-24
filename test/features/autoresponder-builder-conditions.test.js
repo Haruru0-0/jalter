@@ -209,6 +209,18 @@ test('free text with a closing brace is refused with the noBrace message', async
   assert.equal(last(p)[1].content, t('en', 'autoresponder.builder.noBrace'));
 });
 
+test('a typed permission with a pipe is refused with the noPipe message and adds nothing', async () => {
+  const { env, panelId } = await start();
+  await pend(env, panelId, 'requireperm');
+  const p = await submitModal(env, panelId, 'mperm', { perm: 'ManageMessages|BanMembers' });
+  assert.deepEqual(gates(panelId), []);
+  assert.equal(last(p)[0], 'reply');
+  assert.equal(last(p)[1].content, t('en', 'autoresponder.builder.noPipe'));
+  for (const lang of ['en', 'fr', 'ar']) assert.notEqual(t(lang, 'autoresponder.builder.noPipe'), 'autoresponder.builder.noPipe');
+  assert.notEqual(t('fr', 'autoresponder.builder.noPipe'), t('en', 'autoresponder.builder.noPipe'));
+  assert.notEqual(t('ar', 'autoresponder.builder.noPipe'), t('en', 'autoresponder.builder.noPipe'));
+});
+
 test('role pickers add requirerole and denyrole, two roles join with a pipe', async () => {
   const { env, panelId } = await start();
   await pend(env, panelId, 'requirerole');

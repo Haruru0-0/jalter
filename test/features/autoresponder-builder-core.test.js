@@ -221,9 +221,64 @@ test('nav switches pages and the reply page shows its controls', async () => {
   assert.deepEqual(kinds(reply), ['nav', 'text', 'delete', 'silent', 'bembed', 'bdelreply', 'dest']);
   const review = updated(await press(env, panelId, 'nav', { values: ['review'] }));
   assert.deepEqual(kinds(review), ['nav', 'btry', 'bscript', 'save', 'cancel']);
-  const bogus = updated(await press(env, panelId, 'nav', { values: ['hax'] }));
-  assert.equal(bogus, undefined);
+  const bogusClick = await press(env, panelId, 'nav', { values: ['hax'] });
+  assert.equal(bogusClick.calls.length, 1);
+  assert.equal(bogusClick.calls[0][0], 'update');
   assert.equal(drafts.get(panelId).page, 'review');
+});
+
+// ---- forged values and ids: answered once, never thrown, never spliced ----
+
+test('forged nav, mode, dest and channel values are answered with one redraw and change nothing', async () => {
+  const env = setup();
+  await on();
+  const { panelId } = await open(env);
+  const before = drafts.get(panelId).draft;
+  for (const [action, value] of [['nav', 'hax'], ['mode', 'hax'], ['dest', 'hax'], ['channel', undefined]]) {
+    const i = await press(env, panelId, action, { values: value === undefined ? [] : [value] });
+    assert.equal(i.calls.length, 1, action);
+    assert.equal(i.calls[0][0], 'update', action);
+  }
+  assert.equal(drafts.get(panelId).draft, before);
+});
+
+test('a forged channel value is never spliced into the script', async () => {
+  const env = setup();
+  await on();
+  const { panelId } = await open(env);
+  await press(env, panelId, 'dest', { values: ['channel'] });
+  const i = await press(env, panelId, 'channel', { values: ['1>}{addrole:<@&2'] });
+  assert.equal(i.calls.length, 1);
+  assert.equal(i.calls[0][0], 'update');
+  assert.equal(drafts.get(panelId).draft.channelId, null);
+  assert.ok(!generateScript(drafts.get(panelId).draft).includes('addrole'));
+});
+
+test('mtrigger and mtext reached by a forged button id get one normal answer, no throw', async () => {
+  const env = setup();
+  await on();
+  const { panelId } = await open(env);
+  for (const action of ['mtrigger', 'mtext']) {
+    const i = fake(env, { customId: builderId(action, 'staff', panelId) });
+    i.fields = undefined;
+    await command.components.handle(i, env.ctx);
+    assert.equal(i.calls.length, 1, action);
+    assert.deepEqual(i.calls[0], refusal('autoresponder.builder.expired'), action);
+  }
+  assert.equal(drafts.get(panelId).draft.trigger, '');
+});
+
+test('an unknown action id is answered once with expired, in guided and script mode', async () => {
+  const env = setup();
+  await on();
+  const { panelId } = await open(env);
+  const guided = await press(env, panelId, 'hax');
+  assert.equal(guided.calls.length, 1);
+  assert.deepEqual(guided.calls[0], refusal('autoresponder.builder.expired'));
+  drafts.update(panelId, { draft: { ...drafts.get(panelId).draft, mode: 'script', scriptText: 'hi' } });
+  const script = await press(env, panelId, 'hax');
+  assert.equal(script.calls.length, 1);
+  assert.deepEqual(script.calls[0], refusal('autoresponder.builder.expired'));
 });
 
 test('the trigger button opens a prefilled modal; the submit stores the trigger and re-renders', async () => {
@@ -275,7 +330,7 @@ test('mode, destination and the channel select update the draft and re-render', 
   const back = await press(env, panelId, 'dest', { values: ['dm'] });
   assert.deepEqual(kinds(updated(back)), ['nav', 'text', 'delete', 'silent', 'bembed', 'bdelreply', 'dest']);
   const bogus = await press(env, panelId, 'dest', { values: ['hax'] });
-  assert.equal(updated(bogus), undefined);
+  assert.equal(bogus.calls.length, 1);
   assert.equal(drafts.get(panelId).draft.dest, 'dm');
 });
 
@@ -399,6 +454,36 @@ test('save with an empty trigger replies badTrigger and keeps the entry', async 
   assert.ok(drafts.get(panelId));
   assert.equal(drafts.get(panelId).saving, false);
   assert.equal((await listRules(db, G)).length, 0);
+});
+
+test('a channel destination with no channel picked is refused on Save and on Try it, and saves once a channel is chosen', async () => {
+  const env = setup();
+  await on();
+  env.guild.channels.cache.set(CHAN, { id: CHAN, name: 'general' });
+  const panelId = await ready(env);
+  await press(env, panelId, 'dest', { values: ['channel'] });
+  const s = await press(env, panelId, 'save');
+  assert.equal((await listRules(db, G)).length, 0);
+  assert.equal(env.logged.length, 0);
+  assert.ok(drafts.get(panelId));
+  assert.equal(drafts.get(panelId).saving, false);
+  assert.deepEqual(last(s), ['followUp', { content: t('en', 'autoresponder.builder.needChannel'), flags: MessageFlags.Ephemeral }]);
+  const tr = await submitModal(env, panelId, 'mtry', { sample: 'hi bot' });
+  assert.deepEqual(last(tr), refusal('autoresponder.builder.needChannel'));
+  assert.equal(tr.calls.length, 1);
+  await press(env, panelId, 'channel', { values: [CHAN] });
+  const ok = await press(env, panelId, 'save');
+  assert.equal(last(ok)[0], 'editReply');
+  const rules = await listRules(db, G);
+  assert.equal(rules.length, 1);
+  assert.ok(rules[0].script.includes(`{sendto:<#${CHAN}>}`));
+});
+
+test('needChannel exists in en, fr and ar', () => {
+  const k = 'autoresponder.builder.needChannel';
+  for (const lang of ['en', 'fr', 'ar']) assert.notEqual(t(lang, k), k, lang);
+  assert.notEqual(t('fr', k), t('en', k));
+  assert.notEqual(t('ar', k), t('en', k));
 });
 
 test('the 101st rule replies full and stores nothing', async () => {

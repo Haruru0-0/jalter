@@ -951,6 +951,8 @@
   "autoresponder.builder.sum.reactreply": "Reacts to the reply with {value}",
   "autoresponder.builder.page.conditions": "Conditions",
   "autoresponder.builder.noBrace": "That text cannot contain the character }. Remove it and try again.",
+  "autoresponder.builder.noPipe": "A permission name cannot contain the character |. Type one permission at a time.",
+  "autoresponder.builder.needChannel": "Pick the channel to send to first.",
   "autoresponder.builder.tooMany": "A rule can have at most 25 conditions.",
   "autoresponder.builder.cond.kind.cooldown": "Cooldown",
   "autoresponder.builder.cond.kind.requirerole": "Needs a role",

@@ -68,14 +68,14 @@ const textModal = (lang, customId, { name, title, label, style, max, required, v
 
 function nav(interaction, ctx, lang, entry) {
   const page = interaction.values?.[0];
-  if (!PAGES.includes(page)) return undefined;
+  if (!PAGES.includes(page)) return noop(interaction, lang, entry);
   const fresh = drafts.update(entry.panelId, { page, pending: null });
   return fresh ? interaction.update(panelPayload(lang, fresh)) : refuse(interaction, lang, key('expired'));
 }
 
 async function mode(interaction, ctx, lang, entry) {
   const value = interaction.values?.[0];
-  if (!MATCH_MODES.includes(value)) return undefined;
+  if (!MATCH_MODES.includes(value)) return noop(interaction, lang, entry);
   const { draft } = entry;
   if (draft.trigger.trim() !== '') {
     const verdict = checkTrigger(draft.trigger, value);
@@ -86,15 +86,18 @@ async function mode(interaction, ctx, lang, entry) {
 
 function dest(interaction, ctx, lang, entry) {
   const value = interaction.values?.[0];
-  if (!DESTINATIONS.includes(value)) return undefined;
+  if (!DESTINATIONS.includes(value)) return noop(interaction, lang, entry);
   return tryChange(interaction, ctx, lang, entry, patch(entry.draft, { dest: value }), redraw(interaction, lang));
 }
 
 function channel(interaction, ctx, lang, entry) {
-  const value = interaction.values?.[0];
-  if (!value) return undefined;
-  return tryChange(interaction, ctx, lang, entry, patch(entry.draft, { channelId: value }), redraw(interaction, lang));
+  const ids = pickedIds(interaction, 1);
+  if (!ids) return noop(interaction, lang, entry);
+  return tryChange(interaction, ctx, lang, entry, patch(entry.draft, { channelId: ids[0] }), redraw(interaction, lang));
 }
+
+// "Send to a channel" with no channel picked would generate no {sendto} and quietly reply in place.
+const needsChannel = (draft) => draft.mode !== 'script' && draft.dest === 'channel' && !draft.channelId;
 
 const toggle = (field) => (interaction, ctx, lang, entry) =>
   tryChange(interaction, ctx, lang, entry, patch(entry.draft, { [field]: !entry.draft[field] }), redraw(interaction, lang));
@@ -185,6 +188,8 @@ function submitPerm(interaction, ctx, lang, entry) {
   if (!PERM_GATES.includes(entry.pending)) return refuse(interaction, lang, key('expired'));
   const perm = interaction.fields.getTextInputValue('perm').trim();
   if (hasBrace(perm)) return refuse(interaction, lang, key('noBrace'));
+  // A pipe would split one typed permission into two arguments while the summary shows one.
+  if (perm.includes('|')) return refuse(interaction, lang, key('noPipe'));
   return applyGate(interaction, ctx, lang, entry, { fn: entry.pending, perms: [perm] });
 }
 
@@ -337,6 +342,7 @@ function tryButton(interaction, ctx, lang, entry) {
 async function submitTry(interaction, ctx, lang, entry) {
   const sample = interaction.fields.getTextInputValue('sample');
   const { draft } = entry;
+  if (needsChannel(draft)) return refuse(interaction, lang, key('needChannel'));
   const script = generateScript(draft);
   const result = await compileScript(script, { db: ctx.db, guild: interaction.guild, writer: interaction.member });
   if (!result.ok) {
@@ -392,6 +398,7 @@ async function save(interaction, ctx, lang, entry) {
     const { draft } = claimed;
     const verdict = checkTrigger(draft.trigger, draft.matchMode);
     if (!verdict.ok) return await interaction.followUp(ephemeral(t(lang, `autoresponder.badTrigger.${verdict.code}`)));
+    if (needsChannel(draft)) return await interaction.followUp(ephemeral(t(lang, key('needChannel'))));
     const script = generateScript(draft);
     const result = await compileScript(script, { db: ctx.db, guild: interaction.guild, writer: interaction.member });
     if (!result.ok) {
@@ -416,7 +423,7 @@ async function save(interaction, ctx, lang, entry) {
 
 const ACTIONS = {
   nav, mode, dest, channel, delete: toggle('deleteTrigger'), silent: toggle('silent'),
-  trigger: triggerButton, text: textButton, mtrigger: submitTrigger, mtext: submitText, cancel, save,
+  trigger: triggerButton, text: textButton, mtrigger: modalOnly(submitTrigger), mtext: modalOnly(submitText), cancel, save,
   cond, bcool: coolButton, bperm: permButton, mcooldown: modalOnly(submitCooldown), mperm: modalOnly(submitPerm),
   prole: pickRole, pperm: pickPerm, pchan: pickChannel, puser: pickUser, rmgate: removeGateAt,
   bembed: embedButton, bback: back, embed: pickEmbed, mcolor: modalOnly(submitColor),
@@ -446,7 +453,9 @@ export async function handleBuilder(interaction, ctx) {
     return refuse(interaction, lang, key('expired'));
   }
   const action = Object.hasOwn(ACTIONS, ids.action) ? ACTIONS[ids.action] : null;
+  // An unknown action (a forged id) still gets an answer, so the click never shows "interaction failed".
+  if (!action) return refuse(interaction, lang, key('expired'));
   // A script-mode draft has no guided controls: anything outside this set (a forged id) just redraws the panel.
-  if (entry.draft.mode === 'script' && !SCRIPT_MODE_ACTIONS.has(ids.action)) return action ? noop(interaction, lang, entry) : undefined;
-  return action?.(interaction, ctx, lang, entry);
+  if (entry.draft.mode === 'script' && !SCRIPT_MODE_ACTIONS.has(ids.action)) return noop(interaction, lang, entry);
+  return action(interaction, ctx, lang, entry);
 }
