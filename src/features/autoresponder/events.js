@@ -6,6 +6,7 @@ import { awaitOutcome } from '../../core/message-outcome.js';
 import { getRules } from './cache.js';
 import { chooseRule } from './match.js';
 import { evaluate } from './script/evaluate.js';
+import { prepareRun } from './script/run.js';
 import { buildScriptVars } from './script/placeholders.js';
 import { executePlan, sendGateNotice } from './execute.js';
 import { createThrottle } from './throttle.js';
@@ -22,6 +23,7 @@ export function createEvents(deps = {}) {
   const notice = deps.sendGateNotice ?? sendGateNotice;
   const logError = deps.logRunError ?? logRunError;
   const claim = deps.claimCooldown ?? claimCooldown;
+  const prepare = deps.prepareRun ?? prepareRun;
   const throttle = deps.noticeThrottle ?? createThrottle(NOTICE_EVERY_MS);
 
   const onCreate = safe('autoresponderMessage', async (ctx, message) => {
@@ -48,11 +50,15 @@ export function createEvents(deps = {}) {
 
     const lang = await getLang(ctx.db, guild.id);
     const vars = buildScriptVars({ message, member, guild, lang });
-    const plan = evaluate(rule.compiled, { member, channelId: message.channelId, vars });
+    const prepared = await prepare({ compiled: rule.compiled, rule, text: message.content, guild, rng: deps.rng });
+    const plan = evaluate(rule.compiled, { member, channelId: message.channelId, vars, ...prepared });
     const noticeKey = `${guild.id}:${rule.id}:${member.id}`;
 
     if (plan.status === 'skip') {
-      if (plan.notice && throttle.allow(noticeKey)) await notice(ctx, message, lang, { kind: 'role' });
+      if (plan.notice && throttle.allow(noticeKey)) {
+        const detail = plan.gate === 'arg' ? { kind: 'arg', n: plan.arg.n, type: plan.arg.type } : { kind: 'role' };
+        await notice(ctx, message, lang, detail);
+      }
       return;
     }
 

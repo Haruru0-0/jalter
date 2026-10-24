@@ -12,7 +12,7 @@ import { clearRuleCooldowns } from './cooldown.js';
 import { checkTrigger, chooseRule, MATCH_MODES, MAX_TRIGGER_LENGTH } from './match.js';
 import { compileScript, MAX_SCRIPT } from './script/compile.js';
 import { logAutoresponder } from './log.js';
-import { describeRun } from './dryrun.js';
+import { describeRunFor } from './dryrun.js';
 import { openBuilder, handleBuilder } from './builder/handlers.js';
 
 const PREFIX = 'autoresponder';
@@ -153,10 +153,10 @@ async function dryRun(interaction, ctx, lang) {
 
   const lines = [tt(lang, 'rule', { id: rule.id, trigger: oneLine(rule.trigger), mode: rule.matchMode })];
   if (!rule.enabled) lines.push(tt(lang, 'disabled'));
-  lines.push(...describeRun(lang, {
+  lines.push(...await describeRunFor(lang, {
     compiled: rule.compiled, text: content, member: interaction.member, guild: interaction.guild,
     channel: interaction.channel, channelId: interaction.channelId, author: interaction.user,
-  }));
+  }, { rule }));
   return interaction.reply(ephemeral(fitLines(lang, lines, MAX_REPLY)));
 }
 

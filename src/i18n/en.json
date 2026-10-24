@@ -1022,5 +1022,16 @@
   "autoresponder.builder.modal.script": "Script text",
   "autoresponder.builder.input.script": "Script (4000 characters at most)",
   "autoresponder.builder.script.tooLong": "The generated script is over 4000 characters, so it is not prefilled.",
-  "autoresponder.builder.sum.scriptClipped": "(The script is longer than this message can show, so it is cut short.)"
+  "autoresponder.builder.sum.scriptClipped": "(The script is longer than this message can show, so it is cut short.)",
+  "autoresponder.notice.arg": "Missing or invalid word {n} after the command (expected: {type}).",
+  "autoresponder.run.TARGET_MISSING": "The member the rule targets could not be found (they may have left the server).",
+  "autoresponder.run.TARGET_UNSAFE": "The role was not changed: the bot cannot manage that member (the owner, or a member at or above the bot).",
+  "autoresponder.test.draws": "Random values drawn: {detail}",
+  "autoresponder.test.pings": "Would ping: {detail}",
+  "autoresponder.argtype.word": "a word",
+  "autoresponder.argtype.number": "a number",
+  "autoresponder.argtype.user": "a member",
+  "autoresponder.argtype.channel": "a channel",
+  "autoresponder.argtype.role": "a role",
+  "autoresponder.argtype.color": "a color like #ff8800"
 }

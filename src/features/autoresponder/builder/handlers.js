@@ -9,7 +9,7 @@ import { createRule } from '../store.js';
 import { listEmbeds } from '../../embeds/store.js';
 import { invalidate } from '../cache.js';
 import { checkTrigger, matchRule, MATCH_MODES, MAX_TRIGGER_LENGTH } from '../match.js';
-import { describeRun } from '../dryrun.js';
+import { describeRunFor } from '../dryrun.js';
 import { compileScript, MAX_SCRIPT } from '../script/compile.js';
 import { errorLines, log } from '../commands.js';
 import { addAction, addGate, newDraft, patch, removeAction, removeGate, setTrigger, toScriptMode } from './draft.js';
@@ -344,7 +344,7 @@ async function submitTry(interaction, ctx, lang, entry) {
   const { draft } = entry;
   if (needsChannel(draft)) return refuse(interaction, lang, key('needChannel'));
   const script = generateScript(draft);
-  const result = await compileScript(script, { db: ctx.db, guild: interaction.guild, writer: interaction.member });
+  const result = await compileScript(script, { db: ctx.db, guild: interaction.guild, writer: interaction.member, matchMode: draft.matchMode });
   if (!result.ok) {
     return interaction.reply(ephemeral(fitLines(lang, [t(lang, 'autoresponder.errors.head'), ...errorLines(lang, result.errors)], MAX_REPLY)));
   }
@@ -353,10 +353,10 @@ async function submitTry(interaction, ctx, lang, entry) {
   const matched = matchRule({ trigger: draft.trigger, matchMode: draft.matchMode, enabled: true }, sample);
   const lines = [t(lang, key(matched ? 'try.match' : 'try.nomatch'))];
   if (!matched) lines.push(t(lang, key('try.wouldRun')));
-  lines.push(...describeRun(lang, {
+  lines.push(...await describeRunFor(lang, {
     compiled: result.compiled, text: sample, member: interaction.member, guild: interaction.guild,
     channel: interaction.channel, channelId: interaction.channelId, author: interaction.user,
-  }));
+  }, { rule: { trigger: draft.trigger, matchMode: draft.matchMode } }));
   return interaction.reply(ephemeral({ content: fitLines(lang, lines, MAX_REPLY), allowedMentions: { parse: [] } }));
 }
 

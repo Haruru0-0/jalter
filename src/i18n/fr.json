@@ -1022,5 +1022,16 @@
   "autoresponder.builder.modal.script": "Texte du script",
   "autoresponder.builder.input.script": "Script (4000 caractères max.)",
   "autoresponder.builder.script.tooLong": "Le script généré dépasse 4000 caractères, il n'est donc pas prérempli.",
-  "autoresponder.builder.sum.scriptClipped": "(Le script est trop long pour ce message, il est donc tronqué.)"
+  "autoresponder.builder.sum.scriptClipped": "(Le script est trop long pour ce message, il est donc tronqué.)",
+  "autoresponder.notice.arg": "Mot {n} manquant ou invalide après la commande (attendu : {type}).",
+  "autoresponder.run.TARGET_MISSING": "Le membre visé par la règle est introuvable (il a peut-être quitté le serveur).",
+  "autoresponder.run.TARGET_UNSAFE": "Le rôle n'a pas été modifié : le bot ne peut pas gérer ce membre (le propriétaire, ou un membre au même niveau ou au-dessus du bot).",
+  "autoresponder.test.draws": "Valeurs aléatoires tirées : {detail}",
+  "autoresponder.test.pings": "Mentionnerait : {detail}",
+  "autoresponder.argtype.word": "un mot",
+  "autoresponder.argtype.number": "un nombre",
+  "autoresponder.argtype.user": "un membre",
+  "autoresponder.argtype.channel": "un salon",
+  "autoresponder.argtype.role": "un rôle",
+  "autoresponder.argtype.color": "une couleur comme #ff8800"
 }
