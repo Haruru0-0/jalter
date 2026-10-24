@@ -889,5 +889,6 @@
   "autoresponder.test.action.reactreply": "- react to the reply with {detail}",
   "autoresponder.test.action.delete_reply": "- delete the reply after {detail} seconds",
   "autoresponder.test.action.silent": "- stay silent about refusals (no notice)",
-  "autoresponder.test.action.none": "- nothing"
+  "autoresponder.test.action.none": "- nothing",
+  "autoresponder.test.action.replyChannel": "- send the reply in this channel (your message is deleted)"
 }

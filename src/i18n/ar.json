@@ -889,5 +889,6 @@
   "autoresponder.test.action.reactreply": "- التفاعل مع الرد بـ {detail}",
   "autoresponder.test.action.delete_reply": "- حذف الرد بعد {detail} ثانية",
   "autoresponder.test.action.silent": "- عدم إظهار إشعار عند الرفض",
-  "autoresponder.test.action.none": "- لا شيء"
+  "autoresponder.test.action.none": "- لا شيء",
+  "autoresponder.test.action.replyChannel": "- إرسال الرد في هذه القناة (تُحذف رسالتك)"
 }

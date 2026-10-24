@@ -164,10 +164,20 @@ test('it uses the same guard: refused when the feature is off or for non-manager
 });
 
 test('every test key exists in en, fr and ar', () => {
-  const fns = ['delete', 'addrole', 'removerole', 'setnick', 'react', 'reactreply', 'dm', 'sendto', 'embed', 'delete_reply', 'silent', 'reply', 'none'];
+  const fns = ['delete', 'addrole', 'removerole', 'setnick', 'react', 'reactreply', 'dm', 'sendto', 'embed', 'delete_reply', 'silent', 'reply', 'replyChannel', 'none'];
   const keys = [
     ...['none', 'rule', 'disabled', 'gates', 'gate.pass', 'gate.fail', 'gate.cooldown', 'text', 'text.empty', 'actions'].map((k) => `autoresponder.test.${k}`),
     ...fns.map((f) => `autoresponder.test.action.${f}`),
   ];
   for (const lang of ['en', 'fr', 'ar']) for (const k of keys) assert.notEqual(t(lang, k), k, `${lang} ${k}`);
+});
+
+test('delete with reply text and no dm or sendto shows the channel reply after the delete line', async () => {
+  await on();
+  await createRule(db, base({ compiled: comp({ flags: { delete: true } }) }));
+  const c = (await dry('hello')).content;
+  const del = c.indexOf(t('en', 'autoresponder.test.action.delete'));
+  const route = c.indexOf(t('en', 'autoresponder.test.action.replyChannel'));
+  assert.ok(del >= 0 && route > del, c);
+  assert.ok(!c.includes(t('en', 'autoresponder.test.action.reply')));
 });

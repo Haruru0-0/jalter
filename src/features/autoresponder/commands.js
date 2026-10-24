@@ -170,7 +170,7 @@ function actionLines(lang, plan, vars) {
     if (flags.embed) add('embed', flags.embed.kind === 'named' ? flags.embed.name : 'plain');
     if (flags.dm) add('dm');
     else if (flags.sendTo) add('sendto', `<#${flags.sendTo}>`);
-    else if (!flags.delete) add('reply');
+    else add(flags.delete ? 'replyChannel' : 'reply');
     for (const a of acts.filter((x) => x.fn === 'reactreply')) add('reactreply', a.emoji);
     if (flags.deleteReplyAfter) add('delete_reply', flags.deleteReplyAfter);
   }

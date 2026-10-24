@@ -889,5 +889,6 @@
   "autoresponder.test.action.reactreply": "- réagir à la réponse avec {detail}",
   "autoresponder.test.action.delete_reply": "- supprimer la réponse après {detail} secondes",
   "autoresponder.test.action.silent": "- rester silencieux en cas de refus (pas de notification)",
-  "autoresponder.test.action.none": "- rien"
+  "autoresponder.test.action.none": "- rien",
+  "autoresponder.test.action.replyChannel": "- envoyer la réponse dans ce salon (votre message est supprimé)"
 }
