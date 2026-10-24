@@ -12,15 +12,12 @@ import { clearRuleCooldowns } from './cooldown.js';
 import { checkTrigger, chooseRule, MATCH_MODES, MAX_TRIGGER_LENGTH } from './match.js';
 import { compileScript, MAX_SCRIPT } from './script/compile.js';
 import { logAutoresponder } from './log.js';
-import { evaluate } from './script/evaluate.js';
-import { buildScriptVars } from './script/placeholders.js';
-import { renderPlaceholders } from '../../core/placeholders.js';
+import { describeRun } from './dryrun.js';
 
 const PREFIX = 'autoresponder';
 const MAX_ERROR_LINES = 10;
 const MAX_REPLY = 2000;
 const MAX_TEST_MESSAGE = 1000;
-const MAX_TEST_TEXT = 700;
 
 const idOption = (o) => o.setName('id').setDescription('Id of the rule').setMinValue(1).setRequired(true);
 const matchOption = (required) => (o) =>
@@ -134,48 +131,12 @@ async function show(interaction, ctx, lang) {
 }
 
 const tt = (lang, key, vars) => t(lang, `autoresponder.test.${key}`, vars);
-const GATE_LABEL = { requirerole: 'requirerole', denyrole: 'denyrole', requireperm: 'requireperm', denyperm: 'denyperm', requirechannel: 'requirechannel', denychannel: 'denychannel', requireuser: 'requireuser' };
-
 // A disabled rule is only a fallback: the rule that would really run wins when there is one.
 function pickRule(rules, content) {
   const live = chooseRule(rules, content);
   if (live) return live;
   const asIfOn = chooseRule(rules.map((r) => ({ ...r, enabled: true })), content);
   return asIfOn ? rules.find((r) => r.id === asIfOn.id) : null;
-}
-
-// Each gate is judged on its own through evaluate, so the report names every pass and fail.
-function gateLines(lang, compiled, evalCtx) {
-  const lines = [];
-  for (const gate of compiled.gates) {
-    if (gate.fn === 'cooldown') { lines.push(tt(lang, 'gate.cooldown', { seconds: gate.seconds })); continue; }
-    const verdict = evaluate({ ...compiled, gates: [gate] }, evalCtx);
-    lines.push(tt(lang, verdict.status === 'skip' ? 'gate.fail' : 'gate.pass', { gate: GATE_LABEL[gate.fn] ?? gate.fn }));
-  }
-  return lines;
-}
-
-// The actions in the order executePlan runs them, without running any.
-function actionLines(lang, plan, vars) {
-  const { flags } = plan;
-  const acts = plan.actions ?? [];
-  const lines = [];
-  const add = (key, detail) => lines.push(tt(lang, `action.${key}`, { detail }));
-  if (flags.delete) add('delete');
-  for (const a of acts.filter((x) => x.fn === 'addrole' || x.fn === 'removerole')) add(a.fn, `<@&${a.roleId}>`);
-  for (const a of acts.filter((x) => x.fn === 'setnick')) add('setnick', oneLine(renderPlaceholders(a.text, vars)).trim());
-  if (!flags.delete) for (const a of acts.filter((x) => x.fn === 'react')) add('react', a.emoji);
-  const hasMessage = plan.text.length > 0 || !!flags.embed;
-  if (hasMessage) {
-    if (flags.embed) add('embed', flags.embed.kind === 'named' ? flags.embed.name : 'plain');
-    if (flags.dm) add('dm');
-    else if (flags.sendTo) add('sendto', `<#${flags.sendTo}>`);
-    else add(flags.delete ? 'replyChannel' : 'reply');
-    for (const a of acts.filter((x) => x.fn === 'reactreply')) add('reactreply', a.emoji);
-    if (flags.deleteReplyAfter) add('delete_reply', flags.deleteReplyAfter);
-  }
-  if (flags.silent) add('silent');
-  return lines.length ? lines : [tt(lang, 'action.none')];
 }
 
 // Dry run: reads the store and runs the pure pipeline. It writes nothing and calls no Discord write.
@@ -185,21 +146,12 @@ async function dryRun(interaction, ctx, lang) {
   const rule = pickRule(rules, content);
   if (!rule) return interaction.reply(ephemeral(tt(lang, 'none')));
 
-  const member = interaction.member;
-  const channelId = interaction.channelId;
-  const message = { id: '', url: '', content, author: interaction.user, channel: interaction.channel, channelId };
-  const vars = buildScriptVars({ message, member, guild: interaction.guild, lang });
-  const evalCtx = { member, channelId, vars };
-  const plan = evaluate(rule.compiled, evalCtx);
-
   const lines = [tt(lang, 'rule', { id: rule.id, trigger: oneLine(rule.trigger), mode: rule.matchMode })];
   if (!rule.enabled) lines.push(tt(lang, 'disabled'));
-  const gates = gateLines(lang, rule.compiled, evalCtx);
-  if (gates.length) lines.push(tt(lang, 'gates'), ...gates);
-  if (plan.status === 'run') {
-    const shown = plan.text.length > MAX_TEST_TEXT ? `${plan.text.slice(0, MAX_TEST_TEXT - 1)}…` : plan.text;
-    lines.push(tt(lang, 'text'), shown || tt(lang, 'text.empty'), tt(lang, 'actions'), ...actionLines(lang, plan, vars));
-  }
+  lines.push(...describeRun(lang, {
+    compiled: rule.compiled, text: content, member: interaction.member, guild: interaction.guild,
+    channel: interaction.channel, channelId: interaction.channelId, author: interaction.user,
+  }));
   return interaction.reply(ephemeral(fitLines(lang, lines, MAX_REPLY)));
 }
 
