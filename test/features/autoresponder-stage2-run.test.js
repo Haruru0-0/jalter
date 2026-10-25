@@ -508,10 +508,10 @@ test('describeRunFor uses the same preparation, and v1 output has no draws or pi
 const NU = '123456789012345678';
 const names = { [NU]: 'Sam' };
 const nickGuild = (map = names) => ({ id: 'g', roles: { cache: new Map() }, members: { fetch: async (id) => { if (!(id in map)) throw new Error('unknown'); return { id, displayName: map[id] }; } } });
-const nickRun = async (src, text, map = names, vars = {}) => {
+const nickRun = async (src, text, map = names, vars = {}, rng = Math.random) => {
   const { compiled } = await compileFor(src);
   const g = nickGuild(map);
-  const prepared = await prepareRun({ compiled, rule: rule({ trigger: '!fan' }), text, guild: g });
+  const prepared = await prepareRun({ compiled, rule: rule({ trigger: '!fan' }), text, guild: g, rng });
   const plan = evaluate(compiled, { member: member(), channelId: 'c1', vars, ...prepared });
   let applied = null;
   const m = { id: 'a1', manageable: true, roles: { cache: new Map() }, setNickname: async (n) => { applied = n; } };
@@ -568,12 +568,39 @@ test('a 40-character display name is NICK_TOO_LONG; an empty name falls back to 
 });
 
 test('describeRunFor prints the nickname executePlan would set', async () => {
-  const { compiled, g, applied } = await nickRun('{requirearg:1|user}{setnick:[$1] fan club}', `!fan ${NU}`);
+  const map = { [NU]: 'Zed' };
+  const { compiled, applied } = await nickRun('{requirearg:1|user}{setnick:[$1] fan club}', `!fan ${NU}`, map);
   const e = readOnlyEnv();
-  const args = { compiled, text: `!fan ${NU}`, member: e.interaction.member, guild: Object.assign(e.interaction.guild, { members: nickGuild().members }), channel: e.interaction.channel, channelId: 'c1', author: e.interaction.user };
+  const guild = { ...e.interaction.guild, members: nickGuild(map).members };
+  const args = { compiled, text: `!fan ${NU}`, member: e.interaction.member, guild, channel: e.interaction.channel, channelId: 'c1', author: e.interaction.user };
   const lines = await describeRunFor('en', args, { rule: rule({ trigger: '!fan' }) });
-  assert.equal(applied(), 'Sam fan club');
-  assert.ok(lines.some((l) => l.includes('Sam fan club')), lines.join('\n'));
-  assert.ok(!lines.some((l) => l.includes(`<@${NU}> fan club`)), lines.join('\n'));
-  assert.ok(g);
+  assert.equal(applied(), 'Zed fan club');
+  assert.ok(lines.some((l) => l.includes('Zed fan club')), lines.join(' | '));
+  assert.ok(!lines.some((l) => l.includes(`<@${NU}> fan club`)), lines.join(' | '));
+});
+
+test('a checked user word inside a chosen option is the display name in a nickname, the mention in the reply', async () => {
+  const lo = () => 0; const hi = () => 0.99;
+  for (const [src, tok] of [
+    ['{requirearg:1|user}{choose:[$1] a|[$1] b}{setnick:[choice]}says [choice]', 'choice'],
+    ['{requirearg:1|user}{choose:[$1] a|[$1] b}{lockedchoose:[$1] A|[$1] B}{setnick:[lockedchoice]}says [lockedchoice]', 'lockedchoice'],
+  ]) {
+    for (const [rng, letter] of [[lo, 'a'], [hi, 'b']]) {
+      const r = await nickRun(src, `!fan ${NU}`, names, {}, rng);
+      const up = tok === 'lockedchoice' ? letter.toUpperCase() : letter;
+      assert.equal(r.applied(), `Sam ${up}`, `${tok} ${letter}`);
+      assert.equal(r.plan.text, `says <@${NU}> ${up}`);
+      assert.deepEqual(r.res.errors, []);
+    }
+  }
+});
+
+test('a plan without nickDraws renders the nickname from draws as before', async () => {
+  const r = await nickRun('{requirearg:1|user}{choose:[$1] a}{setnick:[choice]}', `!fan ${NU}`);
+  assert.equal(r.applied(), 'Sam a');
+  const plan = { ...r.plan }; delete plan.nickDraws;
+  let applied = null;
+  const m = { id: 'a1', manageable: true, roles: { cache: new Map() }, setNickname: async (n) => { applied = n; } };
+  await executePlan({ db: {} }, { rule: {}, message: { guild: r.g, reply: async () => ({}) }, member: m, plan, lang: 'en', vars: {} }, {});
+  assert.equal(applied, `<@${NU}> a`);
 });

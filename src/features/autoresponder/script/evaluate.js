@@ -84,6 +84,7 @@ export function evaluate(compiled, ctx) {
   const words = ctx.words ?? parseWords('');
   const nickWords = ctx.nickWords ?? words;
   const draws = ctx.draws ?? null;
+  const nickDraws = ctx.nickDraws ?? draws;
   const argResults = ctx.argResults ?? {};
   for (const { n, type } of compiled.argChecks ?? []) {
     const present = words.list[n - 1] !== undefined;
@@ -95,6 +96,6 @@ export function evaluate(compiled, ctx) {
   return {
     status: 'run', cooldown, text, flags: compiled.flags, actions,
     allowedUsers: allowedUsers(compiled.template, ctx, compiled, argResults),
-    ...(compiled.version >= 2 ? { v2: true, words, nickWords, draws } : {}),
+    ...(compiled.version >= 2 ? { v2: true, words, nickWords, draws, nickDraws } : {}),
   };
 }

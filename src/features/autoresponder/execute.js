@@ -166,7 +166,7 @@ export async function executePlan(ctx, { rule, message, member, plan, lang, vars
   for (const a of actions.filter((x) => x.fn === 'setnick')) {
     try {
       if (!member.manageable) { fail(errors, 'CANNOT_MANAGE_NICK', 'setnick'); continue; }
-      const nick = (plan.v2 ? renderScriptText(a.text, { words: plan.nickWords ?? plan.words, draws: plan.draws, vars }) : renderPlaceholders(a.text, vars)).trim();
+      const nick = (plan.v2 ? renderScriptText(a.text, { words: plan.nickWords ?? plan.words, draws: plan.nickDraws ?? plan.draws, vars }) : renderPlaceholders(a.text, vars)).trim();
       if (!nick) { fail(errors, 'NICK_EMPTY', 'setnick'); continue; }
       if ([...nick].length > MAX_NICK) { fail(errors, 'NICK_TOO_LONG', 'setnick', String([...nick].length)); continue; }
       await member.setNickname(nick, REASON);

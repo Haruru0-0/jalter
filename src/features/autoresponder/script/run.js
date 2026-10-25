@@ -16,7 +16,7 @@ const needsWords = (c) => Boolean(c.argChecks?.length)
 
 /**
  * Words after the trigger, the random draws (once per message) and every `requirearg` check result.
- * Resolves to { words, nickWords, draws, argResults } (nickWords: a checked user word as the member's display name, for {setnick}) with argResults a map N -> checkArgType result.
+ * Resolves to { words, nickWords, draws, nickDraws, argResults } (nickWords: a checked user word as the member's display name, for {setnick}) with argResults a map N -> checkArgType result.
  * A version 1 compiled object, or a version 2 one that uses no random value and no word, takes the fast path:
  * empty words and draws, no remainder search, no rng call and no guild read.
  * Words checked as a `user` are written as `<@id>` (mentionCheckedUsers). Chooser options and locked values
@@ -28,7 +28,8 @@ export async function prepareRun({ compiled, rule, text, guild, rng = Math.rando
   const argResults = {};
   if (!compiled?.template || !compiled.actions || (!hasRandom(compiled.random) && !needsWords(compiled))) {
     const empty = parseWords('');
-    return { words: empty, nickWords: empty, draws: drawRandom(null, rng), argResults };
+    const draws = drawRandom(null, rng);
+    return { words: empty, nickWords: empty, draws, nickDraws: draws, argResults };
   }
   const typed = parseWords(triggerRemainder(rule, text) ?? '');
   const draws = drawRandom(compiled.random, rng);
@@ -37,10 +38,13 @@ export async function prepareRun({ compiled, rule, text, guild, rng = Math.rando
   }
   const words = mentionCheckedUsers(typed, compiled.argChecks, argResults);
   const nickWords = nicknameWords(typed, compiled.argChecks, argResults);
-  const renderOption = (v) => (typeof v === 'string' ? renderArgsInText(v, words) : v);
-  draws.choice = draws.choice.map(renderOption);
-  draws.lockedchoice = draws.lockedchoice.map(renderOption);
-  return { words, nickWords, draws, argResults };
+  const renderWith = (w) => (v) => (typeof v === 'string' ? renderArgsInText(v, w) : v);
+  const raw = { choice: draws.choice, lockedchoice: draws.lockedchoice };
+  // The same picks, rendered for a nickname: a checked user word inside an option is the display name there.
+  const nickDraws = { ...draws, choice: raw.choice.map(renderWith(nickWords)), lockedchoice: raw.lockedchoice.map(renderWith(nickWords)) };
+  draws.choice = raw.choice.map(renderWith(words));
+  draws.lockedchoice = raw.lockedchoice.map(renderWith(words));
+  return { words, nickWords, draws, nickDraws, argResults };
 }
 
 // Argument tokens, random tokens and {placeholders} in one pass, so a value that was substituted is never scanned again.

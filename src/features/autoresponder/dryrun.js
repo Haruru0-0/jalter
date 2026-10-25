@@ -29,7 +29,7 @@ function gateLines(lang, compiled, evalCtx) {
 
 // The actions in the order executePlan runs them, without running any.
 function actionLines(lang, plan, vars) {
-  const render = (text) => (plan.v2 ? renderScriptText(text, { words: plan.nickWords ?? plan.words, draws: plan.draws, vars }) : renderPlaceholders(text, vars));
+  const render = (text) => (plan.v2 ? renderScriptText(text, { words: plan.nickWords ?? plan.words, draws: plan.nickDraws ?? plan.draws, vars }) : renderPlaceholders(text, vars));
   const { flags } = plan;
   const acts = plan.actions ?? [];
   const lines = [];
