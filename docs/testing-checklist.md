@@ -584,6 +584,30 @@ Run `npm run deploy` once first. Use a test server, a manager account and a norm
 - [ ] Another member pressing a button or menu on your panel is told it belongs to someone else. A member who lost Manage Server and the manager role is refused on their next click.
 - [ ] Check the panel in English, French and Arabic (`/language set`).
 
+### Stage 2
+
+No `npm run deploy` is needed (no new command). Use a test server, a manager account, a normal member account, a member `Sam` the normal member can mention, and a role `Red` the bot can give.
+
+- [ ] Old rules: a rule saved before stage 2 with `[Note]` in its reply (for example `Read [Note] first`) still replies with the text `[Note]` unchanged, before and after you edit and save it again.
+- [ ] `{choose:Yes.|No.|Maybe.}The ball says: [choice]` (trigger `!8ball`, `startswith`): over 15 or more uses all three answers appear. `{choose:a|b}` with `[choice]` and `[choice2]` in one script: the second choice needs a second `{choose}`.
+- [ ] `{range:1-6}You rolled a [range].` (trigger `!roll`, `exact`) gives numbers from 1 to 6 only; `{range:-5-10}` allows negatives; `{range:6-1}`, `{range:a-b}` and `{range:1-2000000000}` are refused at save with the localized message.
+- [ ] `{weightedchoose:80%|15%|5%}{lockedchoose:Common|Rare|Legendary}You got: [lockedchoice]`: over many uses Common is far more frequent; `[choice]` alone shows 1, 2 or 3. A `lockedchoose` with a different option count, a `lockedchoose` with no `choose`/`weightedchoose` before it in the list, a weight such as `abc` and all weights `0%` are each refused at save. A fifth `{range}` or fifth choice is refused (at most 4 of each).
+- [ ] One draw per message: with `[choice]` in the reply text and in `{setnick:[choice]}`, the nickname and the reply show the same pick.
+- [ ] `[range]`, `[choice]` and `[lockedchoice]` typed in a script that does not define the function stay as literal text in the reply.
+- [ ] Words: `!say` (`startswith`) with `{requirearg:1}[$1+]`: `!say hello  big world` replies `hello  big world` (spacing kept); `[$1]` is `hello`; `[$2-3]` is `big world`; `!SAY hi` also works; a missing word renders empty. A `[$1]` in an `exact`, `endswith` or `regex` rule saves with a warning and renders empty; `{requirearg:1}` there is refused (`NO_ARGUMENTS_IN_MODE`).
+- [ ] `{requirearg:1}`: a bare `!say` skips the rule and shows one short notice that deletes itself after about 8 seconds; sending it again within 30 seconds shows no second notice; with `{silent}` in the script there is no notice; the cooldown does not start on a failed check.
+- [ ] `{requirearg:N|type}`: each of `user` (mention and bare id; an id of someone who left fails), `channel`, `role`, `color` (`#ff8800`), `number` (`12`, `-3`, `1.5`; `1,000` fails) accepts a good word and shows the notice for a bad one. `{requirearg:0}`, `{requirearg:21}` and `{requirearg:1|bogus}` are refused at save.
+- [ ] Hug: `{requirearg:1|user}{user} hugs [$1]` (trigger `!hug`): `!hug @Sam` pings the sender and Sam. `!hug @everyone`, `!hug <@&role>` and `!hug nobody` show the notice and nothing pings.
+- [ ] Ping safety: `{requirearg:1}[$1+]` with `!say @everyone hi`, `!say <@&role>` and `!say @Sam` posts the text but pings nobody (the word is not checked as a user). A mention typed inside a `{choose:...}` option by the script writer shows but does not ping.
+- [ ] Role target: `{requirearg:1|user}{requirerole:Mods}{addrole:Red|[$1]}Gave the role to [$1]` (trigger `!role`): a member with `Mods` runs `!role @Sam` and Sam gets `Red`; a member without `Mods` gets the role notice and nothing changes; `!role @Sam` when Sam already has it is skipped without error; `{removerole:Red|[$1]}` removes it.
+- [ ] Role target refusals at save: the same script without `{requirerole}` or `{requireperm}` is refused (`TARGET_NEEDS_GATE`); `{addrole:Red|[$1]}` without `{requirearg:1|user}` and `{addrole:Red|<@id>}` are refused (`TARGET_NOT_CHECKED_USER`); a dangerous, managed or too-high role is refused as in stage 1; a fourth role, nickname or target action is refused (the cap of 3 includes targets).
+- [ ] Role target refusals at run time: target the server owner or a member above the bot: the role is not changed, the rest of the reply still goes out, and staff get one mod-log line (at most one per rule per hour). Target a member who just left (use an id): the `user` check fails and the notice shows.
+- [ ] `/autoresponder test message:!hug @Sam` and `message:!roll`: the report shows the words resolved against the server, the gate lines (including `requirearg 1`), a "Random values drawn" line, a "Would ping" line, and sends, grants and changes nothing; a nonexistent user fails the check.
+- [ ] Builder Random page: the menu now lists Basics, Reply, Conditions, Actions, Random and Review. Add a random number (range), random choice, weighted choice and locked choice through their forms; the page shows the tokens to type in the reply text; a bad range or mismatched locked choice is refused and the panel keeps its earlier state; Remove deletes one.
+- [ ] Builder Conditions: "Needs a word after the trigger" with word number and type (any word, a member, channel, color, role, number); `0` and `21` are refused. Builder Actions: a role action can target "the member in word N" (needs a word checked as a member and a role or permission condition; otherwise Save and Try it show the compiler's refusal). Builder Try it shows drawn values and who would be pinged.
+- [ ] `/autoresponder editmatchmode` on a rule that uses `{requirearg}` or a `[$1]` word: moving it to `exact` is refused (or saves with a warning for `[$1]` only); a lower-ranked manager changing the mode of a rule whose role is above them is refused (`ROLE_ABOVE_YOU`); a rule whose role was deleted cannot change mode until the script is fixed.
+- [ ] Check the new notice, error and builder texts in English, French and Arabic (`/language set`).
+
 ## 17. Permissions and robustness
 
 - [ ] Every setup reply is ephemeral (only you see it).
