@@ -1,31 +1,43 @@
 // Per-message preparation shared by the live listener, `/autoresponder test` and the builder's Try it, so all
 // three behave identically: the member's words, the one random drawing and the argument type checks.
 import { ESCAPED_BRACKET } from './parse.js';
-import { parseWords, renderArgsInText, checkArgType } from './args.js';
+import { parseWords, renderArgsInText, checkArgType, mentionCheckedUsers } from './args.js';
 import { drawRandom, renderRand } from './random.js';
 import { triggerRemainder } from '../match.js';
 
 const unescape = (v) => (typeof v === 'string' ? v.replaceAll(ESCAPED_BRACKET, '[') : v);
+const ARG_TOKEN = /\[\$(?:[1-9]|1\d|20)(?:\+|-(?:[1-9]|1\d|20))?\]/;
+
+const hasRandom = (r) => Boolean(r && (r.ranges?.length || r.choosers?.length || r.locked?.length));
+// Does anything in the rule read the member's words? (A role target always comes with a `requirearg`.)
+const needsWords = (c) => Boolean(c.argChecks?.length)
+  || c.template.some((p) => p.t === 'arg')
+  || c.actions.some((a) => a.target != null || (a.fn === 'setnick' && ARG_TOKEN.test(a.text ?? '')));
 
 /**
  * Words after the trigger, the random draws (once per message) and every `requirearg` check result.
  * Resolves to { words, draws, argResults } with argResults a map N -> checkArgType result.
- * A version 1 compiled object (no `random`, no `argChecks`) gets empty words and draws.
- * Chooser options and locked values hold the escaped-bracket sentinel; it is mapped back to `[` here, so a
- * drawn value reads the same wherever it is rendered.
+ * A version 1 compiled object, or a version 2 one that uses no random value and no word, takes the fast path:
+ * empty words and draws, no remainder search, no rng call and no guild read.
+ * Words checked as a `user` are written as `<@id>` (mentionCheckedUsers). Chooser options and locked values
+ * then get their `[$N]` tokens rendered with those words; they hold the escaped-bracket sentinel, which
+ * renderArgsInText maps back to `[` after the tokens, so `\[$1]` stays literal and a value reads the same
+ * wherever it is rendered. The rendered member words are never scanned again.
  */
 export async function prepareRun({ compiled, rule, text, guild, rng = Math.random }) {
   const argResults = {};
-  if (!compiled || (!compiled.random && !compiled.argChecks)) {
+  if (!compiled?.template || !compiled.actions || (!hasRandom(compiled.random) && !needsWords(compiled))) {
     return { words: parseWords(''), draws: drawRandom(null, rng), argResults };
   }
-  const words = parseWords(triggerRemainder(rule, text) ?? '');
+  const typed = parseWords(triggerRemainder(rule, text) ?? '');
   const draws = drawRandom(compiled.random, rng);
-  draws.choice = draws.choice.map(unescape);
-  draws.lockedchoice = draws.lockedchoice.map(unescape);
   for (const { n, type } of compiled.argChecks ?? []) {
-    argResults[n] = await checkArgType(type ?? null, words.list[n - 1], guild);
+    argResults[n] = await checkArgType(type ?? null, typed.list[n - 1], guild);
   }
+  const words = mentionCheckedUsers(typed, compiled.argChecks, argResults);
+  const renderOption = (v) => (typeof v === 'string' ? renderArgsInText(v, words) : v);
+  draws.choice = draws.choice.map(renderOption);
+  draws.lockedchoice = draws.lockedchoice.map(renderOption);
   return { words, draws, argResults };
 }
 

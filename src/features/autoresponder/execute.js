@@ -91,6 +91,9 @@ async function changeRole(a, { guild, member, deps, errors }) {
       if (!subject || subject.roles.cache.has(a.roleId)) return;
       await subject.roles.add(a.roleId, REASON);
     } else {
+      // A targeted change re-checks the role first, like addrole. A self removerole keeps its stage 1 order
+      // (a role the member does not hold is a quiet no-op, then only botCanGive).
+      if (targeted && (dangerous(role) || !canGive(guild, role))) return fail(errors, 'ROLE_UNSAFE', a.fn, a.roleId);
       const subject = targeted ? await resolveTarget(a, { guild, errors }) : member;
       if (!subject || !subject.roles.cache.has(a.roleId)) return;
       if (!canGive(guild, role)) return fail(errors, 'ROLE_UNSAFE', a.fn, a.roleId);

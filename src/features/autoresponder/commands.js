@@ -86,13 +86,16 @@ async function editmatchmode(interaction, ctx, lang) {
   const mode = interaction.options.getString('match');
   const verdict = checkTrigger(rule.trigger, mode);
   if (!verdict.ok) return interaction.reply(ephemeral(t(lang, `autoresponder.badTrigger.${verdict.code}`)));
-  // The stored script must still be valid under the new mode (for example no {requirearg} without words).
+  // Only the mode-dependent error blocks the change ({requirearg} in a mode without words). Anything else the
+  // recompile reports (a role above this admin, a deleted role, embed or channel) is not caused by the mode,
+  // and the compiled result is thrown away: only matchMode is stored.
   const result = await compileScript(rule.script, { db: ctx.db, guild: interaction.guild, writer: interaction.member, matchMode: mode });
-  if (!result.ok) return interaction.reply(ephemeral(failureText(lang, result.errors)));
+  const modeErrors = result.ok ? [] : result.errors.filter((e) => e.code === 'NO_ARGUMENTS_IN_MODE');
+  if (modeErrors.length) return interaction.reply(ephemeral(failureText(lang, modeErrors)));
   await updateRule(ctx.db, interaction.guildId, rule.id, { matchMode: mode });
   invalidate(interaction.guildId);
   await log(ctx, interaction, lang, 'editmatchmode', rule.id, mode);
-  return interaction.reply(ephemeral(withWarnings(lang, t(lang, 'autoresponder.matchChanged', { id: rule.id, mode }), result.warnings)));
+  return interaction.reply(ephemeral(withWarnings(lang, t(lang, 'autoresponder.matchChanged', { id: rule.id, mode }), result.warnings ?? [])));
 }
 
 async function toggle(interaction, ctx, lang) {
@@ -175,7 +178,7 @@ const failureText = (lang, errors) =>
   fitLines(lang, [t(lang, 'autoresponder.errors.head'), ...errorLines(lang, errors)], MAX_REPLY);
 
 // Warnings go after the success text, one line each, without repeating a code.
-function withWarnings(lang, text, warnings = []) {
+export function withWarnings(lang, text, warnings = []) {
   const codes = [...new Set(warnings.map((w) => w.code))];
   return [text, ...codes.map((c) => t(lang, `autoresponder.warning.${c}`))].join('\n');
 }

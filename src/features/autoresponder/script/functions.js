@@ -207,7 +207,9 @@ export const FUNCTIONS = {
         else errors.push({ code: 'WEIGHT_INVALID', detail: a });
       }
       if (errors.length) return errors;
-      if (!(weights.reduce((x, y) => x + y, 0) > 0)) return [{ code: 'WEIGHT_INVALID', detail: args.join('|') }];
+      // All zero, or a sum that overflows to Infinity (the draw would then always land on the last option).
+      const total = weights.reduce((x, y) => x + y, 0);
+      if (!(total > 0) || !Number.isFinite(total)) return [{ code: 'WEIGHT_INVALID', detail: args.join('|') }];
       if (acc.random.choosers.length >= MAX_RANDOM) return [{ code: 'TOO_MANY_RANDOM' }];
       acc.random.choosers.push({ kind: 'weighted', weights });
       return [];

@@ -10,6 +10,7 @@ import { createAutoresponderCommand } from '../../src/features/autoresponder/com
 import { evaluate } from '../../src/features/autoresponder/script/evaluate.js';
 import { prepareRun } from '../../src/features/autoresponder/script/run.js';
 import { ESCAPED_BRACKET } from '../../src/features/autoresponder/script/parse.js';
+import { compileScript } from '../../src/features/autoresponder/script/compile.js';
 import { executePlan, sendGateNotice, RUN_ERROR_CODES } from '../../src/features/autoresponder/execute.js';
 import { describeRun, describeRunFor } from '../../src/features/autoresponder/dryrun.js';
 import { createThrottle } from '../../src/features/autoresponder/throttle.js';
@@ -36,7 +37,7 @@ const guildWith = (ids = [U1]) => ({ members: { fetch: async (id) => { if (!ids.
 
 // ---- prepareRun ----
 test('prepareRun: words for startswith and includes, none for exact', async () => {
-  const c = comp();
+  const c = comp({ template: [{ t: 'arg', from: 1, to: 'end' }] });
   const sw = await prepareRun({ compiled: c, rule: rule(), text: '!hug  one two', guild: guildWith() });
   assert.deepEqual(sw.words.list, ['one', 'two']);
   const inc = await prepareRun({ compiled: c, rule: rule({ matchMode: 'includes' }), text: 'oh !hug a b', guild: guildWith() });
@@ -174,7 +175,7 @@ test('plan actions carry targetId from the checked word', async () => {
 });
 
 // ---- executor: targets ----
-function targetEnv({ targets = {}, ownerId = 'owner', roles = { r1: {} }, dangerous = () => false } = {}) {
+function targetEnv({ targets = {}, ownerId = 'owner', roles = { r1: {} }, dangerous = () => false, canGive = () => true } = {}) {
   const log = [];
   const members = new Map(Object.entries(targets).map(([id, o]) => [id, {
     id, manageable: true, roles: { cache: new Map(), highest: { comparePositionTo: () => -1 }, add: async (...a) => { log.push(['add', id, ...a]); }, remove: async (...a) => { log.push(['remove', id, ...a]); } }, ...o,
@@ -188,7 +189,7 @@ function targetEnv({ targets = {}, ownerId = 'owner', roles = { r1: {} }, danger
   const run = (actions, extra = {}) => executePlan({ db: {} }, {
     rule: {}, message, member: author, lang: 'en', vars: {},
     plan: { status: 'run', cooldown: null, text: 'done', flags: flags(), allowedUsers: [], actions, ...extra },
-  }, { botCanGive: () => true, isDangerousRole: dangerous });
+  }, { botCanGive: canGive, isDangerousRole: dangerous });
   return { run, log, members };
 }
 
@@ -238,6 +239,143 @@ test('the role is re-checked for a targeted action: ROLE_UNSAFE and ROLE_MISSING
   assert.deepEqual(res.errors.map((x) => x.code), ['ROLE_UNSAFE', 'ROLE_MISSING']);
   assert.equal(e.log.some((l) => l[0] === 'add'), false);
   assert.ok(e.log.some((l) => l[0] === 'nick'));
+});
+
+test('a targeted removerole re-checks the role: dangerous or not givable -> ROLE_UNSAFE, the rest still runs', async () => {
+  for (const opts of [{ dangerous: () => true }, { canGive: () => false }]) {
+    const e = targetEnv({ targets: { [U1]: {} }, ...opts });
+    e.members.get(U1).roles.cache.set('r1', { id: 'r1' });
+    const res = await e.run([{ fn: 'removerole', roleId: 'r1', target: 1, targetId: U1 }, { fn: 'setnick', text: 'N' }]);
+    assert.deepEqual(res.errors, [{ code: 'ROLE_UNSAFE', action: 'removerole', detail: 'r1' }]);
+    assert.equal(e.log.some((l) => l[0] === 'remove' || l[0] === 'author-remove'), false);
+    assert.ok(e.log.some((l) => l[0] === 'nick'));
+    assert.ok(e.log.some((l) => l[0] === 'reply'));
+  }
+});
+
+test('a targeted removerole: a missing target is TARGET_MISSING, an unsafe one TARGET_UNSAFE, never the author', async () => {
+  const missing = targetEnv();
+  assert.deepEqual((await missing.run([{ fn: 'removerole', roleId: 'r1', target: 1, targetId: U1 }])).errors.map((x) => x.code), ['TARGET_MISSING']);
+  assert.deepEqual((await missing.run([{ fn: 'removerole', roleId: 'r1', target: 1 }])).errors.map((x) => x.code), ['TARGET_MISSING']);
+  const held = () => { const c = new Map([['r1', { id: 'r1' }]]); return c; };
+  const cases = [
+    targetEnv({ targets: { [U1]: {} }, ownerId: U1 }),
+    targetEnv({ targets: { [U1]: { manageable: false } } }),
+    targetEnv({ targets: { [U1]: { roles: { cache: held(), highest: { comparePositionTo: () => 1 }, remove: async () => { throw new Error('must not'); } } } } }),
+    targetEnv({ targets: { bot: {} } }),
+  ];
+  for (const [k, e] of cases.entries()) {
+    const id = k === 3 ? 'bot' : U1;
+    const m = e.members.get(id);
+    if (!m.roles.cache.has('r1')) m.roles.cache.set('r1', { id: 'r1' });
+    const res = await e.run([{ fn: 'removerole', roleId: 'r1', target: 1, targetId: id }]);
+    assert.deepEqual(res.errors.map((x) => x.code), ['TARGET_UNSAFE'], `case ${k}`);
+    assert.equal(e.log.some((l) => l[0] === 'remove' || l[0] === 'author-remove'), false, `case ${k}`);
+  }
+  for (const e of [missing, ...cases]) assert.equal(e.log.some((l) => l[0] === 'author-remove'), false);
+});
+
+// ---- choice options render the member's words ----
+const compileFor = (src, matchMode = 'startswith') => compileScript(src, { db, guild: { id: 'g', roles: { cache: new Map() }, channels: { cache: new Map() } }, writer: {}, matchMode });
+const runSrc = async (src, text, rng = () => 0, guild = guildWith()) => {
+  const r = await compileFor(src);
+  assert.equal(r.ok, true, JSON.stringify(r.errors));
+  const prepared = await prepareRun({ compiled: r.compiled, rule: rule(), text, guild, rng });
+  return { plan: evaluate(r.compiled, { member: member(), channelId: 'c1', vars: {}, ...prepared }), prepared };
+};
+
+test('[$N] inside a choose option is rendered with the member words', async () => {
+  const a = await runSrc('{choose:Hi [$1]!|Hey [$1]!}[choice]', '!hug Sam', () => 0);
+  assert.equal(a.plan.text, 'Hi Sam!');
+  const b = await runSrc('{choose:Hi [$1]!|Hey [$1]!}[choice]', '!hug Sam', () => 0.99);
+  assert.equal(b.plan.text, 'Hey Sam!');
+  assert.deepEqual(b.prepared.draws.choice, ['Hey Sam!']);
+});
+
+test('[$N+], [$N-M] and a missing word in options; the escaped bracket stays literal', async () => {
+  assert.equal((await runSrc('{choose:say [$1+]}[choice]', '!hug a  b c')).plan.text, 'say a  b c');
+  assert.equal((await runSrc('{choose:[$2-3]}[choice]', '!hug a b c d')).plan.text, 'b c');
+  assert.equal((await runSrc('{choose:x[$4]y}[choice]', '!hug a')).plan.text, 'xy');
+  assert.equal((await runSrc('{choose:lit \\[$1]}[choice]', '!hug Sam')).plan.text, 'lit [$1]');
+});
+
+test('lockedchoose values render [$N]; weightedchoose positions stay numbers', async () => {
+  const r = await runSrc('{weightedchoose:1%|1%}{lockedchoose:to [$1]|for [$1]}[choice] [lockedchoice]', '!hug Ann', () => 0);
+  assert.equal(r.plan.text, '1 to Ann');
+  assert.deepEqual(r.prepared.draws.choice, [1]);
+});
+
+test('a member word in an option is not rendered a second time and options never add pings', async () => {
+  const twice = await runSrc('{choose:[$1]}[choice] {user}', '!hug [$2] {user} x');
+  assert.equal(twice.plan.text, '[$2]');
+  const pings = await runSrc(`{requirearg:1|user}{choose:hi [$1] <@${U2}>}[choice]`, `!hug <@${U1}>`);
+  assert.equal(pings.plan.text, `hi <@${U1}> <@${U2}>`);
+  assert.deepEqual(pings.plan.allowedUsers, []);
+});
+
+// ---- a word checked as a user renders as a mention ----
+test('a bare id checked as a user renders as <@id> and pings; unchecked or other types stay as typed', async () => {
+  const checked = await runSrc('{requirearg:1|user}hugs [$1]', `!hug ${U1}`);
+  assert.equal(checked.plan.text, `hugs <@${U1}>`);
+  assert.deepEqual(checked.plan.allowedUsers, [U1]);
+  const rest = await runSrc('{requirearg:1|user}hugs [$1+]', `!hug ${U1}  twice`);
+  assert.equal(rest.plan.text, `hugs <@${U1}>  twice`);
+  const mention = await runSrc('{requirearg:1|user}hugs [$1]', `!hug <@!${U1}>`);
+  assert.equal(mention.plan.text, `hugs <@${U1}>`);
+  const unchecked = await runSrc('hugs [$1]', `!hug ${U1}`);
+  assert.equal(unchecked.plan.text, `hugs ${U1}`);
+  assert.deepEqual(unchecked.plan.allowedUsers, []);
+  const number = await runSrc('{requirearg:1|number}n [$1]', `!hug ${U1}`);
+  assert.equal(number.plan.text, `n ${U1}`);
+  assert.deepEqual(number.plan.allowedUsers, []);
+  const second = await runSrc('{requirearg:1|user}[$2]', `!hug ${U1} ${U1}`);
+  assert.equal(second.plan.text, U1);
+  assert.deepEqual(second.plan.allowedUsers, []);
+});
+
+// ---- the fast path ----
+test('prepareRun fast path: a version 2 rule with no stage 2 feature reads no words and draws nothing', async () => {
+  const throwing = () => { throw new Error('rng used'); };
+  const noGuild = { members: { fetch: async () => { throw new Error('guild used'); } } };
+  const plain = (await compileFor('hi {user} {setnick:Bob}')).compiled;
+  const p = await prepareRun({ compiled: plain, rule: rule(), text: '!hug a b', guild: noGuild, rng: throwing });
+  assert.deepEqual(p.words.list, []);
+  assert.deepEqual(p.draws, { range: [], choice: [], lockedchoice: [], picked: [] });
+  assert.deepEqual(p.argResults, {});
+});
+
+test('prepareRun slow path: an arg part, an arg token in a nickname, a random or an arg check computes words', async () => {
+  for (const src of ['say [$1]', '{setnick:[$2]}', '{range:1-2}[range]', '{requirearg:1}']) {
+    const c = (await compileFor(src)).compiled;
+    const p = await prepareRun({ compiled: c, rule: rule(), text: '!hug a b', guild: guildWith(), rng: () => 0 });
+    assert.deepEqual(p.words.list, ['a', 'b'], src);
+  }
+});
+
+// ---- events: a failed requirearg does not burn the cooldown ----
+test('events: a failed requirearg never claims the cooldown', async () => {
+  await enable();
+  await createRule(db, {
+    guildId: 'g1', trigger: '!hug', matchMode: 'startswith', script: 'x', createdBy: 'u1',
+    compiled: comp({ template: [{ t: 'arg', from: 1, to: 1 }], argChecks: [{ n: 1, type: 'user' }], gates: [{ fn: 'cooldown', seconds: 60 }] }),
+  });
+  const claims = [];
+  const exec = [];
+  const [event] = createEvents({
+    executePlan: async (ctx, args) => { exec.push(args); return { errors: [] }; },
+    sendGateNotice: async () => {},
+    logRunError: async () => {},
+    claimCooldown: async (...a) => { claims.push(a); return { ok: true }; },
+    noticeThrottle: createThrottle(30_000),
+  });
+  const ctx = { db, client: { user: { id: 'bot' } } };
+  await event.execute(ctx, fakeMessage('!hug nobody'));
+  await event.execute(ctx, fakeMessage('!hug'));
+  assert.equal(claims.length, 0);
+  assert.equal(exec.length, 0);
+  await event.execute(ctx, fakeMessage(`!hug <@${U1}>`));
+  assert.equal(claims.length, 1);
+  assert.equal(exec.length, 1);
 });
 
 // ---- i18n ----

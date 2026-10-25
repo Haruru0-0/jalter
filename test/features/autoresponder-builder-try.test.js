@@ -195,3 +195,19 @@ test('every Try it i18n key exists in en, fr and ar, with short labels', () => {
     for (const k of short) assert.ok(t(lang, `autoresponder.builder.${k}`).length <= 45, `${lang} ${k}`);
   }
 });
+
+test('Try it and Save show the compile warnings (an exact draft with [$1] gets ARGS_EMPTY_IN_MODE)', async () => {
+  const warning = t('en', 'autoresponder.warning.ARGS_EMPTY_IN_MODE');
+  const { env, panelId } = await start({ matchMode: 'exact', text: 'hi [$1]' });
+  assert.ok(body(await tryIt(env, panelId, 'hello')).includes(warning));
+  const saved = await press(env, panelId, 'save');
+  const rules = await listRules(db, G);
+  assert.equal(rules.length, 1);
+  const [kind, payload] = last(saved);
+  assert.equal(kind, 'editReply');
+  assert.equal(payload.content, `${bt('saved', { id: rules[0].id })}\n${warning}`);
+  const clean = await start({ trigger: 'other', matchMode: 'exact', text: 'plain' });
+  assert.ok(!body(await tryIt(clean.env, clean.panelId, 'other')).includes(warning));
+  const ok = last(await press(clean.env, clean.panelId, 'save'));
+  assert.equal(ok[1].content, bt('saved', { id: (await listRules(db, G)).at(-1).id }));
+});

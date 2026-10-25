@@ -16,12 +16,35 @@ export function parseWords(remainder) {
   }
   return {
     list,
+    text,
+    starts,
     rest(n) {
       const i = Math.floor(Number(n)) - 1;
       if (!(i >= 0) || i >= list.length) return '';
       return text.slice(starts[i]).trimEnd();
     },
   };
+}
+
+/**
+ * Words with every word that passed a `user` check written as `<@id>` (a bare id or `<@!id>` becomes a
+ * mention). Only the display changes: pings still come from evaluate's allowedUsers alone, and a word that was
+ * not checked as a user stays exactly as typed. Spacing between words is kept.
+ */
+export function mentionCheckedUsers(words, argChecks, argResults) {
+  const swaps = new Map();
+  for (const { n, type } of argChecks ?? []) {
+    const r = argResults?.[n];
+    if (type === 'user' && r?.ok === true && r.id && words.list[n - 1] !== undefined) swaps.set(n - 1, `<@${r.id}>`);
+  }
+  if (!swaps.size) return words;
+  let out = '';
+  let pos = 0;
+  words.list.forEach((w, i) => {
+    out += words.text.slice(pos, words.starts[i]) + (swaps.get(i) ?? w);
+    pos = words.starts[i] + w.length;
+  });
+  return parseWords(out + words.text.slice(pos));
 }
 
 /** Text for an `arg` token. */

@@ -11,7 +11,7 @@ import { invalidate } from '../cache.js';
 import { checkTrigger, matchRule, MATCH_MODES, MAX_TRIGGER_LENGTH } from '../match.js';
 import { describeRunFor } from '../dryrun.js';
 import { compileScript, MAX_SCRIPT } from '../script/compile.js';
-import { errorLines, log } from '../commands.js';
+import { errorLines, log, withWarnings } from '../commands.js';
 import {
   addAction, addArgCheck, addGate, addRandom, newDraft, patch, removeAction, removeArgCheck, removeGate, removeRandom, setArgType, setTrigger, toScriptMode,
 } from './draft.js';
@@ -30,6 +30,8 @@ const key = (k) => `autoresponder.builder.${k}`;
 const oneLine = (s) => String(s).replace(/\s+/g, ' ');
 
 const refuse = (interaction, lang, k) => interaction.reply(ephemeral(t(lang, k)));
+// The compile warnings as the text editor shows them, for Try it (the success line itself is not wanted there).
+const warningLines = (lang, warnings) => withWarnings(lang, '', warnings).split('\n').slice(1);
 
 // A refusal that must not touch the panel: acknowledge the click, then send a separate ephemeral message.
 async function sideMessage(interaction, text) {
@@ -502,6 +504,7 @@ async function submitTry(interaction, ctx, lang, entry) {
     compiled: result.compiled, text: sample, member: interaction.member, guild: interaction.guild,
     channel: interaction.channel, channelId: interaction.channelId, author: interaction.user,
   }, { rule: { trigger: draft.trigger, matchMode: draft.matchMode } }));
+  lines.push(...warningLines(lang, result.warnings));
   return interaction.reply(ephemeral({ content: fitLines(lang, lines, MAX_REPLY), allowedMentions: { parse: [] } }));
 }
 
@@ -560,7 +563,7 @@ async function save(interaction, ctx, lang, entry) {
     await log(ctx, interaction, lang, 'add', created.id,
       `${oneLine(draft.trigger).slice(0, LOG_DETAIL_MAX)} (${t(lang, key('logDetail'))})`);
     drafts.endSave(entry.panelId, true);
-    return await interaction.editReply({ content: t(lang, key('saved'), { id: created.id }), components: [] });
+    return await interaction.editReply({ content: withWarnings(lang, t(lang, key('saved'), { id: created.id }), result.warnings), components: [] });
   } finally {
     if (!done) drafts.endSave(entry.panelId, false);
   }

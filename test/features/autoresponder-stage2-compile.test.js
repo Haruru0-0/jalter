@@ -272,6 +272,35 @@ test('editmatchmode refuses a mode that would invalidate the script and leaves t
   assert.equal((await getRule(db, G, plain.id)).matchMode, 'exact');
 });
 
+test('editmatchmode is refused only for NO_ARGUMENTS_IN_MODE: a role above the admin or a deleted role does not block it', async () => {
+  const e = cenv();
+  await on();
+  e.member.roles.highest = { position: 1 };
+  const stored = { version: 1, template: [], gates: [], actions: [], flags: {} };
+  const above = await createRule(db, { guildId: G, trigger: '!a', matchMode: 'startswith', script: 'hi {addrole:Mid}', compiled: stored, createdBy: 'u' });
+  const okAbove = await runSlash(e, 'editmatchmode', { id: above.id, match: 'exact' });
+  assert.equal(last(okAbove), t('en', 'autoresponder.matchChanged', { id: above.id, mode: 'exact' }));
+  assert.equal((await getRule(db, G, above.id)).matchMode, 'exact');
+  const gone = await createRule(db, { guildId: G, trigger: '!b', matchMode: 'startswith', script: 'hi {addrole:Deleted}{sendto:#gone}', compiled: stored, createdBy: 'u' });
+  const okGone = await runSlash(e, 'editmatchmode', { id: gone.id, match: 'includes' });
+  assert.equal(last(okGone), t('en', 'autoresponder.matchChanged', { id: gone.id, mode: 'includes' }));
+  assert.equal((await getRule(db, G, gone.id)).matchMode, 'includes');
+  const both = await createRule(db, { guildId: G, trigger: '!c', matchMode: 'startswith', script: '{requirearg:1}{addrole:Mid}', compiled: stored, createdBy: 'u' });
+  const refused = await runSlash(e, 'editmatchmode', { id: both.id, match: 'exact' });
+  assert.ok(last(refused).includes(t('en', 'autoresponder.error.NO_ARGUMENTS_IN_MODE', { detail: '"exact"' }).trim()));
+  assert.ok(!last(refused).includes(t('en', 'autoresponder.error.ROLE_ABOVE_YOU', { detail: '"Mid"' }).trim()));
+  assert.equal((await getRule(db, G, both.id)).matchMode, 'startswith');
+  const warned = await createRule(db, { guildId: G, trigger: '!d', matchMode: 'startswith', script: 'hi [$1]', compiled: stored, createdBy: 'u' });
+  const w = await runSlash(e, 'editmatchmode', { id: warned.id, match: 'exact' });
+  assert.ok(last(w).endsWith(t('en', 'autoresponder.warning.ARGS_EMPTY_IN_MODE')));
+});
+
+test('weightedchoose whose weights add up to Infinity is WEIGHT_INVALID', async () => {
+  const huge = `1${'0'.repeat(308)}%`;
+  assert.deepEqual(codes(await comp(`{weightedchoose:${huge}|${huge}}`)), ['WEIGHT_INVALID']);
+  assert.equal((await comp(`{weightedchoose:${huge}|1%}`)).ok, true);
+});
+
 test('add and edit pass the match mode and show the warning after the success text', async () => {
   const e = cenv();
   await on();
