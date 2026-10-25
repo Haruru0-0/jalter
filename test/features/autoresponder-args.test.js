@@ -63,9 +63,9 @@ const guild = {
 };
 
 test('checkArgType', async () => {
-  assert.deepEqual(await checkArgType('user', `<@${U}>`, guild), { ok: true, id: U });
-  assert.deepEqual(await checkArgType('user', `<@!${U}>`, guild), { ok: true, id: U });
-  assert.deepEqual(await checkArgType('user', U, guild), { ok: true, id: U });
+  assert.deepEqual(await checkArgType('user', `<@${U}>`, guild), { ok: true, id: U, name: '' });
+  assert.deepEqual(await checkArgType('user', `<@!${U}>`, guild), { ok: true, id: U, name: '' });
+  assert.deepEqual(await checkArgType('user', U, guild), { ok: true, id: U, name: '' });
   assert.equal((await checkArgType('user', '999999999999999999', guild)).ok, false);
   assert.equal((await checkArgType('user', 'sam', guild)).ok, false);
   assert.deepEqual(await checkArgType('channel', `<#${C}>`, guild), { ok: true, id: C });
@@ -134,4 +134,12 @@ test('matchRule true implies triggerRemainder non-null for startswith and includ
       }
     }
   }
+});
+
+test('checkArgType user: name is the fetched member displayName, empty when unavailable', async () => {
+  const g = { members: { fetch: async (id) => (id === U ? { id, displayName: 'Sam' } : { id }) } };
+  assert.deepEqual(await checkArgType('user', `<@${U}>`, g), { ok: true, id: U, name: 'Sam' });
+  assert.deepEqual(await checkArgType('user', U, g), { ok: true, id: U, name: 'Sam' });
+  assert.deepEqual(await checkArgType('user', '999999999999999999', g), { ok: true, id: '999999999999999999', name: '' });
+  assert.deepEqual(await checkArgType('number', '5', g), { ok: true });
 });

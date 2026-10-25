@@ -47,6 +47,46 @@ export function mentionCheckedUsers(words, argChecks, argResults) {
   return parseWords(out + words.text.slice(pos));
 }
 
+/**
+ * Words for a nickname: every word checked as a `user` is replaced by that member's display name (the typed word
+ * when there is none), because Discord does not resolve mentions in a nickname. The name is member-controlled, so
+ * the escape sentinel is dropped from it; renderArgsInText inserts it in one pass and never rescans it.
+ */
+export function nicknameWords(words, argChecks, argResults) {
+  const swaps = new Map();
+  for (const { n, type } of argChecks ?? []) {
+    const r = argResults?.[n];
+    if (type !== 'user' || r?.ok !== true || words.list[n - 1] === undefined) continue;
+    const name = String(r.name ?? '').replaceAll(ESCAPED_BRACKET, '');
+    swaps.set(n - 1, name || words.list[n - 1]);
+  }
+  if (!swaps.size) return words;
+  // Built directly, not re-split: a display name may hold spaces and must stay one word.
+  const list = [];
+  const starts = [];
+  let text = '';
+  let pos = 0;
+  words.list.forEach((w, i) => {
+    text += words.text.slice(pos, words.starts[i]);
+    const word = swaps.get(i) ?? w;
+    list.push(word);
+    starts.push(text.length);
+    text += word;
+    pos = words.starts[i] + w.length;
+  });
+  text += words.text.slice(pos);
+  return {
+    list,
+    text,
+    starts,
+    rest(n) {
+      const i = Math.floor(Number(n)) - 1;
+      if (!(i >= 0) || i >= list.length) return '';
+      return text.slice(starts[i]).trimEnd();
+    },
+  };
+}
+
 /** Text for an `arg` token. */
 export function renderArg(token, words) {
   if (token.to === 'end') return words.rest(token.from);
@@ -97,7 +137,7 @@ export async function checkArgType(type, word, guild) {
       if (!id) return { ok: false };
       try {
         const member = await guild?.members?.fetch(id);
-        return member ? { ok: true, id } : { ok: false };
+        return member ? { ok: true, id, name: typeof member.displayName === 'string' ? member.displayName : '' } : { ok: false };
       } catch {
         return { ok: false };
       }

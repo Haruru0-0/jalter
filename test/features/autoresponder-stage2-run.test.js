@@ -65,7 +65,7 @@ test('prepareRun: version 1 is a no-op; argResults cover every check', async () 
   assert.deepEqual(r.argResults, {});
   const c = comp({ argChecks: [{ n: 1, type: 'user' }, { n: 2, type: 'number' }, { n: 3, type: null }] });
   const p = await prepareRun({ compiled: c, rule: rule(), text: `!hug <@${U1}> abc`, guild: guildWith() });
-  assert.deepEqual(p.argResults[1], { ok: true, id: U1 });
+  assert.deepEqual(p.argResults[1], { ok: true, id: U1, name: '' });
   assert.equal(p.argResults[2].ok, false);
   assert.equal(p.argResults[3].ok, false);
 });
@@ -502,4 +502,78 @@ test('describeRunFor uses the same preparation, and v1 output has no draws or pi
   const lines = await describeRunFor('en', args, { rule: rule({ trigger: 'hello' }) });
   assert.deepEqual(lines, describeRun('en', args));
   assert.equal(lines.some((l) => /Random values|Would ping/.test(l)), false);
+});
+
+// ---- nickname words ----
+const NU = '123456789012345678';
+const names = { [NU]: 'Sam' };
+const nickGuild = (map = names) => ({ id: 'g', roles: { cache: new Map() }, members: { fetch: async (id) => { if (!(id in map)) throw new Error('unknown'); return { id, displayName: map[id] }; } } });
+const nickRun = async (src, text, map = names, vars = {}) => {
+  const { compiled } = await compileFor(src);
+  const g = nickGuild(map);
+  const prepared = await prepareRun({ compiled, rule: rule({ trigger: '!fan' }), text, guild: g });
+  const plan = evaluate(compiled, { member: member(), channelId: 'c1', vars, ...prepared });
+  let applied = null;
+  const m = { id: 'a1', manageable: true, roles: { cache: new Map() }, setNickname: async (n) => { applied = n; } };
+  const replies = [];
+  const res = await executePlan({ db: {} }, { rule: {}, message: { guild: g, reply: async (o) => { replies.push(o); return {}; } }, member: m, plan, lang: 'en', vars }, {});
+  return { prepared, plan, res, replies, applied: () => applied, compiled, g };
+};
+
+test('prepareRun: nickWords hold the display name of a checked user word, words keep the mention', async () => {
+  const c = comp({ argChecks: [{ n: 1, type: 'user' }], actions: [{ fn: 'setnick', text: '[$1]' }] });
+  const p = await prepareRun({ compiled: c, rule: rule(), text: `!hug ${NU} extra`, guild: nickGuild() });
+  assert.equal(p.nickWords.list[0], 'Sam');
+  assert.equal(p.words.list[0], `<@${NU}>`);
+  assert.deepEqual(p.nickWords.list, ['Sam', 'extra']);
+});
+
+test('prepareRun: nickWords equal words for unchecked, number-checked and requirearg-free rules', async () => {
+  for (const c of [
+    comp({ actions: [{ fn: 'setnick', text: '[$1]' }] }),
+    comp({ argChecks: [{ n: 1, type: 'number' }], actions: [{ fn: 'setnick', text: '[$1]' }] }),
+    comp({ template: [{ t: 'text', v: 'x' }] }),
+  ]) {
+    const p = await prepareRun({ compiled: c, rule: rule(), text: '!hug 42', guild: nickGuild() });
+    assert.equal(p.nickWords, p.words);
+  }
+});
+
+test('nickname uses the display name; reply text and allowedUsers keep the mention', async () => {
+  const r = await nickRun('{requirearg:1|user}{setnick:[$1] fan club}{user} hugs [$1]', `!fan ${NU}`);
+  assert.equal(r.applied(), 'Sam fan club');
+  assert.match(r.plan.text, new RegExp(`<@${NU}>`));
+  assert.deepEqual(r.plan.allowedUsers, ['a1', NU]); // the sender (via {user}) and the checked user, as before
+  assert.deepEqual(r.res.errors, []);
+});
+
+test('a display name with spaces keeps later word indexes and rest()', async () => {
+  const r = await nickRun('{requirearg:1|user}{setnick:[$2]/[$2+]/[$1+]}', `!fan ${NU} tail end`, { [NU]: 'Sam Smith' });
+  assert.equal(r.applied(), 'tail/tail end/Sam Smith tail end');
+});
+
+test('a display name is inserted literally in one pass', async () => {
+  for (const name of ['[$2]', '<@999>', '{user}', '[range]', `a${ESCAPED_BRACKET}b`]) {
+    const r = await nickRun('{requirearg:1|user}{setnick:[$1]}', `!fan ${NU} second`, { [NU]: name }, { user: 'SECRET' });
+    assert.equal(r.applied(), name.replaceAll(ESCAPED_BRACKET, ''), name);
+  }
+});
+
+test('a 40-character display name is NICK_TOO_LONG; an empty name falls back to the typed word', async () => {
+  const long = await nickRun('{requirearg:1|user}{setnick:[$1]}', `!fan ${NU}`, { [NU]: 'x'.repeat(40) });
+  assert.equal(long.applied(), null);
+  assert.equal(long.res.errors[0].code, 'NICK_TOO_LONG');
+  const empty = await nickRun('{requirearg:1|user}{setnick:[$1]}', `!fan ${NU}`, { [NU]: '' });
+  assert.equal(empty.applied(), NU);
+});
+
+test('describeRunFor prints the nickname executePlan would set', async () => {
+  const { compiled, g, applied } = await nickRun('{requirearg:1|user}{setnick:[$1] fan club}', `!fan ${NU}`);
+  const e = readOnlyEnv();
+  const args = { compiled, text: `!fan ${NU}`, member: e.interaction.member, guild: Object.assign(e.interaction.guild, { members: nickGuild().members }), channel: e.interaction.channel, channelId: 'c1', author: e.interaction.user };
+  const lines = await describeRunFor('en', args, { rule: rule({ trigger: '!fan' }) });
+  assert.equal(applied(), 'Sam fan club');
+  assert.ok(lines.some((l) => l.includes('Sam fan club')), lines.join('\n'));
+  assert.ok(!lines.some((l) => l.includes(`<@${NU}> fan club`)), lines.join('\n'));
+  assert.ok(g);
 });

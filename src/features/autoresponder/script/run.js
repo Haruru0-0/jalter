@@ -1,7 +1,7 @@
 // Per-message preparation shared by the live listener, `/autoresponder test` and the builder's Try it, so all
 // three behave identically: the member's words, the one random drawing and the argument type checks.
 import { ESCAPED_BRACKET } from './parse.js';
-import { parseWords, renderArgsInText, checkArgType, mentionCheckedUsers } from './args.js';
+import { parseWords, renderArgsInText, checkArgType, mentionCheckedUsers, nicknameWords } from './args.js';
 import { drawRandom, renderRand } from './random.js';
 import { triggerRemainder } from '../match.js';
 
@@ -16,7 +16,7 @@ const needsWords = (c) => Boolean(c.argChecks?.length)
 
 /**
  * Words after the trigger, the random draws (once per message) and every `requirearg` check result.
- * Resolves to { words, draws, argResults } with argResults a map N -> checkArgType result.
+ * Resolves to { words, nickWords, draws, argResults } (nickWords: a checked user word as the member's display name, for {setnick}) with argResults a map N -> checkArgType result.
  * A version 1 compiled object, or a version 2 one that uses no random value and no word, takes the fast path:
  * empty words and draws, no remainder search, no rng call and no guild read.
  * Words checked as a `user` are written as `<@id>` (mentionCheckedUsers). Chooser options and locked values
@@ -27,7 +27,8 @@ const needsWords = (c) => Boolean(c.argChecks?.length)
 export async function prepareRun({ compiled, rule, text, guild, rng = Math.random }) {
   const argResults = {};
   if (!compiled?.template || !compiled.actions || (!hasRandom(compiled.random) && !needsWords(compiled))) {
-    return { words: parseWords(''), draws: drawRandom(null, rng), argResults };
+    const empty = parseWords('');
+    return { words: empty, nickWords: empty, draws: drawRandom(null, rng), argResults };
   }
   const typed = parseWords(triggerRemainder(rule, text) ?? '');
   const draws = drawRandom(compiled.random, rng);
@@ -35,10 +36,11 @@ export async function prepareRun({ compiled, rule, text, guild, rng = Math.rando
     argResults[n] = await checkArgType(type ?? null, typed.list[n - 1], guild);
   }
   const words = mentionCheckedUsers(typed, compiled.argChecks, argResults);
+  const nickWords = nicknameWords(typed, compiled.argChecks, argResults);
   const renderOption = (v) => (typeof v === 'string' ? renderArgsInText(v, words) : v);
   draws.choice = draws.choice.map(renderOption);
   draws.lockedchoice = draws.lockedchoice.map(renderOption);
-  return { words, draws, argResults };
+  return { words, nickWords, draws, argResults };
 }
 
 // Argument tokens, random tokens and {placeholders} in one pass, so a value that was substituted is never scanned again.
