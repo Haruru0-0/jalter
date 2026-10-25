@@ -8,6 +8,10 @@ import { buildHelp } from '../../src/features/help/index.js';
 import * as automod from '../../src/features/automod/index.js';
 import * as autoresponder from '../../src/features/autoresponder/index.js';
 import { pruneCooldowns } from '../../src/features/autoresponder/cooldown.js';
+import { FUNCTIONS } from '../../src/features/autoresponder/script/functions.js';
+import { COMPILE_ERROR_CODES } from '../../src/features/autoresponder/script/compile.js';
+import { RUN_ERROR_CODES } from '../../src/features/autoresponder/execute.js';
+import { PAGES } from '../../src/features/autoresponder/builder/panel.js';
 
 test('the modules load without a duplicate command, component prefix or job type', () => {
   const registry = collectModules(modules);
@@ -62,4 +66,24 @@ test('the autoresponder component prefix is registered exactly once', () => {
   const owners = modules.flatMap((m) => m.commands ?? []).filter((c) => c.components?.prefix === 'autoresponder');
   assert.equal(owners.length, 1);
   assert.equal(collectModules(modules).components.get('autoresponder'), owners[0].components);
+});
+
+test('stage 2: the function table lists the random functions and requirearg', () => {
+  for (const name of ['range', 'choose', 'weightedchoose', 'lockedchoose', 'requirearg']) {
+    assert.equal(typeof FUNCTIONS[name]?.check, 'function', `missing function ${name}`);
+  }
+});
+
+test('stage 2: the new compile and run-time error codes are listed', () => {
+  for (const code of ['RANGE_INVALID', 'WEIGHT_INVALID', 'TOO_MANY_RANDOM', 'CHOICE_COUNT_MISMATCH', 'CHOICE_NOT_CHOSEN_YET',
+    'ARG_INDEX_INVALID', 'ARG_TYPE_INVALID', 'NO_ARGUMENTS_IN_MODE', 'TARGET_NOT_CHECKED_USER', 'TARGET_NEEDS_GATE']) {
+    assert.ok(COMPILE_ERROR_CODES.includes(code), `missing compile code ${code}`);
+  }
+  for (const code of ['TARGET_MISSING', 'TARGET_UNSAFE']) {
+    assert.ok(RUN_ERROR_CODES.includes(code), `missing run code ${code}`);
+  }
+});
+
+test('stage 2: the builder pages end with random and review', () => {
+  assert.deepEqual(PAGES.slice(-2), ['random', 'review']);
 });
