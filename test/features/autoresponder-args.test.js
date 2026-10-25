@@ -136,7 +136,7 @@ test('matchRule true implies triggerRemainder non-null for startswith and includ
   }
 });
 
-test('checkArgType user: name is the fetched member displayName, empty when unavailable', async () => {
+test('checkArgType user: name is the fetched displayName, empty for a member without displayName', async () => {
   const g = { members: { fetch: async (id) => (id === U ? { id, displayName: 'Sam' } : { id }) } };
   assert.deepEqual(await checkArgType('user', `<@${U}>`, g), { ok: true, id: U, name: 'Sam' });
   assert.deepEqual(await checkArgType('user', U, g), { ok: true, id: U, name: 'Sam' });
