@@ -170,3 +170,9 @@ test('new codes are listed and translated in every language', () => {
     for (const lang of ['en', 'fr', 'ar']) assert.notEqual(t(lang, `autoresponder.error.${c}`, { detail: '' }), `autoresponder.error.${c}`, `${lang} ${c}`);
   }
 });
+
+test('a whitespace-only link button label is rejected as BAD_ARGUMENT', async () => {
+  const r = await comp('Hi {addlinkbutton:   |https://example.com}');
+  assert.equal(r.ok, false);
+  assert.ok(codes(r).includes('BAD_ARGUMENT'));
+});

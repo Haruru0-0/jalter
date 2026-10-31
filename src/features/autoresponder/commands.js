@@ -15,6 +15,7 @@ import { logAutoresponder } from './log.js';
 import { describeRunFor } from './dryrun.js';
 import { openBuilder, handleBuilder } from './builder/handlers.js';
 import { handlePress } from './buttons/press.js';
+import { BUTTON_HANDLERS, submitButtonModal, STYLE_CHOICES, LIMITATION_CHOICES } from './buttons/setup.js';
 
 const PREFIX = 'autoresponder';
 const MAX_ERROR_LINES = 10;
@@ -43,8 +44,21 @@ export function buildData() {
     .addSubcommand((s) =>
       s.setName('test').setDescription('Try a message against the rules without sending anything')
         .addStringOption((o) => o.setName('message').setDescription('What a member would type').setMaxLength(MAX_TEST_MESSAGE).setRequired(true)))
-    .addSubcommand((s) => s.setName('builder').setDescription('Build a rule with buttons and menus'));
+    .addSubcommand((s) => s.setName('builder').setDescription('Build a rule with buttons and menus'))
+    .addSubcommandGroup((g) => g.setName('button').setDescription('Manage the buttons that replies can carry')
+      .addSubcommand((s) => buttonOptions(s.setName('add').setDescription('Create a button').addStringOption(buttonName)))
+      .addSubcommand((s) => buttonOptions(s.setName('edit').setDescription('Edit a button').addStringOption(buttonName)))
+      .addSubcommand((s) => s.setName('remove').setDescription('Delete a button').addStringOption(buttonName))
+      .addSubcommand((s) => s.setName('list').setDescription('List the buttons')));
 }
+
+const buttonName = (o) => o.setName('name').setDescription('Name of the button (a-z, 0-9, _ and -, up to 16)').setMaxLength(16).setRequired(true);
+const buttonOptions = (sub) => sub
+  .addStringOption((o) => o.setName('style').setDescription('Colour of the button')
+    .addChoices(...STYLE_CHOICES.map((c) => ({ name: c, value: c }))))
+  .addBooleanOption((o) => o.setName('invoker_only').setDescription('Only the member who triggered the reply can press it'))
+  .addStringOption((o) => o.setName('limitations').setDescription('How many presses are allowed per message')
+    .addChoices(...LIMITATION_CHOICES.map((c) => ({ name: c, value: c }))));
 
 const state = (lang, enabled) => t(lang, enabled ? 'common.on' : 'common.off');
 const oneLine = (s) => String(s).replace(/\s+/g, ' ');
@@ -222,9 +236,11 @@ async function handle(interaction, ctx) {
   // Member-facing: a press needs the feature on, not Manage Server, so it is routed before any guard.
   if (kind === 'p') return handlePress(interaction, ctx);
   if (kind === 'b') return handleBuilder(interaction, ctx);
-  if (kind !== 'm' || !interaction.isModalSubmit() || !['add', 'edit'].includes(action)) return;
+  const buttonModal = action === 'btnadd' || action === 'btnedit';
+  if (kind !== 'm' || !interaction.isModalSubmit() || !(buttonModal || ['add', 'edit'].includes(action))) return;
   const lang = await guard(interaction, ctx, 'autoresponder');
   if (!lang) return;
+  if (buttonModal) return submitButtonModal(interaction, ctx, lang, action);
   return submitModal(interaction, ctx, lang, action, arg);
 }
 
@@ -233,7 +249,13 @@ export function createAutoresponderCommand() {
     data: buildData(),
     components: { prefix: PREFIX, handle },
     async execute(interaction, ctx) {
+      const group = interaction.options.getSubcommandGroup?.(false) ?? null;
       const sub = interaction.options.getSubcommand();
+      if (group === 'button') {
+        const lang = await guard(interaction, ctx, 'autoresponder');
+        if (!lang) return;
+        return BUTTON_HANDLERS[sub]?.(interaction, ctx, lang);
+      }
       if (sub === 'enable' || sub === 'disable') {
         await handleToggle(interaction, ctx, 'autoresponder');
         invalidate(interaction.guildId);

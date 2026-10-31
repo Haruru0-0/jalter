@@ -350,7 +350,7 @@ export const FUNCTIONS = {
     check(args, { guild }, acc) {
       if (acc.buttons.length >= MAX_SCRIPT_BUTTONS) return [{ code: 'TOO_MANY_BUTTONS', detail: String(MAX_SCRIPT_BUTTONS) }];
       const [label, rawUrl, rawEmoji = ''] = args;
-      if (!label || label.length > MAX_LABEL) return [{ code: 'BAD_ARGUMENT', detail: label }];
+      if (!label.trim() || label.length > MAX_LABEL) return [{ code: 'BAD_ARGUMENT', detail: label }];
       let url = null;
       if (rawUrl.length <= MAX_LINK_URL) {
         try {
