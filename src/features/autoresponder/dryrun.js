@@ -5,6 +5,7 @@ import { evaluate } from './script/evaluate.js';
 import { buildScriptVars } from './script/placeholders.js';
 import { renderPlaceholders } from '../../core/placeholders.js';
 import { prepareRun, renderScriptText } from './script/run.js';
+import { getButton } from './buttons/store.js';
 
 const MAX_TEST_TEXT = 700;
 
@@ -55,7 +56,7 @@ function actionLines(lang, plan, vars) {
  * The report lines for one compiled rule: the gate lines, then (when no gate fails) the rendered text
  * and the action list. `text` is the message the member would type.
  */
-export function describeRun(lang, { compiled, text, member, guild, channel, channelId, author, prepared }) {
+export function describeRun(lang, { compiled, text, member, guild, channel, channelId, author, prepared, buttonInfo }) {
   const message = { id: '', url: '', content: text, author, channel, channelId };
   const vars = buildScriptVars({ message, member, guild, lang });
   const evalCtx = { member, channelId, vars, ...prepared };
@@ -71,8 +72,20 @@ export function describeRun(lang, { compiled, text, member, guild, channel, chan
     if (drawn) lines.push(drawn);
     if (plan.allowedUsers.length) lines.push(tt(lang, 'pings', { detail: plan.allowedUsers.map((id) => `<@${id}>`).join(' ') }));
     lines.push(tt(lang, 'actions'), ...actionLines(lang, plan, vars));
+    if (plan.buttons?.length) lines.push(tt(lang, 'buttons', { detail: plan.buttons.map((b) => buttonText(b, buttonInfo)).join(', ') }));
   }
   return lines;
+}
+
+// One button of the buttons line: a stored one with its label, colour and settings, a link with its URL.
+function buttonText(b, info) {
+  if (b.kind === 'link') return `${oneLine(b.label)} (${b.url})`;
+  const found = info?.[b.name];
+  if (!found) return `${b.name} (?)`;
+  const bits = [found.style];
+  if (found.invokerOnly) bits.push('invoker_only');
+  if (found.limitations && found.limitations !== 'none') bits.push(found.limitations);
+  return `${oneLine(found.label)} (${bits.join(', ')})`;
 }
 
 // "[range]: 4, [choice]: red" for every value drawn for this message; null when nothing was drawn.
@@ -87,8 +100,16 @@ function drawLine(lang, draws) {
 /**
  * The async entry the three callers use (live-identical): runs prepareRun for the sample message
  * (reads only: a member lookup for `user` checks), then describeRun. `rule` supplies { trigger, matchMode }.
+ * With buttons and a `db`, the stored buttons are read (reads only) so the line can name their label and settings.
  */
-export async function describeRunFor(lang, args, { rule, rng } = {}) {
+export async function describeRunFor(lang, args, { rule, rng, db } = {}) {
   const prepared = await prepareRun({ compiled: args.compiled, rule, text: args.text, guild: args.guild, rng });
-  return describeRun(lang, { ...args, prepared });
+  let buttonInfo;
+  if (db && args.compiled.buttons?.length) {
+    buttonInfo = {};
+    for (const b of args.compiled.buttons) {
+      if (b.kind === 'stored' && !(b.name in buttonInfo)) buttonInfo[b.name] = await getButton(db, args.guild.id, b.name).catch(() => null);
+    }
+  }
+  return describeRun(lang, { ...args, prepared, buttonInfo });
 }

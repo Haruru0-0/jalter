@@ -503,7 +503,7 @@ async function submitTry(interaction, ctx, lang, entry) {
   lines.push(...await describeRunFor(lang, {
     compiled: result.compiled, text: sample, member: interaction.member, guild: interaction.guild,
     channel: interaction.channel, channelId: interaction.channelId, author: interaction.user,
-  }, { rule: { trigger: draft.trigger, matchMode: draft.matchMode } }));
+  }, { rule: { trigger: draft.trigger, matchMode: draft.matchMode }, db: ctx.db }));
   lines.push(...warningLines(lang, result.warnings));
   return interaction.reply(ephemeral({ content: fitLines(lang, lines, MAX_REPLY), allowedMentions: { parse: [] } }));
 }

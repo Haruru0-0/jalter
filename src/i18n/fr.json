@@ -1078,5 +1078,16 @@
   "autoresponder.argtype.user": "un membre",
   "autoresponder.argtype.channel": "un salon",
   "autoresponder.argtype.role": "un rôle",
-  "autoresponder.argtype.color": "une couleur comme #ff8800"
+  "autoresponder.argtype.color": "une couleur comme #ff8800",
+  "autoresponder.press.expired": "Ce bouton a expiré.",
+  "autoresponder.press.invoker": "Seul le membre qui a déclenché ce message peut utiliser ce bouton.",
+  "autoresponder.press.pressed": "Ce bouton a déjà été utilisé.",
+  "autoresponder.press.locked": "Quelqu'un a déjà appuyé sur un bouton de ce message, ses boutons sont donc fermés.",
+  "autoresponder.press.slow": "Doucement : attends quelques secondes avant d'appuyer à nouveau.",
+  "autoresponder.press.gate": "Tu ne peux pas utiliser ce bouton.",
+  "autoresponder.press.arg": "Mot {n} du message d'origine manquant ou invalide (attendu : {type}).",
+  "autoresponder.press.cooldown": "Doucement : tu pourras réutiliser ce bouton dans {seconds} secondes.",
+  "autoresponder.press.error": "Un problème est survenu avec ce bouton. Réessaie.",
+  "autoresponder.run.BUTTON_MISSING": "Un bouton utilisé par la règle n'existe plus, il a donc été ignoré.",
+  "autoresponder.test.buttons": "Boutons de la réponse : {detail}"
 }

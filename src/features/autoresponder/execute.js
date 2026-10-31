@@ -7,17 +7,21 @@ import { renderScriptText } from './script/run.js';
 import { buildEmbedPayload } from '../embeds/render.js';
 import { getEmbed } from '../embeds/store.js';
 import { t } from '../../i18n/index.js';
+import { getButton, createMessageRecord } from './buttons/store.js';
+import { buildRows } from './buttons/model.js';
+import { componentEmoji } from '../reactionroles/config.js';
 
 export const RUN_ERROR_CODES = [
   'ROLE_MISSING', 'ROLE_UNSAFE', 'ROLE_FAILED', 'CANNOT_MANAGE_NICK', 'NICK_TOO_LONG', 'NICK_EMPTY', 'CANNOT_DELETE', 'CANNOT_REACT',
   'CANNOT_DM', 'CANNOT_SEND', 'RENDERED_TOO_LONG', 'EMBED_FAILED',
-  'TARGET_MISSING', 'TARGET_UNSAFE',
+  'TARGET_MISSING', 'TARGET_UNSAFE', 'BUTTON_MISSING',
 ];
 
 const REASON = 'Autoresponder';
 const MAX_TEXT = 2000;
 const MAX_NICK = 32;
 const NOTICE_SECONDS = 8;
+export const BUTTON_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
 /** In-memory, best effort (not restart-safe): deletes `message` after `seconds`. */
 export function scheduleDelete(message, seconds, deps = {}) {
@@ -140,10 +144,13 @@ async function buildPayload(ctx, { guild, plan, vars, deps, errors }) {
 
 /**
  * Runs a 'run' Plan. `vars` are the rendered placeholder values, used to render a setnick text
- * (the Plan only carries the raw `action.text`). Returns { errors }.
+ * (the Plan only carries the raw `action.text`). Returns { errors, sent } (sent: the posted message or null).
+ * With `plan.buttons` the message is sent, a record is stored under its id and the message is edited to carry the
+ * buttons (their custom ids hold the sent message id). `invokerId` (default: member.id) is stored as the invoker;
+ * `buttonState` ({ words, draws }) replaces what is stored for a chained reply (default: the plan's own).
  */
-export async function executePlan(ctx, { rule, message, member, plan, lang, vars = {} }, deps = {}) {
-  void rule; void lang;
+export async function executePlan(ctx, { rule, message, member, plan, lang, vars = {}, invokerId, buttonState }, deps = {}) {
+  void lang;
   const errors = [];
   const guild = message.guild ?? member.guild;
   const send = deps.trySend ?? trySend;
@@ -190,7 +197,14 @@ export async function executePlan(ctx, { rule, message, member, plan, lang, vars
     fail(errors, 'RENDERED_TOO_LONG', 'message', String(plan.text.length));
   } else {
     const payload = await buildPayload(ctx, { guild, plan, vars, deps, errors });
-    if (payload) sent = await deliver(payload, { message, member, guild, plan, triggerDeleted, send, errors });
+    if (payload) {
+      // Only a rule with buttons does any extra work (a lookup per stored button, a record, an edit).
+      const entries = plan.buttons?.length && !plan.flags.dm ? await resolveButtons(ctx, guild, plan.buttons, deps, errors) : [];
+      sent = await deliver(payload, { message, member, guild, plan, triggerDeleted, send, errors });
+      if (sent && entries.length) {
+        await attachButtons(ctx, { sent, entries, rule, guild, message, plan, deps, errors, invokerId: invokerId ?? member.id, buttonState });
+      }
+    }
   }
 
   if (sent) {
@@ -203,7 +217,48 @@ export async function executePlan(ctx, { rule, message, member, plan, lang, vars
     }
     if (plan.flags.deleteReplyAfter) scheduleDelete(sent, plan.flags.deleteReplyAfter, deps);
   }
-  return { errors };
+  return { errors, sent };
+}
+
+// Stored buttons are looked up now (label, emoji and colour may have changed since the rule was saved); a removed one
+// is skipped and reported. Link buttons carry everything they need.
+async function resolveButtons(ctx, guild, buttons, deps, errors) {
+  const find = deps.getButton ?? getButton;
+  const entries = [];
+  for (const b of buttons) {
+    if (b.kind === 'link') { entries.push(b); continue; }
+    let found = null;
+    try {
+      found = await find(ctx.db, guild.id, b.name);
+    } catch {
+      found = null;
+    }
+    if (!found) { fail(errors, 'BUTTON_MISSING', 'addbutton', b.name); continue; }
+    entries.push({ kind: 'stored', name: b.name, label: found.label, emoji: found.emoji, style: found.style });
+  }
+  return entries;
+}
+
+// The custom ids need the id of the message that was just sent, so: store the record, then edit the buttons on.
+async function attachButtons(ctx, { sent, entries, rule, guild, message, plan, deps, errors, invokerId, buttonState }) {
+  const now = deps.now?.() ?? Date.now();
+  const store = deps.createMessageRecord ?? createMessageRecord;
+  try {
+    await store(ctx.db, {
+      messageId: sent.id,
+      channelId: sent.channelId ?? sent.channel?.id ?? message.channelId ?? message.channel?.id,
+      guildId: guild.id,
+      ruleId: rule.id,
+      invokerId,
+      buttons: entries.map((e) => (e.kind === 'link' ? e : { kind: 'stored', name: e.name })),
+      words: buttonState?.words ?? plan.words?.rest?.(1) ?? '',
+      draws: buttonState?.draws ?? plan.draws ?? {},
+      expiresAt: now + BUTTON_TTL_MS,
+    });
+    await sent.edit({ components: buildRows(sent.id, entries, null, componentEmoji) });
+  } catch (err) {
+    fail(errors, 'CANNOT_SEND', 'buttons', String(err?.code ?? ''));
+  }
 }
 
 async function deliver(payload, { message, member, guild, plan, triggerDeleted, send, errors }) {

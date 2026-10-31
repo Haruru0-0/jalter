@@ -1078,5 +1078,16 @@
   "autoresponder.argtype.user": "a member",
   "autoresponder.argtype.channel": "a channel",
   "autoresponder.argtype.role": "a role",
-  "autoresponder.argtype.color": "a color like #ff8800"
+  "autoresponder.argtype.color": "a color like #ff8800",
+  "autoresponder.press.expired": "This button has expired.",
+  "autoresponder.press.invoker": "Only the member who triggered this message can use this button.",
+  "autoresponder.press.pressed": "This button was already used.",
+  "autoresponder.press.locked": "Someone already pressed a button on this message, so its buttons are closed.",
+  "autoresponder.press.slow": "Slow down: wait a few seconds before pressing again.",
+  "autoresponder.press.gate": "You cannot use this button.",
+  "autoresponder.press.arg": "Missing or invalid word {n} from the original message (expected: {type}).",
+  "autoresponder.press.cooldown": "Slow down: you can use this button again in {seconds} seconds.",
+  "autoresponder.press.error": "Something went wrong with this button. Please try again.",
+  "autoresponder.run.BUTTON_MISSING": "A button used by the rule no longer exists, so it was left out.",
+  "autoresponder.test.buttons": "Buttons on the reply: {detail}"
 }

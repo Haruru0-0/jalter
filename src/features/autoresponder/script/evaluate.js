@@ -96,6 +96,7 @@ export function evaluate(compiled, ctx) {
   return {
     status: 'run', cooldown, text, flags: compiled.flags, actions,
     allowedUsers: allowedUsers(compiled.template, ctx, compiled, argResults),
+    ...(compiled.buttons?.length ? { buttons: compiled.buttons } : {}),
     ...(compiled.version >= 2 ? { v2: true, words, nickWords, draws, nickDraws } : {}),
   };
 }

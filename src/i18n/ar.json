@@ -1078,5 +1078,16 @@
   "autoresponder.argtype.user": "عضو",
   "autoresponder.argtype.channel": "قناة",
   "autoresponder.argtype.role": "رتبة",
-  "autoresponder.argtype.color": "لون مثل #ff8800"
+  "autoresponder.argtype.color": "لون مثل #ff8800",
+  "autoresponder.press.expired": "انتهت صلاحية هذا الزر.",
+  "autoresponder.press.invoker": "فقط العضو الذي أطلق هذه الرسالة يمكنه استخدام هذا الزر.",
+  "autoresponder.press.pressed": "تم استخدام هذا الزر من قبل.",
+  "autoresponder.press.locked": "ضغط شخص ما على زر في هذه الرسالة، لذلك أُغلقت أزرارها.",
+  "autoresponder.press.slow": "تمهّل: انتظر بضع ثوانٍ قبل الضغط مرة أخرى.",
+  "autoresponder.press.gate": "لا يمكنك استخدام هذا الزر.",
+  "autoresponder.press.arg": "الكلمة {n} من الرسالة الأصلية مفقودة أو غير صالحة (المتوقع: {type}).",
+  "autoresponder.press.cooldown": "تمهّل: يمكنك استخدام هذا الزر مجددًا بعد {seconds} ثانية.",
+  "autoresponder.press.error": "حدث خطأ مع هذا الزر. حاول مرة أخرى.",
+  "autoresponder.run.BUTTON_MISSING": "زر تستخدمه القاعدة لم يعد موجودًا، لذلك تم تجاهله.",
+  "autoresponder.test.buttons": "أزرار الرد: {detail}"
 }

@@ -47,6 +47,44 @@ export async function prepareRun({ compiled, rule, text, guild, rng = Math.rando
   return { words, nickWords, draws, nickDraws, argResults };
 }
 
+const DEFINES = {
+  range: (r) => Boolean(r?.ranges?.length),
+  choice: (r) => Boolean(r?.choosers?.length),
+  lockedchoice: (r) => Boolean(r?.locked?.length),
+};
+
+/**
+ * prepareRun for a button press: the words come from the text stored with the posted message (`wordsText`), not from
+ * a trigger. Every `argChecks` entry is checked again against the guild as it is now. Random values merge like this:
+ * a kind (range, choice, lockedchoice) the button script defines is drawn fresh now; a kind it does not define keeps
+ * the value stored with the original message (`storedDraws`, already rendered with the original words).
+ * No fast path: a button script reads stored draws even when it draws nothing itself.
+ */
+export async function prepareButtonRun({ compiled, wordsText, storedDraws, guild, rng = Math.random }) {
+  const typed = parseWords(wordsText ?? '');
+  const argResults = {};
+  for (const { n, type } of compiled.argChecks ?? []) {
+    argResults[n] = await checkArgType(type ?? null, typed.list[n - 1], guild);
+  }
+  const words = mentionCheckedUsers(typed, compiled.argChecks, argResults);
+  const nickWords = nicknameWords(typed, compiled.argChecks, argResults);
+  const own = drawRandom(compiled.random, rng);
+  const draws = { range: [], choice: [], lockedchoice: [], picked: own.picked };
+  const nickDraws = { range: [], choice: [], lockedchoice: [], picked: own.picked };
+  const renderWith = (w) => (v) => (typeof v === 'string' ? renderArgsInText(v, w) : v);
+  for (const kind of Object.keys(DEFINES)) {
+    if (DEFINES[kind](compiled.random)) {
+      draws[kind] = kind === 'range' ? own.range : own[kind].map(renderWith(words));
+      nickDraws[kind] = kind === 'range' ? own.range : own[kind].map(renderWith(nickWords));
+    } else {
+      const stored = Array.isArray(storedDraws?.[kind]) ? storedDraws[kind] : [];
+      draws[kind] = stored;
+      nickDraws[kind] = stored;
+    }
+  }
+  return { words, nickWords, draws, nickDraws, argResults };
+}
+
 // Argument tokens, random tokens and {placeholders} in one pass, so a value that was substituted is never scanned again.
 const TOKENS = /(\[\$(?:[1-9]|1\d|20)(?:\+|-(?:[1-9]|1\d|20))?\]|\[(?:range|choice|lockedchoice)[2-4]?\]|\{[a-z_]+\})/;
 const RAND = /^\[(range|choice|lockedchoice)([2-4])?\]$/;

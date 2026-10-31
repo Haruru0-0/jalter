@@ -14,6 +14,7 @@ import { compileScript, MAX_SCRIPT } from './script/compile.js';
 import { logAutoresponder } from './log.js';
 import { describeRunFor } from './dryrun.js';
 import { openBuilder, handleBuilder } from './builder/handlers.js';
+import { handlePress } from './buttons/press.js';
 
 const PREFIX = 'autoresponder';
 const MAX_ERROR_LINES = 10;
@@ -159,7 +160,7 @@ async function dryRun(interaction, ctx, lang) {
   lines.push(...await describeRunFor(lang, {
     compiled: rule.compiled, text: content, member: interaction.member, guild: interaction.guild,
     channel: interaction.channel, channelId: interaction.channelId, author: interaction.user,
-  }, { rule }));
+  }, { rule, db: ctx.db }));
   return interaction.reply(ephemeral(fitLines(lang, lines, MAX_REPLY)));
 }
 
@@ -218,6 +219,8 @@ async function submitModal(interaction, ctx, lang, kind, arg) {
 /** Routes every `autoresponder:*` component: the add and edit modal submissions. */
 async function handle(interaction, ctx) {
   const [, kind, action, arg] = interaction.customId.split(':');
+  // Member-facing: a press needs the feature on, not Manage Server, so it is routed before any guard.
+  if (kind === 'p') return handlePress(interaction, ctx);
   if (kind === 'b') return handleBuilder(interaction, ctx);
   if (kind !== 'm' || !interaction.isModalSubmit() || !['add', 'edit'].includes(action)) return;
   const lang = await guard(interaction, ctx, 'autoresponder');
