@@ -53,5 +53,9 @@ export function generateScript(d) {
   }
   for (const values of d.random.locked) calls.push(`{lockedchoose:${values.map(escapeArg).join('|')}}`);
   for (const c of d.argChecks) calls.push(c.type ? `{requirearg:${c.n}|${c.type}}` : `{requirearg:${c.n}}`);
+  for (const b of d.buttons ?? []) {
+    if (b.kind === 'link') calls.push(`{addlinkbutton:${[b.label, b.url, ...(b.emoji ? [b.emoji] : [])].map(escapeArg).join('|')}}`);
+    else calls.push(`{addbutton:${escapeArg(b.name)}}`);
+  }
   return [d.text, ...calls].join('\n');
 }

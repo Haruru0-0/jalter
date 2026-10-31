@@ -2,7 +2,7 @@
 // Draft = { trigger, matchMode, text, dest: 'reply'|'dm'|'channel', channelId, embed, deleteTrigger,
 //   deleteReplyAfter, silent, gates: Gate[], actions: Action[], mode: 'guided'|'script', scriptText,
 //   random: { ranges: [{min,max}], choosers: [{kind:'choose',options}|{kind:'weighted',weights}], locked: string[][] },
-//   argChecks: [{ n, type|null }] }  (role actions may carry target: number|null)
+//   argChecks: [{ n, type|null }], buttons: [{ kind: 'stored', name } | { kind: 'link', label, url, emoji }] }  (role actions may carry target: number|null)
 
 export function newDraft(matchMode = 'exact') {
   return {
@@ -19,6 +19,7 @@ export function newDraft(matchMode = 'exact') {
     actions: [],
     random: { ranges: [], choosers: [], locked: [] },
     argChecks: [],
+    buttons: [],
     mode: 'guided',
     scriptText: null,
   };
@@ -58,3 +59,7 @@ export function addRandom(d, list, item) {
 
 /** Removes entry `index` of one list ('ranges' | 'choosers' | 'locked'). */
 export const removeRandom = (d, field, index) => ({ ...d, random: { ...d.random, [field]: d.random[field].filter((_, i) => i !== index) } });
+
+export const addButton = (d, button) => ({ ...d, buttons: [...(d.buttons ?? []), button] });
+
+export const removeButton = (d, index) => ({ ...d, buttons: (d.buttons ?? []).filter((_, i) => i !== index) });

@@ -13,7 +13,7 @@ const CONTENT_LIMIT = 2000;
 const key = (k) => `autoresponder.builder.${k}`;
 
 // Later tasks insert their pages before `review`, which stays last.
-export const PAGES = ['basics', 'reply', 'conditions', 'actions', 'random', 'review'];
+export const PAGES = ['basics', 'reply', 'conditions', 'actions', 'random', 'buttons', 'review'];
 export const DESTINATIONS = ['reply', 'dm', 'channel'];
 
 export const GATE_KINDS = ['cooldown', 'requirerole', 'denyrole', 'requireperm', 'denyperm', 'requirechannel', 'denychannel', 'requireuser'];
@@ -37,6 +37,7 @@ export const PERMISSIONS = [
   'ManageWebhooks', 'CreateInstantInvite',
 ];
 const MAX_LABEL = 100;
+export const MAX_BUTTON_OPTIONS = 24; // the select holds 25; a rule carries at most 25 buttons
 export const MAX_EMBED_OPTIONS = 23; // the select holds 25: "no embed", "plain colour", then these
 
 /** autoresponder:b:<action>:<userId>:<panelId>[:<extra>] (well under Discord's 100 characters). */
@@ -165,6 +166,28 @@ export function randomTokens(random) {
   return [...list('range', random.ranges.length), ...list('choice', random.choosers.length), ...list('lockedchoice', random.locked.length)];
 }
 
+function buttonRows(lang, entry) {
+  const { userId, panelId, draft } = entry;
+  const id = (action) => builderId(action, userId, panelId);
+  const names = (entry.buttonNames ?? []).slice(0, MAX_BUTTON_OPTIONS);
+  const rows = [];
+  if (names.length) {
+    rows.push(row(pick(lang, id('pbtn'), 'ph.buttons', names.map((name, index) => ({ label: name.slice(0, MAX_LABEL), value: `n${index}` })))));
+  }
+  rows.push(row(btn(lang, id('blink'), 'btn.addlink', ButtonStyle.Primary)));
+  const added = (draft.buttons ?? []).slice(0, MAX_GATES);
+  if (added.length) {
+    rows.push(row(pick(lang, id('rmbtn'), 'ph.rmbutton', removeOptions(lang, 'buttons', added))));
+  }
+  return rows;
+}
+
+function buttonNote(lang, entry) {
+  const names = entry.buttonNames ?? [];
+  if (!names.length) return t(lang, key('buttons.none'));
+  return names.length > MAX_BUTTON_OPTIONS ? t(lang, key('buttons.more'), { shown: MAX_BUTTON_OPTIONS, total: names.length }) : null;
+}
+
 function pageRows(lang, entry, page) {
   const { userId, panelId, draft } = entry;
   const id = (action) => builderId(action, userId, panelId);
@@ -192,6 +215,7 @@ function pageRows(lang, entry, page) {
   if (page === 'conditions') return conditionRows(lang, entry);
   if (page === 'actions') return actionRows(lang, entry);
   if (page === 'random') return randomRows(lang, entry);
+  if (page === 'buttons') return buttonRows(lang, entry);
   const tail = [button(lang, id('save'), 'save', ButtonStyle.Success), button(lang, id('cancel'), 'cancel', ButtonStyle.Danger)];
   const head = [button(lang, id('btry'), 'try'), button(lang, id('bscript'), 'script')];
   // Script mode keeps Basics reachable for the trigger and match mode.
@@ -249,7 +273,7 @@ export function panelPayload(lang, entry) {
     PAGES.map((p) => ({ label: t(lang, key(`page.${p}`)), value: p })), page);
   const head = t(lang, key('head'), { page: t(lang, key(`page.${page}`)) });
   return {
-    content: fitLines(lang, [head, ...summaryLines(lang, entry.draft), ...(page === 'random' ? [randomNote(lang, entry.draft)] : [])], CONTENT_LIMIT),
+    content: fitLines(lang, [head, ...summaryLines(lang, entry.draft), ...(page === 'random' ? [randomNote(lang, entry.draft)] : []), ...(page === 'buttons' ? [buttonNote(lang, entry)].filter(Boolean) : [])], CONTENT_LIMIT),
     components: [row(nav), ...pageRows(lang, entry, page)],
     allowedMentions: { parse: [] },
   };

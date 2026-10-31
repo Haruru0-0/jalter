@@ -7,19 +7,20 @@ import { getLang, t } from '../../../i18n/index.js';
 import { fitLines } from '../../reactionroles/setup.js';
 import { createRule } from '../store.js';
 import { listEmbeds } from '../../embeds/store.js';
+import { listButtons } from '../buttons/store.js';
 import { invalidate } from '../cache.js';
 import { checkTrigger, matchRule, MATCH_MODES, MAX_TRIGGER_LENGTH } from '../match.js';
 import { describeRunFor } from '../dryrun.js';
 import { compileScript, MAX_SCRIPT } from '../script/compile.js';
 import { errorLines, log, withWarnings } from '../commands.js';
 import {
-  addAction, addArgCheck, addGate, addRandom, newDraft, patch, removeAction, removeArgCheck, removeGate, removeRandom, setArgType, setTrigger, toScriptMode,
+  addAction, addArgCheck, addButton, addGate, addRandom, newDraft, patch, removeAction, removeArgCheck, removeButton, removeGate, removeRandom, setArgType, setTrigger, toScriptMode,
 } from './draft.js';
 import { generateScript } from './generate.js';
 import { drafts } from './drafts.js';
 import {
   builderId, parseBuilderId, panelPayload, PAGES, DESTINATIONS,
-  GATE_KINDS, ACTION_KINDS, ROLE_ACTIONS, REACT_ACTIONS, ROLE_GATES, PERM_GATES, CHANNEL_GATES, MAX_PICK, MAX_GATES, PERMISSIONS, MAX_EMBED_OPTIONS,
+  GATE_KINDS, ACTION_KINDS, ROLE_ACTIONS, REACT_ACTIONS, ROLE_GATES, PERM_GATES, CHANNEL_GATES, MAX_PICK, MAX_GATES, PERMISSIONS, MAX_EMBED_OPTIONS, MAX_BUTTON_OPTIONS,
   COND_KINDS, ARG_KIND, ARG_TYPE_CHOICES, ARGTYPE_PREFIX, RANDOM_KINDS, argTypeTarget, userArgNumbers,
 } from './panel.js';
 
@@ -71,10 +72,12 @@ const textModal = (lang, customId, { name, title, label, style, max, required, v
 
 // ---- controls: each answers the interaction itself ----
 
-function nav(interaction, ctx, lang, entry) {
+async function nav(interaction, ctx, lang, entry) {
   const page = interaction.values?.[0];
   if (!PAGES.includes(page)) return noop(interaction, lang, entry);
-  const fresh = drafts.update(entry.panelId, { page, pending: null, target: null });
+  // The saved buttons are read when the page opens (like the embed picker); picks are by index into this list.
+  const buttonNames = page === 'buttons' ? (await listButtons(ctx.db, interaction.guildId)).map((b) => b.name) : null;
+  const fresh = drafts.update(entry.panelId, { page, pending: null, target: null, buttonNames });
   return fresh ? interaction.update(panelPayload(lang, fresh)) : refuse(interaction, lang, key('expired'));
 }
 
@@ -478,6 +481,44 @@ function submitDelReply(interaction, ctx, lang, entry) {
   return tryChange(interaction, ctx, lang, entry, patch(entry.draft, { deleteReplyAfter: seconds || null }), redraw(interaction, lang));
 }
 
+// ---- buttons: saved buttons by name, link buttons by modal ----
+
+function pickStoredButton(interaction, ctx, lang, entry) {
+  if (entry.page !== 'buttons') return noop(interaction, lang, entry);
+  const value = interaction.values?.[0] ?? '';
+  const index = /^n(\d{1,2})$/.test(value) ? Number(value.slice(1)) : -1;
+  const name = index >= 0 && index < MAX_BUTTON_OPTIONS ? entry.buttonNames?.[index] : undefined;
+  if (!name) return noop(interaction, lang, entry);
+  return tryChange(interaction, ctx, lang, entry, addButton(entry.draft, { kind: 'stored', name }), redraw(interaction, lang));
+}
+
+function linkButton(interaction, ctx, lang, entry) {
+  if (entry.page !== 'buttons') return noop(interaction, lang, entry);
+  const field = (name, label, max, required) => new ActionRowBuilder().addComponents(
+    new TextInputBuilder().setCustomId(name).setLabel(t(lang, key(label))).setStyle(TextInputStyle.Short).setMaxLength(max).setRequired(required));
+  return interaction.showModal(new ModalBuilder().setCustomId(builderId('mlink', entry.userId, entry.panelId))
+    .setTitle(t(lang, key('modal.link')))
+    .addComponents(field('label', 'input.linklabel', 80, true), field('url', 'input.linkurl', 512, true), field('emoji', 'input.linkemoji', 64, false)));
+}
+
+function submitLink(interaction, ctx, lang, entry) {
+  const label = interaction.fields.getTextInputValue('label').trim();
+  const url = interaction.fields.getTextInputValue('url').trim();
+  const emoji = (interaction.fields.getTextInputValue('emoji') ?? '').trim();
+  if ([label, url, emoji].some(hasBrace)) return refuse(interaction, lang, key('noBrace'));
+  // The pipe separates the arguments of the call, so it cannot be part of one.
+  if ([label, url, emoji].some((v) => v.includes('|'))) return refuse(interaction, lang, key('noPipe'));
+  if (label === '') return badInput(interaction, lang, 'BAD_ARGUMENT', label);
+  return tryChange(interaction, ctx, lang, entry, addButton(entry.draft, { kind: 'link', label, url, emoji: emoji || null }), redraw(interaction, lang));
+}
+
+function removeButtonAt(interaction, ctx, lang, entry) {
+  const raw = interaction.values?.[0];
+  const index = /^\d{1,2}$/.test(raw ?? '') ? Number(raw) : -1;
+  if (index < 0 || index >= (entry.draft.buttons ?? []).length) return noop(interaction, lang, entry);
+  return tryChange(interaction, ctx, lang, entry, removeButton(entry.draft, index), redraw(interaction, lang));
+}
+
 // ---- Try it: a dry run of the draft against a sample message. Reads only; nothing is written or sent. ----
 
 function tryButton(interaction, ctx, lang, entry) {
@@ -580,6 +621,7 @@ const ACTIONS = {
   bargn: argNumberButton, margn: modalOnly(submitArgNumber), parg: pickArgType, tgt: pickTarget,
   rnd: pickRandomKind, mrange: modalOnly(submitRange), mchoose: modalOnly(submitChoose), mweighted: modalOnly(submitWeighted),
   mlocked: modalOnly(submitLocked), rmrnd: removeRandomAt,
+  pbtn: pickStoredButton, blink: linkButton, mlink: modalOnly(submitLink), rmbtn: removeButtonAt,
   act, bnick: nickButton, bemoji: emojiButton, mnick: modalOnly(submitNick), memoji: modalOnly(submitEmoji), rmact: removeActionAt,
 };
 

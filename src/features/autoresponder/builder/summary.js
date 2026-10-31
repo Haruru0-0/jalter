@@ -4,6 +4,7 @@ import { t } from '../../../i18n/index.js';
 const key = (k) => `autoresponder.builder.${k}`;
 const oneLine = (s) => String(s).replace(/\s+/g, ' ');
 const MAX_TEXT_SHOWN = 200;
+const MAX_URL_SHOWN = 60;
 
 const mention = {
   requirerole: (id) => `<@&${id}>`, denyrole: (id) => `<@&${id}>`, addrole: (id) => `<@&${id}>`, removerole: (id) => `<@&${id}>`,
@@ -56,6 +57,11 @@ export function summaryLines(lang, d) {
       : t(lang, key('sum.choose'), { value: c.options.map(oneLine).join(', ') }));
   }
   for (const values of random.locked) lines.push(t(lang, key('sum.locked'), { value: values.map(oneLine).join(', ') }));
+  for (const b of d.buttons ?? []) {
+    lines.push(b.kind === 'link'
+      ? t(lang, key('sum.addlinkbutton'), { value: `${oneLine(b.label)} (${oneLine(b.url).slice(0, MAX_URL_SHOWN)}${b.emoji ? `, ${b.emoji}` : ''})` })
+      : t(lang, key('sum.addbutton'), { value: b.name }));
+  }
   if (d.deleteTrigger && d.actions.some((a) => a.fn === 'react')) lines.push(t(lang, key('sum.note.deleteReact')));
   return lines;
 }

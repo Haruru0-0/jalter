@@ -15,7 +15,7 @@ const gen = (over) => generateScript({ ...newDraft(), text: 'hi', ...over });
 test('newDraft defaults', () => {
   assert.deepEqual(newDraft(), {
     trigger: '', matchMode: 'exact', text: '', dest: 'reply', channelId: null, embed: null,
-    deleteTrigger: false, deleteReplyAfter: null, silent: false, gates: [], actions: [], random: { ranges: [], choosers: [], locked: [] }, argChecks: [], mode: 'guided', scriptText: null,
+    deleteTrigger: false, deleteReplyAfter: null, silent: false, gates: [], actions: [], random: { ranges: [], choosers: [], locked: [] }, argChecks: [], buttons: [], mode: 'guided', scriptText: null,
   });
   assert.equal(newDraft('contains').matchMode, 'contains');
 });

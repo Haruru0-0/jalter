@@ -94,7 +94,7 @@ async function start(mode = 'startswith') {
 }
 
 test('PAGES has random after actions and before review', () => {
-  assert.deepEqual(PAGES, ['basics', 'reply', 'conditions', 'actions', 'random', 'review']);
+  assert.deepEqual(PAGES, ['basics', 'reply', 'conditions', 'actions', 'random', 'buttons', 'review']);
 });
 
 test('the new pages and views stay within 5 rows, 25 options and 100 character ids in every language', () => {

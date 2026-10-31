@@ -101,7 +101,7 @@ const refusedWith = (i, code, detail) =>
   assert.ok(last(i)[1].content.includes(t('en', `autoresponder.error.${code}`, detail ? { detail: `"${detail}"` } : {})), `${code}: ${last(i)[1]?.content}`);
 
 test('PAGES has conditions then actions before review', () => {
-  assert.deepEqual(PAGES.slice(2), ['conditions', 'actions', 'random', 'review']);
+  assert.deepEqual(PAGES.slice(2), ['conditions', 'actions', 'random', 'buttons', 'review']);
 });
 
 test('the actions page stays within 5 rows, 25 options and 100 character ids in every state and language', () => {

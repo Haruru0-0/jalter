@@ -85,5 +85,5 @@ test('stage 2: the new compile and run-time error codes are listed', () => {
 });
 
 test('stage 2: the builder pages end with random and review', () => {
-  assert.deepEqual(PAGES.slice(-2), ['random', 'review']);
+  assert.deepEqual(PAGES.slice(-3), ['random', 'buttons', 'review']);
 });
