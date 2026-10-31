@@ -166,9 +166,12 @@ const reactAction = (fn) => ({
 });
 
 // Attaching a stored button hands its role actions to whoever saves the script, so they are checked against that saver
-// as if typed here. Only the button's own actions: a button it chains to was checked when that button was saved.
-// A role that no longer exists is left to the press (it fails there as a missing role).
-function attachedRoleError(guild, writer, button) {
+// as if typed here. The check follows the buttons it attaches in turn, breadth first, each distinct button read once
+// (cycles end on the visited set). A role that no longer exists is left to the press (it fails there as a missing role)
+// and a stored button that no longer exists is skipped. A button edited after this save is not re-checked.
+export const MAX_CHAIN_BUTTONS = 25;
+
+function buttonRoleError(guild, writer, button) {
   for (const a of button.compiled?.actions ?? []) {
     if (a.fn !== 'addrole' && a.fn !== 'removerole') continue;
     const role = guild.roles?.cache?.get(a.roleId);
@@ -176,6 +179,24 @@ function attachedRoleError(guild, writer, button) {
     if (isDangerousRole(role)) return { code: 'ROLE_DANGEROUS', detail: button.name };
     if (!botCanGive(guild, role)) return { code: 'ROLE_ABOVE_BOT', detail: button.name };
     if (!callerCanGive(guild, writer, role)) return { code: 'ROLE_ABOVE_YOU', detail: button.name };
+  }
+  return null;
+}
+
+async function attachedRoleError(db, guild, writer, button) {
+  const visited = new Set([button.name]);
+  const queue = [button];
+  for (let i = 0; i < queue.length; i++) {
+    const refused = buttonRoleError(guild, writer, queue[i]);
+    if (refused) return refused;
+    for (const next of queue[i].compiled?.buttons ?? []) {
+      if (next.kind !== 'stored' || visited.has(next.name)) continue;
+      visited.add(next.name);
+      const found = await getButton(db, guild.id, next.name);
+      if (!found) continue;
+      if (queue.length >= MAX_CHAIN_BUTTONS) return { code: 'BUTTON_CHAIN_TOO_LONG', detail: button.name };
+      queue.push(found);
+    }
   }
   return null;
 }
@@ -355,7 +376,7 @@ export const FUNCTIONS = {
       if (!isButtonName(name)) return [{ code: 'BUTTON_NAME_INVALID', detail: name }];
       const found = await getButton(db, guild.id, name);
       if (!found) return [{ code: 'BUTTON_NOT_FOUND', detail: name }];
-      const refused = attachedRoleError(guild, writer, found);
+      const refused = await attachedRoleError(db, guild, writer, found);
       if (refused) return [refused];
       acc.buttons.push({ kind: 'stored', name });
       acc.buttonPos ??= acc.pos;

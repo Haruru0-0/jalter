@@ -884,6 +884,7 @@
   "autoresponder.error.BUTTONS_NEED_CHANNEL": "Les boutons ont besoin d'un message dans un salon, ils ne peuvent donc pas être utilisés avec dm",
   "autoresponder.error.BUTTONS_NEED_TEXT": "Les boutons ont besoin de texte ou d'un embed dans la réponse",
   "autoresponder.error.BUTTON_NAME_INVALID": "Nom de bouton invalide {detail}",
+  "autoresponder.error.BUTTON_CHAIN_TOO_LONG": "Les boutons attachés s'enchaînent sur trop d'autres boutons (plus de 25), à partir de {detail}",
   "autoresponder.warning.ARGS_EMPTY_IN_MODE": "Note : ce mode de correspondance n'a pas de mots après le déclencheur, donc [$1] et les formes semblables seront vides.",
   "autoresponder.test.none": "Aucune règle ne correspond à ce message.",
   "autoresponder.test.rule": "La règle {id} répondrait : {trigger} ({mode})",

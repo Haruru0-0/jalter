@@ -884,6 +884,7 @@
   "autoresponder.error.BUTTONS_NEED_CHANNEL": "Buttons need a message in a channel, so they cannot be used with dm",
   "autoresponder.error.BUTTONS_NEED_TEXT": "Buttons need some text or an embed in the reply",
   "autoresponder.error.BUTTON_NAME_INVALID": "Invalid button name {detail}",
+  "autoresponder.error.BUTTON_CHAIN_TOO_LONG": "The attached buttons chain through too many other buttons (more than 25), starting from {detail}",
   "autoresponder.warning.ARGS_EMPTY_IN_MODE": "Note: this match mode has no words after the trigger, so [$1] and similar will be empty.",
   "autoresponder.test.none": "No rule matches that message.",
   "autoresponder.test.rule": "Rule {id} would answer: {trigger} ({mode})",

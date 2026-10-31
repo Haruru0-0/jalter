@@ -224,3 +224,99 @@ test('an attached button whose role is gone is skipped; a dangerous or above-bot
   const high = roleGuild([role({ position: 12 })]);
   assert.deepEqual(codes(await comp('Hi {addbutton:modrole}', { guild: high, writer: writerAt(15) })), ['ROLE_ABOVE_BOT']);
 });
+
+// Chained buttons: attaching a button also checks the roles of every stored button it attaches, to any depth.
+const chainButton = async (name, attached, actions = []) => createButton(db, {
+  guildId: G, name, label: name, style: 'grey', script: 'x',
+  compiled: { version: 2, template: [{ t: 'text', v: 'x' }], gates: [], actions, flags: {}, buttons: attached.map((n) => ({ kind: 'stored', name: n })) },
+  createdBy: id(1),
+});
+const giveMod = [{ fn: 'addrole', roleId: MOD, raw: 'Mod', target: null }];
+const detailsOf = (r) => r.errors.map((e) => [e.code, e.detail]);
+
+test('a wrapper button that attaches an admin role button is checked against the saver', async () => {
+  await roleButton('adm', giveMod);
+  await chainButton('adm2', ['adm']);
+  const g = roleGuild([role()]);
+  assert.deepEqual(detailsOf(await comp('Hi {addbutton:adm2}', { guild: g, writer: writerAt(3) })), [['ROLE_ABOVE_YOU', 'adm']]);
+  assert.deepEqual(codes(await comp('Hi {addbutton:adm2}', { guild: g, writer: writerAt(3), buttonScript: true })), ['ROLE_ABOVE_YOU']);
+  assert.equal((await comp('Hi {addbutton:adm2}', { guild: g, writer: writerAt(6) })).ok, true);
+  assert.equal((await comp('Hi {addbutton:adm2}', { guild: g, writer: writerAt(1, id(700)) })).ok, true);
+});
+
+test('a three-level chain is checked down to the last button, removerole included', async () => {
+  await roleButton('c', giveMod);
+  await chainButton('bb', ['c']);
+  await chainButton('a2', ['bb']);
+  await roleButton('r', [{ fn: 'removerole', roleId: MOD, raw: 'Mod', target: null }]);
+  await chainButton('w', ['r']);
+  await chainButton('w2', ['w']);
+  const g = roleGuild([role()]);
+  assert.deepEqual(detailsOf(await comp('Hi {addbutton:a2}', { guild: g, writer: writerAt(3) })), [['ROLE_ABOVE_YOU', 'c']]);
+  assert.deepEqual(detailsOf(await comp('Hi {addbutton:w2}', { guild: g, writer: writerAt(3) })), [['ROLE_ABOVE_YOU', 'r']]);
+  assert.equal((await comp('Hi {addbutton:a2}', { guild: g, writer: writerAt(6) })).ok, true);
+});
+
+test('a dangerous role or one above the bot deep in the chain is refused with the same codes', async () => {
+  await roleButton('modrole', giveMod);
+  await chainButton('top', ['modrole']);
+  const danger = roleGuild([role({ permissions: { has: (p) => p === 'Administrator' } })]);
+  assert.deepEqual(detailsOf(await comp('Hi {addbutton:top}', { guild: danger, writer: writerAt(15) })), [['ROLE_DANGEROUS', 'modrole']]);
+  const high = roleGuild([role({ position: 12 })]);
+  assert.deepEqual(detailsOf(await comp('Hi {addbutton:top}', { guild: high, writer: writerAt(15) })), [['ROLE_ABOVE_BOT', 'modrole']]);
+});
+
+test('a cycle terminates: it compiles when the role is allowed and is refused when it is not', async () => {
+  await chainButton('ca', ['cb']);
+  await chainButton('cb', ['ca'], giveMod);
+  const g = roleGuild([role()]);
+  assert.equal((await comp('Hi {addbutton:ca}', { guild: g, writer: writerAt(6) })).ok, true);
+  assert.deepEqual(detailsOf(await comp('Hi {addbutton:ca}', { guild: g, writer: writerAt(3) })), [['ROLE_ABOVE_YOU', 'cb']]);
+  await chainButton('me', ['me']);
+  assert.equal((await comp('Hi {addbutton:me}', { guild: g, writer: writerAt(0) })).ok, true);
+});
+
+test('a missing intermediate stored button is skipped', async () => {
+  await chainButton('gone', ['ghost', 'x']);
+  assert.equal((await comp('Hi {addbutton:gone}', { guild: roleGuild([role()]), writer: writerAt(0) })).ok, true);
+});
+
+test('a chain of 25 distinct buttons is fully checked; 26 is BUTTON_CHAIN_TOO_LONG', async () => {
+  const g = roleGuild([role()]);
+  const chain = async (p, count) => {
+    for (let i = 1; i <= count; i++) await chainButton(`${p}${i}`, i < count ? [`${p}${i + 1}`] : [], i === count ? giveMod : []);
+  };
+  await chain('n', 25);
+  assert.deepEqual(detailsOf(await comp('Hi {addbutton:n1}', { guild: g, writer: writerAt(3) })), [['ROLE_ABOVE_YOU', 'n25']]);
+  assert.equal((await comp('Hi {addbutton:n1}', { guild: g, writer: writerAt(6) })).ok, true);
+  await resetDb(db); // the server holds at most 50 buttons
+  await chain('m', 26);
+  assert.deepEqual(detailsOf(await comp('Hi {addbutton:m1}', { guild: g, writer: writerAt(6) })), [['BUTTON_CHAIN_TOO_LONG', 'm1']]);
+});
+
+test('each distinct button in a chain is read once, even with a cycle and a shared descendant', async () => {
+  await chainButton('leaf', ['top2']);
+  await chainButton('l', ['leaf']);
+  await chainButton('r2', ['leaf']);
+  await chainButton('top2', ['l', 'r2']);
+  let reads = 0;
+  const spy = { query: (...a) => { if (String(a[0]).includes('autoresponder_buttons')) reads++; return db.query(...a); } };
+  const r = await comp('Hi {addbutton:top2}', { db: spy, guild: roleGuild([role()]), writer: writerAt(6) });
+  assert.equal(r.ok, true);
+  assert.equal(reads, 4);
+});
+
+test('a script without addbutton reads no buttons', async () => {
+  let reads = 0;
+  const spy = { query: (...a) => { if (String(a[0]).includes('autoresponder_buttons')) reads++; return db.query(...a); } };
+  assert.equal((await comp('Hello', { db: spy })).ok, true);
+  assert.equal(reads, 0);
+});
+
+test('BUTTON_CHAIN_TOO_LONG is a compile error code with en, fr and ar text', () => {
+  assert.ok(COMPILE_ERROR_CODES.includes('BUTTON_CHAIN_TOO_LONG'));
+  for (const lang of ['en', 'fr', 'ar']) {
+    const text = t(lang, 'autoresponder.error.BUTTON_CHAIN_TOO_LONG', { detail: 'rules' });
+    assert.ok(text && !text.includes('autoresponder.error'), lang);
+  }
+});

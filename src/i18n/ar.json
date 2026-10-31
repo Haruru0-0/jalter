@@ -884,6 +884,7 @@
   "autoresponder.error.BUTTONS_NEED_CHANNEL": "الأزرار تحتاج إلى رسالة في قناة، لذا لا يمكن استخدامها مع dm",
   "autoresponder.error.BUTTONS_NEED_TEXT": "الأزرار تحتاج إلى نص أو embed في الرد",
   "autoresponder.error.BUTTON_NAME_INVALID": "اسم الزر غير صالح {detail}",
+  "autoresponder.error.BUTTON_CHAIN_TOO_LONG": "سلسلة الأزرار المرفقة تمر عبر أزرار كثيرة جدا (أكثر من 25) بدءا من {detail}",
   "autoresponder.warning.ARGS_EMPTY_IN_MODE": "ملاحظة: وضع المطابقة هذا ليس فيه كلمات بعد الكلمة المحفزة، لذلك ستكون [$1] وما يشبهها فارغة.",
   "autoresponder.test.none": "لا توجد قاعدة تطابق هذه الرسالة.",
   "autoresponder.test.rule": "ستردّ القاعدة {id}: {trigger} ({mode})",
