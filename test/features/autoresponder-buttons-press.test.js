@@ -141,7 +141,7 @@ test('a rule without buttons makes no database call and no extra Discord call', 
   let queries = 0;
   const spy = { query: async (...a) => { queries += 1; return db.query(...a); }, connect: async () => { queries += 1; return db.connect(); } };
   const w = sendWorld();
-  const res = await executePlan(spy, { rule: { id: 1 }, message: w.message, member: w.member, lang: 'en', vars: {}, plan: sendPlan() }, {});
+  const res = await executePlan({ db: spy }, { rule: { id: 1 }, message: w.message, member: w.member, lang: 'en', vars: {}, plan: sendPlan() }, {});
   assert.equal(queries, 0);
   assert.equal(w.log.edits.length, 0);
   assert.equal(res.sent.id, 'S1');
@@ -490,4 +490,68 @@ test('all new keys exist in en, fr and ar', () => {
   const keys = ['expired', 'invoker', 'pressed', 'locked', 'slow', 'gate', 'arg', 'cooldown', 'error'].map((k) => `autoresponder.press.${k}`);
   keys.push('autoresponder.run.BUTTON_MISSING', 'autoresponder.test.buttons');
   for (const lang of [en, fr, ar]) for (const k of keys) assert.ok(lang[k], k);
+});
+
+// ---------- fix round 1: gates are answered before anything is claimed ----------
+
+const gated = (limitations) => ({ limitations, compiled: comp({ gates: [{ fn: 'requirerole', roleIds: ['R9'] }] }) });
+
+for (const limitations of ['limited', 'strict']) {
+  test(`${limitations}: a failed gate claims nothing and leaves the buttons alone; a member with the role then presses`, async () => {
+    await seed({ buttons: [gated(limitations), {}] });
+    const without = pressWorld({ userId: 'p2' });
+    await without.interact(id(0));
+    assert.equal(without.calls.follow[0].content, press('gate'));
+    assert.deepEqual(without.calls.edits, []);
+    noEffects(without);
+    const rec = await getMessageRecord(db, '1001');
+    assert.equal(rec.locked, false);
+    assert.deepEqual(rec.pressed, []);
+    const withRole = pressWorld({ memberRoles: ['R9'] });
+    await withRole.interact(id(0));
+    assert.equal(withRole.calls.replies.length, 1);
+    assert.equal(withRole.calls.edits.length, 1);
+  });
+}
+
+test('a failed requirearg (stored user left) claims nothing', async () => {
+  await seed({ buttons: [{ ...argButton(), limitations: 'strict' }], record: { words: U1 } });
+  const gone = pressWorld({ known: [] });
+  await gone.interact(id(0));
+  assert.equal(gone.calls.follow[0].content, press('arg', { n: '1', type: t('en', 'autoresponder.argtype.user') }));
+  assert.deepEqual(gone.calls.edits, []);
+  assert.equal((await getMessageRecord(db, '1001')).locked, false);
+  const ok = pressWorld({ known: [U1] });
+  await ok.interact(id(0));
+  assert.equal(ok.calls.replies.length, 1);
+});
+
+test('a successful press still claims exactly once under Promise.all', async () => {
+  await seed({ buttons: [{ limitations: 'strict' }] });
+  const ws = ['p1', 'p2', 'p3'].map((u) => pressWorld({ userId: u }));
+  await Promise.all(ws.map((w) => w.interact(id(0))));
+  assert.equal(ws.reduce((n, w) => n + w.calls.replies.length, 0), 1);
+  assert.equal(ws.reduce((n, w) => n + w.calls.follow.length, 0), 2);
+});
+
+test('a press whose message or channel does not match the record answers expired', async () => {
+  await seed();
+  const w = pressWorld();
+  await w.interact(id(0), { message: { ...w.message, id: '999' } });
+  await w.interact(id(0), { channelId: 'other' });
+  assert.deepEqual(w.calls.follow.map((f) => f.content), [press('expired'), press('expired')]);
+  noEffects(w);
+});
+
+test('a non-invoker pressing an invoker_only button twice is throttled; the invoker is unaffected', async () => {
+  await seed({ buttons: [{ invokerOnly: true }] });
+  const throttle = createPressThrottle(3000);
+  const deps = { throttle, now: () => 5000 };
+  const other = pressWorld({ userId: 'p2' });
+  await other.interact(id(0), { deps });
+  await other.interact(id(0), { deps });
+  assert.deepEqual(other.calls.follow.map((f) => f.content), [press('invoker'), press('slow')]);
+  const inv = pressWorld({ userId: 'inv' });
+  await inv.interact(id(0), { deps });
+  assert.equal(inv.calls.replies.length, 1);
 });

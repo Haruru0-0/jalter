@@ -85,7 +85,9 @@ export function createPressThrottle(everyMs = 3000) {
 /** Pure: may this presser go ahead? The record and button are already loaded. */
 export function pressDecision({ record, button, presserId, now, throttle }) {
   if (record.expiresAt <= now) return { ok: false, reason: 'expired' };
-  if (button?.invokerOnly && presserId !== record.invokerId) return { ok: false, reason: 'invoker' };
+  // The throttle is per presser and comes first: a non-invoker cannot spam an invoker_only button, and the
+  // invoker's own throttle is never touched by someone else's refused press.
   if (throttle && !throttle.check(record.messageId, presserId, now)) return { ok: false, reason: 'slow' };
+  if (button?.invokerOnly && presserId !== record.invokerId) return { ok: false, reason: 'invoker' };
   return { ok: true };
 }

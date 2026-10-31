@@ -120,11 +120,13 @@ test('pressDecision: throttle per presser per message', () => {
   assert.deepEqual(press('m1', 'u1', 4000), { ok: true });
 });
 
-test('pressDecision: a refused invoker press does not start the throttle', () => {
+test('pressDecision: a refused non-invoker is throttled, and never affects the invoker throttle', () => {
   const t = createPressThrottle(3000);
   const record = { messageId: 'm', invokerId: 'u1', expiresAt: 1e12 };
-  pressDecision({ record, button: { invokerOnly: true }, presserId: 'u2', now: 1000, throttle: t });
-  assert.deepEqual(pressDecision({ record, button: { invokerOnly: false }, presserId: 'u2', now: 1001, throttle: t }), { ok: true });
+  const btn = { invokerOnly: true };
+  assert.deepEqual(pressDecision({ record, button: btn, presserId: 'u2', now: 1000, throttle: t }), { ok: false, reason: 'invoker' });
+  assert.deepEqual(pressDecision({ record, button: btn, presserId: 'u2', now: 1001, throttle: t }), { ok: false, reason: 'slow' });
+  assert.deepEqual(pressDecision({ record, button: btn, presserId: 'u1', now: 1002, throttle: t }), { ok: true });
 });
 
 test('createPressThrottle is bounded', () => {

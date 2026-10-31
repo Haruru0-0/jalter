@@ -78,6 +78,9 @@ async function press(interaction, ctx, deps, lang, say) {
   if (!(await isEnabled(ctx.db, guildId, 'autoresponder'))) return say('expired');
   const record = await (deps.getMessageRecord ?? getMessageRecord)(ctx.db, parsed.messageId, now);
   if (!record || record.guildId !== guildId) return say('expired');
+  // Defence in depth: the id must belong to the message and channel the press came from.
+  if (interaction.message?.id !== parsed.messageId) return say('expired');
+  if (interaction.channelId && record.channelId && interaction.channelId !== record.channelId) return say('expired');
   const rule = await getRule(ctx.db, guildId, record.ruleId);
   if (!rule || !rule.enabled) return say('expired');
   // parseButtonId does not bound the index; a link entry has no custom id, so only a stored one can be pressed.
@@ -88,15 +91,6 @@ async function press(interaction, ctx, deps, lang, say) {
 
   const decision = pressDecision({ record, button, presserId: presser.id, now, throttle: deps.throttle ?? defaultThrottle });
   if (!decision.ok) return say(decision.reason);
-
-  const claim = await claimPress(ctx.db, record.messageId, parsed.index, button.limitations, now);
-  if (!claim.ok) {
-    if (claim.reason === 'gone') return say('expired');
-    await say(claim.reason);
-    await refreshButtons(interaction, ctx, record.messageId, deps, now);
-    return;
-  }
-  if (button.limitations !== 'none') await refreshButtons(interaction, ctx, record.messageId, deps, now);
 
   const guild = interaction.guild;
   const member = interaction.member?.roles?.cache ? interaction.member : await guild.members.fetch(presser.id);
@@ -112,6 +106,18 @@ async function press(interaction, ctx, deps, lang, say) {
     if (plan.gate === 'arg') return say('arg', { n: String(plan.arg.n), type: t(lang, `autoresponder.argtype.${plan.arg.type ?? 'word'}`) });
     return say('gate');
   }
+
+  // Gates and word checks are read-only, so they are answered before anything is claimed: a member who fails them
+  // must not use up a limited button or lock a strict message for everyone.
+  const claim = await claimPress(ctx.db, record.messageId, parsed.index, button.limitations, now);
+  if (!claim.ok) {
+    if (claim.reason === 'gone') return say('expired');
+    await say(claim.reason);
+    await refreshButtons(interaction, ctx, record.messageId, deps, now);
+    return;
+  }
+  if (button.limitations !== 'none') await refreshButtons(interaction, ctx, record.messageId, deps, now);
+
   if (plan.cooldown) {
     let claimed;
     try {
