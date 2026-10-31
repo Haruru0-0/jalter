@@ -165,6 +165,21 @@ const reactAction = (fn) => ({
   },
 });
 
+// Attaching a stored button hands its role actions to whoever saves the script, so they are checked against that saver
+// as if typed here. Only the button's own actions: a button it chains to was checked when that button was saved.
+// A role that no longer exists is left to the press (it fails there as a missing role).
+function attachedRoleError(guild, writer, button) {
+  for (const a of button.compiled?.actions ?? []) {
+    if (a.fn !== 'addrole' && a.fn !== 'removerole') continue;
+    const role = guild.roles?.cache?.get(a.roleId);
+    if (!role) continue;
+    if (isDangerousRole(role)) return { code: 'ROLE_DANGEROUS', detail: button.name };
+    if (!botCanGive(guild, role)) return { code: 'ROLE_ABOVE_BOT', detail: button.name };
+    if (!callerCanGive(guild, writer, role)) return { code: 'ROLE_ABOVE_YOU', detail: button.name };
+  }
+  return null;
+}
+
 const RANGE_RE = /^(-?\d+)-(-?\d+)$/;
 const WEIGHT_RE = /^(\d+(?:\.\d+)?)%$/;
 const ARG_N_RE = /^(?:[1-9]|1\d|20)$/;
@@ -334,11 +349,14 @@ export const FUNCTIONS = {
   addbutton: {
     min: 1,
     max: 1,
-    async check(args, { db, guild }, acc) {
+    async check(args, { db, guild, writer }, acc) {
       if (acc.buttons.length >= MAX_SCRIPT_BUTTONS) return [{ code: 'TOO_MANY_BUTTONS', detail: String(MAX_SCRIPT_BUTTONS) }];
       const name = args[0];
       if (!isButtonName(name)) return [{ code: 'BUTTON_NAME_INVALID', detail: name }];
-      if (!(await getButton(db, guild.id, name))) return [{ code: 'BUTTON_NOT_FOUND', detail: name }];
+      const found = await getButton(db, guild.id, name);
+      if (!found) return [{ code: 'BUTTON_NOT_FOUND', detail: name }];
+      const refused = attachedRoleError(guild, writer, found);
+      if (refused) return [refused];
       acc.buttons.push({ kind: 'stored', name });
       acc.buttonPos ??= acc.pos;
       return [];

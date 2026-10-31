@@ -321,3 +321,16 @@ test('every button text exists in en, fr and ar, within modal limits', () => {
     }
   }
 });
+
+test('button add refuses to attach a button whose role the saver cannot give, and stores nothing', async () => {
+  const env = setup();
+  env.guild.roles.cache.set('333333333333333333', { id: '333333333333333333', name: 'Mod', position: 8, managed: false, permissions: { has: () => false } });
+  await on();
+  await createButton(db, { ...stored, name: 'modrole', compiled: { version: 2, template: [{ t: 'text', v: 'x' }], gates: [], actions: [{ fn: 'addrole', roleId: '333333333333333333', raw: 'Mod', target: null }], flags: {} } });
+  const i = await send(env, 'autoresponder:m:btnadd:mine:blue:0n', { label: 'Mine', script: 'Get it {addbutton:modrole}' });
+  assert.ok(text(i).includes(t('en', 'autoresponder.error.ROLE_ABOVE_YOU', { detail: '"modrole"' })), text(i));
+  assert.equal(await getButton(db, G, 'mine'), null);
+  env.member.roles.highest.position = 9;
+  const ok = await send(env, 'autoresponder:m:btnadd:mine:blue:0n', { label: 'Mine', script: 'Get it {addbutton:modrole}' });
+  assert.equal(text(ok), t('en', 'autoresponder.button.created', { name: 'mine' }));
+});

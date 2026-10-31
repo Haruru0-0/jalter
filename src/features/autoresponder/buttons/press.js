@@ -40,7 +40,7 @@ async function refreshButtons(interaction, ctx, messageId, deps, now) {
   try {
     const fresh = await (deps.getMessageRecord ?? getMessageRecord)(ctx.db, messageId, now);
     if (!fresh) return;
-    await interaction.editReply({ components: await renderRows(ctx, fresh, deps) });
+    await interaction.editReply({ components: await renderRows(ctx, fresh, deps), allowedMentions: { parse: [] } });
   } catch (err) {
     console.warn(`Autoresponder could not update the buttons: ${err?.message ?? err}`);
   }

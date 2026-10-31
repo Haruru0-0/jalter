@@ -11,6 +11,8 @@ import { createPressThrottle } from '../../src/features/autoresponder/buttons/mo
 import { executePlan, RUN_ERROR_CODES } from '../../src/features/autoresponder/execute.js';
 import { handlePress } from '../../src/features/autoresponder/buttons/press.js';
 import { evaluate } from '../../src/features/autoresponder/script/evaluate.js';
+import { prepareRun } from '../../src/features/autoresponder/script/run.js';
+import { compileScript } from '../../src/features/autoresponder/script/compile.js';
 import { describeRun } from '../../src/features/autoresponder/dryrun.js';
 import { createAutoresponderCommand } from '../../src/features/autoresponder/commands.js';
 import en from '../../src/i18n/en.json' with { type: 'json' };
@@ -554,4 +556,58 @@ test('a non-invoker pressing an invoker_only button twice is throttled; the invo
   const inv = pressWorld({ userId: 'inv' });
   await inv.interact(id(0), { deps });
   assert.equal(inv.calls.replies.length, 1);
+});
+
+// ---------- stage 3 follow-up: stored words, allowedMentions on component edits ----------
+
+test('end to end: a rule that reads no words but carries a button stores the words, and the button uses them on press', async () => {
+  const world = pressWorld({ known: [U1] });
+  const cg = { ...world.guild, roles: { cache: new Map() }, channels: { cache: new Map() } };
+  const btn = await compileScript('hug [$1]{requirearg:1|user}', { db, guild: cg, writer: { id: 'w' }, buttonScript: true });
+  assert.equal(btn.ok, true);
+  await createButton(db, { ...baseButton, name: 'answer', label: 'Answer', compiled: btn.compiled });
+  const ruleComp = await compileScript('Noted {addbutton:answer}', { db, guild: cg, writer: { id: 'w' }, matchMode: 'startswith' });
+  assert.equal(ruleComp.ok, true);
+  const rule = await createRule(db, { guildId: 'g1', trigger: '!ask', matchMode: 'startswith', script: 'x', compiled: ruleComp.compiled, createdBy: 'u1' });
+  const text = `!ask ${U1}  please`;
+  const prepared = await prepareRun({ compiled: rule.compiled, rule, text, guild: world.guild, rng: () => 0.5 });
+  assert.equal(prepared.words.rest(1), `${U1}  please`);
+  const plan = evaluate(rule.compiled, { member: world.member, channelId: 'c1', vars: {}, ...prepared });
+  const edits = [];
+  const msg = {
+    id: 'trig', guild: world.guild, channel: world.channel, channelId: 'c1',
+    reply: async () => ({ id: '1001', channelId: 'c1', channel: { id: 'c1' }, edit: async (e) => { edits.push(e); }, react: async () => {}, delete: async () => {} }),
+  };
+  const res = await executePlan({ db }, { rule, message: msg, member: world.member, plan, lang: 'en', vars: {} }, {});
+  assert.deepEqual(res.errors, []);
+  const rec = await getMessageRecord(db, '1001');
+  assert.equal(rec.words, `${U1}  please`);
+  await world.interact(id(0));
+  assert.deepEqual(world.calls.follow, []);
+  assert.equal(world.calls.replies[0].content, `hug <@${U1}>`);
+});
+
+test('prepareRun: a rule with no words and no buttons still takes the fast path', async () => {
+  const cg = { id: 'g1', roles: { cache: new Map() }, channels: { cache: new Map() } };
+  const plain = (await compileScript('Noted {user}', { db, guild: cg, writer: { id: 'w' }, matchMode: 'startswith' })).compiled;
+  const throwing = () => { throw new Error('rng used'); };
+  const noGuild = { members: { fetch: async () => { throw new Error('guild used'); } } };
+  const p = await prepareRun({ compiled: plain, rule: { trigger: '!ask', matchMode: 'startswith' }, text: '!ask a b', guild: noGuild, rng: throwing });
+  assert.deepEqual(p.words.list, []);
+  assert.equal(p.words.rest(1), '');
+});
+
+test('the edit that adds the buttons and the re-render of disabled buttons both pass allowedMentions parse []', async () => {
+  await createButton(db, baseButton);
+  const rule = await sendRule();
+  const w = sendWorld();
+  await executePlan({ db }, { rule, message: w.message, member: w.member, lang: 'en', vars: {}, plan: sendPlan({ buttons: [{ kind: 'stored', name: 'rules' }] }) }, {});
+  assert.deepEqual(w.log.edits[0].p.allowedMentions, { parse: [] });
+  await resetDb(db);
+  await setFeature(db, 'g1', 'autoresponder', { enabled: true });
+  await seed({ buttons: [{ limitations: 'limited' }] });
+  const p = pressWorld();
+  await p.interact(id(0));
+  assert.equal(p.calls.edits.length, 1);
+  assert.deepEqual(p.calls.edits[0].allowedMentions, { parse: [] });
 });

@@ -255,7 +255,7 @@ async function attachButtons(ctx, { sent, entries, rule, guild, message, plan, d
       draws: buttonState?.draws ?? plan.draws ?? {},
       expiresAt: now + BUTTON_TTL_MS,
     });
-    await sent.edit({ components: buildRows(sent.id, entries, null, componentEmoji) });
+    await sent.edit({ components: buildRows(sent.id, entries, null, componentEmoji), allowedMentions: { parse: [] } });
   } catch (err) {
     fail(errors, 'CANNOT_SEND', 'buttons', String(err?.code ?? ''));
   }

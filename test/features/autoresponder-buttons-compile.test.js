@@ -4,6 +4,7 @@ import { testDb } from '../helpers/db.js';
 import { resetDb } from '../../src/db/index.js';
 import { t } from '../../src/i18n/index.js';
 import { createButton } from '../../src/features/autoresponder/buttons/store.js';
+import { createEmbed } from '../../src/features/embeds/store.js';
 import { compileScript, COMPILE_ERROR_CODES } from '../../src/features/autoresponder/script/compile.js';
 
 const G = '100000000000000000';
@@ -116,14 +117,14 @@ test('{dm} with any button is BUTTONS_NEED_CHANNEL, in either order', async () =
   assert.ok(codes(await comp('Hi {addlinkbutton:L|https://e.com}{dm}')).includes('BUTTONS_NEED_CHANNEL'));
 });
 
-test('buttons need text or an embed', async () => {
+test('buttons need text or a named embed', async () => {
   assert.deepEqual(codes(await comp('{addbutton:x}')), ['BUTTONS_NEED_TEXT']);
   assert.deepEqual(codes(await comp('  {addbutton:x}  ')), ['BUTTONS_NEED_TEXT']);
   assert.deepEqual(codes(await comp('{addlinkbutton:L|https://e.com}')), ['BUTTONS_NEED_TEXT']);
   assert.equal((await comp('Hello {addbutton:x}')).ok, true);
   assert.equal((await comp('{addbutton:x}Hello')).ok, true);
-  assert.equal((await comp('{embed}{addbutton:x}')).ok, true);
-  assert.equal((await comp('{addbutton:x}{embed}')).ok, true);
+  assert.deepEqual(codes(await comp('{embed}{addbutton:x}')), ['BUTTONS_NEED_TEXT']);
+  assert.deepEqual(codes(await comp('{addbutton:x}{embed}')), ['BUTTONS_NEED_TEXT']);
   assert.equal((await comp('{user}{addbutton:x}')).ok, true);
   assert.equal((await comp('{range:1-6}[range]{addbutton:x}')).ok, true);
   assert.equal((await comp('{requirearg:1}[$1]{addbutton:x}')).ok, true);
@@ -175,4 +176,51 @@ test('a whitespace-only link button label is rejected as BAD_ARGUMENT', async ()
   const r = await comp('Hi {addlinkbutton:   |https://example.com}');
   assert.equal(r.ok, false);
   assert.ok(codes(r).includes('BAD_ARGUMENT'));
+});
+
+// ---------- stage 3 follow-up: a plain embed is not text; attached role buttons are checked against the saver ----------
+
+test('a plain {embed} does not count as text for buttons; a named embed does', async () => {
+  assert.deepEqual(codes(await comp('{addlinkbutton:x|https://e.com}{embed}')), ['BUTTONS_NEED_TEXT']);
+  assert.deepEqual(codes(await comp('{embed:#ff0000}{addbutton:x}')), ['BUTTONS_NEED_TEXT']);
+  assert.equal((await comp('Hello {embed}{addbutton:x}')).ok, true);
+  await createEmbed(db, G, 'card');
+  assert.equal((await comp('{embed:card}{addbutton:x}')).ok, true);
+});
+
+const MOD = id(60);
+const roleGuild = (roles) => ({ ...guild(), roles: { cache: new Map(roles.map((r) => [r.id, r])) } });
+const role = (over = {}) => ({ id: MOD, name: 'Mod', position: 5, managed: false, permissions: { has: () => false }, ...over });
+const roleButton = async (name, actions) => createButton(db, { guildId: G, name, label: name, style: 'grey', script: 'x', compiled: { version: 2, template: [{ t: 'text', v: 'x' }], gates: [], actions, flags: {} }, createdBy: id(1) });
+const writerAt = (position, wid = id(701)) => ({ id: wid, roles: { highest: { position } } });
+
+test('attaching a button whose role the saver cannot give is ROLE_ABOVE_YOU with the button name', async () => {
+  await roleButton('modrole', [{ fn: 'addrole', roleId: MOD, raw: 'Mod', target: null }]);
+  await roleButton('unmod', [{ fn: 'removerole', roleId: MOD, raw: 'Mod', target: null }]);
+  const g = roleGuild([role()]);
+  for (const src of ['Hi {addbutton:modrole}', 'Hi {addbutton:unmod}']) {
+    const r = await comp(src, { guild: g, writer: writerAt(3) });
+    assert.equal(r.ok, false, src);
+    assert.deepEqual(r.errors.map((e) => [e.code, e.detail]), [['ROLE_ABOVE_YOU', src.slice(14, -1)]], src);
+  }
+  const inButton = await comp('Again {addbutton:modrole}', { guild: g, writer: writerAt(3), buttonScript: true });
+  assert.deepEqual(codes(inButton), ['ROLE_ABOVE_YOU']);
+});
+
+test('a saver who can give the role, the guild owner, and a button with no role actions all compile', async () => {
+  await roleButton('modrole', [{ fn: 'addrole', roleId: MOD, raw: 'Mod', target: null }]);
+  const g = roleGuild([role()]);
+  assert.equal((await comp('Hi {addbutton:modrole}', { guild: g, writer: writerAt(6) })).ok, true);
+  assert.equal((await comp('Hi {addbutton:modrole}', { guild: g, writer: writerAt(1, id(700)) })).ok, true);
+  assert.equal((await comp('Hi {addbutton:modrole}', { guild: g, writer: writerAt(6), buttonScript: true })).ok, true);
+  assert.equal((await comp('Hi {addbutton:x}', { guild: g, writer: writerAt(0) })).ok, true);
+});
+
+test('an attached button whose role is gone is skipped; a dangerous or above-bot role is refused', async () => {
+  await roleButton('modrole', [{ fn: 'addrole', roleId: MOD, raw: 'Mod', target: null }]);
+  assert.equal((await comp('Hi {addbutton:modrole}', { guild: roleGuild([]), writer: writerAt(0) })).ok, true);
+  const danger = roleGuild([role({ permissions: { has: (p) => p === 'ManageGuild' } })]);
+  assert.deepEqual(codes(await comp('Hi {addbutton:modrole}', { guild: danger, writer: writerAt(15) })), ['ROLE_DANGEROUS']);
+  const high = roleGuild([role({ position: 12 })]);
+  assert.deepEqual(codes(await comp('Hi {addbutton:modrole}', { guild: high, writer: writerAt(15) })), ['ROLE_ABOVE_BOT']);
 });

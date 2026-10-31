@@ -10,7 +10,8 @@ const ARG_TOKEN = /\[\$(?:[1-9]|1\d|20)(?:\+|-(?:[1-9]|1\d|20))?\]/;
 
 const hasRandom = (r) => Boolean(r && (r.ranges?.length || r.choosers?.length || r.locked?.length));
 // Does anything in the rule read the member's words? (A role target always comes with a `requirearg`.)
-const needsWords = (c) => Boolean(c.argChecks?.length)
+// A rule that attaches buttons always needs them: the words are stored with the message for the button scripts.
+const needsWords = (c) => Boolean(c.argChecks?.length || c.buttons?.length)
   || c.template.some((p) => p.t === 'arg')
   || c.actions.some((a) => a.target != null || (a.fn === 'setnick' && ARG_TOKEN.test(a.text ?? '')));
 

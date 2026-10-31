@@ -129,7 +129,8 @@ export async function compileScript(source, env) {
 
   if (acc.buttons.length) {
     if (acc.flags.dm) errors.push(err('BUTTONS_NEED_CHANNEL', acc.buttonPos));
-    const hasText = template.some((p) => p.t !== 'text' || p.v.trim() !== '') || acc.flags.embed !== null;
+    // A plain {embed} uses the text as its description, so only a named embed is content on its own.
+    const hasText = template.some((p) => p.t !== 'text' || p.v.trim() !== '') || acc.flags.embed?.kind === 'named';
     if (!hasText) errors.push(err('BUTTONS_NEED_TEXT', acc.buttonPos));
   }
 
