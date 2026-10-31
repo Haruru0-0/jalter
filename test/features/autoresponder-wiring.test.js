@@ -8,6 +8,7 @@ import { buildHelp } from '../../src/features/help/index.js';
 import * as automod from '../../src/features/automod/index.js';
 import * as autoresponder from '../../src/features/autoresponder/index.js';
 import { pruneCooldowns } from '../../src/features/autoresponder/cooldown.js';
+import { pruneButtonMessages } from '../../src/features/autoresponder/buttons/store.js';
 import { FUNCTIONS } from '../../src/features/autoresponder/script/functions.js';
 import { COMPILE_ERROR_CODES } from '../../src/features/autoresponder/script/compile.js';
 import { RUN_ERROR_CODES } from '../../src/features/autoresponder/execute.js';
@@ -86,4 +87,40 @@ test('stage 2: the new compile and run-time error codes are listed', () => {
 
 test('stage 2: the builder pages end with random and review', () => {
   assert.deepEqual(PAGES.slice(-3), ['random', 'buttons', 'review']);
+});
+
+test('stage 3: the function table lists the button functions', () => {
+  for (const name of ['addbutton', 'addlinkbutton']) {
+    assert.equal(typeof FUNCTIONS[name]?.check, 'function', `missing function ${name}`);
+  }
+});
+
+test('stage 3: the button compile and run-time error codes are listed', () => {
+  for (const code of ['BUTTON_NOT_FOUND', 'LINK_URL_INVALID', 'TOO_MANY_BUTTONS', 'BUTTONS_NEED_CHANNEL', 'BUTTONS_NEED_TEXT', 'BUTTON_NAME_INVALID']) {
+    assert.ok(COMPILE_ERROR_CODES.includes(code), `missing compile code ${code}`);
+  }
+  assert.ok(RUN_ERROR_CODES.includes('BUTTON_MISSING'), 'missing run code BUTTON_MISSING');
+});
+
+test('stage 3: the autoresponder command has the button group and keeps every other subcommand', () => {
+  const { commands } = collectModules(modules);
+  const options = commands.get('autoresponder').data.toJSON().options;
+  const group = options.find((o) => o.name === 'button');
+  assert.ok(group, 'missing the button group');
+  assert.deepEqual(group.options.map((o) => o.name).sort(), ['add', 'edit', 'list', 'remove']);
+  const names = options.map((o) => o.name);
+  for (const sub of ['builder', 'enable', 'disable', 'add', 'edit', 'editmatchmode', 'toggle', 'remove', 'list', 'show', 'test']) {
+    assert.ok(names.includes(sub), `missing subcommand ${sub}`);
+  }
+  assert.equal(new Set(names).size, names.length);
+});
+
+test('stage 3: the housekeeping list prunes the cooldowns and the button messages', () => {
+  const { housekeeping } = collectModules(modules);
+  assert.ok(housekeeping.includes(pruneCooldowns));
+  assert.ok(housekeeping.includes(pruneButtonMessages));
+});
+
+test('stage 3: the builder pages put buttons before review', () => {
+  assert.deepEqual(PAGES, ['basics', 'reply', 'conditions', 'actions', 'random', 'buttons', 'review']);
 });
