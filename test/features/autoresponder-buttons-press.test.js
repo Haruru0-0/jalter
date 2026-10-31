@@ -611,3 +611,9 @@ test('the edit that adds the buttons and the re-render of disabled buttons both 
   assert.equal(p.calls.edits.length, 1);
   assert.deepEqual(p.calls.edits[0].allowedMentions, { parse: [] });
 });
+
+test('the French press and button strings use vous and straight apostrophes', () => {
+  for (const [k, v] of Object.entries(fr).filter(([k]) => k.startsWith('autoresponder.press.') || k.startsWith('autoresponder.button.'))) {
+    assert.doesNotMatch(v, /\b(tu|toi|ton|ta|tes)\b|attends|Réessaie|’/i, k);
+  }
+});

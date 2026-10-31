@@ -226,8 +226,14 @@ test('} and | in the label, URL or emoji are refused before the compile, and a b
     { label: 'ab', url: 'https://e.com', emoji: 'x|y' },
   ]) {
     const i = await submitModal(env, panelId, 'mlink', fields);
-    assert.equal(last(i)[1].content, t('en', 'autoresponder.builder.noPipe'));
+    assert.equal(last(i)[1].content, t('en', 'autoresponder.builder.noPipeLink'));
   }
+  for (const lang of ['en', 'fr', 'ar']) {
+    assert.notEqual(t(lang, 'autoresponder.builder.noPipeLink'), 'autoresponder.builder.noPipeLink', lang);
+    assert.notEqual(t(lang, 'autoresponder.builder.noPipeLink'), t(lang, 'autoresponder.builder.noPipe'), lang);
+  }
+  assert.notEqual(t('fr', 'autoresponder.builder.noPipeLink'), t('en', 'autoresponder.builder.noPipeLink'));
+  assert.notEqual(t('ar', 'autoresponder.builder.noPipeLink'), t('en', 'autoresponder.builder.noPipeLink'));
   const blank = await submitModal(env, panelId, 'mlink', { label: '   ', url: 'https://e.com', emoji: '' });
   assert.ok(last(blank)[1].content.includes(t('en', 'autoresponder.builder.refused')));
   assert.deepEqual(draftOf(panelId).buttons, []);

@@ -1,6 +1,7 @@
 // A press on an autoresponder button: member-facing, so it only needs the feature to be on (no manager check).
-// Order (design spec, "What a press checks"): deferUpdate, feature on, record alive, rule exists and is enabled,
-// stored button exists, invoker and throttle, the limited/strict claim, the button script's gates, then {cooldown}.
+// Order: deferUpdate; feature on; record alive (same guild, message and channel); rule exists and is enabled; index
+// in bounds; stored button exists; throttle; invoker; read-only prepare and evaluate (gate and word answers, nothing
+// claimed yet); the atomic limited/strict claim; refresh the buttons; {cooldown}; run.
 // Every refusal is an ephemeral follow-up; the public reply is posted by executePlan.
 import { getLang, t } from '../../../i18n/index.js';
 import { isEnabled } from '../../../core/registry.js';

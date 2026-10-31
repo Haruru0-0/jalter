@@ -507,7 +507,7 @@ function submitLink(interaction, ctx, lang, entry) {
   const emoji = (interaction.fields.getTextInputValue('emoji') ?? '').trim();
   if ([label, url, emoji].some(hasBrace)) return refuse(interaction, lang, key('noBrace'));
   // The pipe separates the arguments of the call, so it cannot be part of one.
-  if ([label, url, emoji].some((v) => v.includes('|'))) return refuse(interaction, lang, key('noPipe'));
+  if ([label, url, emoji].some((v) => v.includes('|'))) return refuse(interaction, lang, key('noPipeLink'));
   if (label === '') return badInput(interaction, lang, 'BAD_ARGUMENT', label);
   return tryChange(interaction, ctx, lang, entry, addButton(entry.draft, { kind: 'link', label, url, emoji: emoji || null }), redraw(interaction, lang));
 }
