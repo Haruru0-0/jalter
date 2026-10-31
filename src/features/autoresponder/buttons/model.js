@@ -9,7 +9,7 @@ export const STYLES = {
 export const LIMITATIONS = ['none', 'limited', 'strict'];
 
 const PREFIX = 'autoresponder:p';
-const NAME = /^[a-z0-9_-]{1,32}$/;
+const NAME = /^[a-z0-9_-]{1,16}$/;
 const MAX_LABEL = 80;
 const MAX_ROWS = 5;
 const PER_ROW = 5;

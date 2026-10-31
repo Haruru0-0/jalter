@@ -16,7 +16,7 @@ test('styles and limitations constants', () => {
 
 test('checkButtonInput: valid and each code', () => {
   assert.deepEqual(checkButtonInput(ok), { ok: true });
-  for (const name of ['', 'Rules', 'a b', 'x'.repeat(33), undefined]) {
+  for (const name of ['', 'Rules', 'a b', 'x'.repeat(17), undefined]) {
     assert.deepEqual(checkButtonInput({ ...ok, name }), { ok: false, code: 'BUTTON_NAME_INVALID' }, String(name));
   }
   for (const label of ['', '   ', 'x'.repeat(81), undefined]) {
@@ -25,6 +25,7 @@ test('checkButtonInput: valid and each code', () => {
   assert.deepEqual(checkButtonInput({ ...ok, style: 'pink' }), { ok: false, code: 'BUTTON_STYLE_INVALID' });
   assert.deepEqual(checkButtonInput({ ...ok, limitations: 'weird' }), { ok: false, code: 'BUTTON_LIMITATION_INVALID' });
   assert.deepEqual(checkButtonInput({ ...ok, label: 'x'.repeat(80) }), { ok: true });
+  assert.deepEqual(checkButtonInput({ ...ok, name: 'x'.repeat(16) }), { ok: true });
 });
 
 test('buttonId round trip and garbage', () => {

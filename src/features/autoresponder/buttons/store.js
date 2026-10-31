@@ -68,7 +68,7 @@ const COLUMNS = {
 };
 
 export async function updateButton(db, guildId, name, patch) {
-  const keys = Object.keys(patch).filter((k) => k in COLUMNS);
+  const keys = Object.keys(patch).filter((k) => Object.hasOwn(COLUMNS, k) && patch[k] !== undefined);
   if (!keys.length) return false;
   const sets = keys.map((k, i) => `${COLUMNS[k]} = $${i + 3}${k === 'compiled' ? '::jsonb' : ''}`);
   const values = keys.map((k) => (k === 'compiled' ? JSON.stringify(patch[k]) : patch[k]));
@@ -140,6 +140,8 @@ export async function claimPress(db, messageId, index, limitation, now = Date.no
   if (!cur.length) return { ok: false, reason: 'gone' };
   if (cur[0].locked) return { ok: false, reason: 'locked' };
   if (limitation === 'limited') return { ok: false, reason: 'pressed' };
+  // A strict claim that wrote nothing must never be allowed.
+  if (limitation === 'strict') return { ok: false, reason: 'locked' };
   return { ok: true };
 }
 

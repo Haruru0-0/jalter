@@ -171,3 +171,19 @@ test('pruneButtonMessages removes only expired rows and returns the count', asyn
 test('housekeeping includes pruneButtonMessages', () => {
   assert.ok(housekeeping.includes(pruneButtonMessages));
 });
+
+test('a strict claim that wrote nothing but finds an open message is refused', async () => {
+  const stub = {
+    query: async (sql) => (/^\s*UPDATE/.test(sql) ? { rows: [] } : { rows: [{ locked: false, pressed: [] }] }),
+  };
+  assert.deepEqual(await claimPress(stub, 'm', 0, 'strict', T), { ok: false, reason: 'locked' });
+});
+
+test('updateButton ignores inherited keys and undefined values', async () => {
+  await createButton(db, base);
+  assert.equal(await updateButton(db, 'g1', 'one', { constructor: 'x', toString: 'y' }), false);
+  assert.equal(await updateButton(db, 'g1', 'one', { label: undefined, style: undefined }), false);
+  assert.equal(await updateButton(db, 'g1', 'one', { label: undefined, style: 'red' }), true);
+  const b = await getButton(db, 'g1', 'one');
+  assert.deepEqual([b.label, b.style], ['One', 'red']);
+});
