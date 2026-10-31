@@ -277,8 +277,11 @@ test('a cycle terminates: it compiles when the role is allowed and is refused wh
 });
 
 test('a missing intermediate stored button is skipped', async () => {
-  await chainButton('gone', ['ghost', 'x']);
-  assert.equal((await comp('Hi {addbutton:gone}', { guild: roleGuild([role()]), writer: writerAt(0) })).ok, true);
+  await roleButton('adm', giveMod);
+  await chainButton('gone', ['ghost', 'adm']);
+  const g = roleGuild([role()]);
+  assert.deepEqual(detailsOf(await comp('Hi {addbutton:gone}', { guild: g, writer: writerAt(3) })), [['ROLE_ABOVE_YOU', 'adm']]);
+  assert.equal((await comp('Hi {addbutton:gone}', { guild: g, writer: writerAt(6) })).ok, true);
 });
 
 test('a chain of 25 distinct buttons is fully checked; 26 is BUTTON_CHAIN_TOO_LONG', async () => {
