@@ -10,12 +10,14 @@ export const LIMITATIONS = ['none', 'limited', 'strict'];
 
 const PREFIX = 'autoresponder:p';
 const NAME = /^[a-z0-9_-]{1,16}$/;
-const MAX_LABEL = 80;
+export const MAX_LABEL = 80;
 const MAX_ROWS = 5;
 const PER_ROW = 5;
 
+export const isButtonName = (name) => typeof name === 'string' && NAME.test(name);
+
 export function checkButtonInput({ name, label, style, limitations }) {
-  if (typeof name !== 'string' || !NAME.test(name)) return { ok: false, code: 'BUTTON_NAME_INVALID' };
+  if (!isButtonName(name)) return { ok: false, code: 'BUTTON_NAME_INVALID' };
   if (typeof label !== 'string' || !label.trim() || label.length > MAX_LABEL) return { ok: false, code: 'BUTTON_LABEL_INVALID' };
   if (!Object.hasOwn(STYLES, style)) return { ok: false, code: 'BUTTON_STYLE_INVALID' };
   if (!LIMITATIONS.includes(limitations)) return { ok: false, code: 'BUTTON_LIMITATION_INVALID' };

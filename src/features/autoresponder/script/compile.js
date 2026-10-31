@@ -16,6 +16,7 @@ export const COMPILE_ERROR_CODES = [
   'NICK_TOO_LONG', 'TARGET_NOT_ALLOWED_YET', 'SCRIPT_TOO_LONG',
   'RANGE_INVALID', 'WEIGHT_INVALID', 'TOO_MANY_RANDOM', 'CHOICE_COUNT_MISMATCH', 'CHOICE_NOT_CHOSEN_YET',
   'ARG_INDEX_INVALID', 'ARG_TYPE_INVALID', 'NO_ARGUMENTS_IN_MODE', 'TARGET_NOT_CHECKED_USER', 'TARGET_NEEDS_GATE',
+  'BUTTON_NOT_FOUND', 'LINK_URL_INVALID', 'TOO_MANY_BUTTONS', 'BUTTONS_NEED_CHANNEL', 'BUTTONS_NEED_TEXT', 'BUTTON_NAME_INVALID',
 ];
 
 const err = (code, pos, detail) => (detail === undefined ? { code, pos } : { code, pos, detail });
@@ -23,13 +24,16 @@ const ARG_TOKEN_IN_TEXT = /\[\$(?:[1-9]|1\d|20)(?:\+|-(?:[1-9]|1\d|20))?\]/;
 const plain = (s) => s.replaceAll(ESCAPED_BRACKET, '[');
 
 // A `rand` token is live only when the script defines the function that produces it.
-function randIsLive(token, random) {
+function randIsLive(token, random, buttonScript) {
+  // A button's own script draws at press time, so its tokens are always live.
+  if (buttonScript) return true;
   const defined = { range: random.ranges, choice: random.choosers, lockedchoice: random.locked }[token.kind];
   return token.n <= defined.length;
 }
 
 /**
- * env = { db, guild, writer, matchMode? } (no matchMode: unknown, no mode errors).
+ * env = { db, guild, writer, matchMode?, buttonScript? } (no matchMode: unknown, no mode errors;
+ * buttonScript: a stored button's own script, its words come from the original message so matchMode is ignored).
  * Resolves to { ok: true, compiled, warnings } or { ok: false, errors }.
  */
 export async function compileScript(source, env) {
@@ -49,11 +53,13 @@ export async function compileScript(source, env) {
     argChecks: [],
     targets: [],
     lockedPos: [],
+    buttons: [],
+    buttonPos: null,
     pos: 0,
   };
   const errors = [];
   const warnings = [];
-  const noWords = Boolean(env.matchMode) && !WORD_MODES.has(env.matchMode);
+  const noWords = Boolean(env.matchMode) && !env.buttonScript && !WORD_MODES.has(env.matchMode);
   const warnArgs = (pos) => {
     if (noWords && warnings.length === 0) warnings.push({ code: 'ARGS_EMPTY_IN_MODE', pos });
   };
@@ -116,9 +122,15 @@ export async function compileScript(source, env) {
     if (node.t === 'text') pushText(node.v);
     else if (node.t === 'arg') template.push({ t: 'arg', from: node.from, to: node.to });
     else if (node.t === 'rand') {
-      if (randIsLive(node, acc.random)) template.push({ t: 'rand', kind: node.kind, n: node.n });
+      if (randIsLive(node, acc.random, env.buttonScript)) template.push({ t: 'rand', kind: node.kind, n: node.n });
       else pushText(node.raw);
     } else if (node.args.length === 0 && PLACEHOLDER_NAMES.has(node.name)) template.push({ t: 'ph', name: node.name });
+  }
+
+  if (acc.buttons.length) {
+    if (acc.flags.dm) errors.push(err('BUTTONS_NEED_CHANNEL', acc.buttonPos));
+    const hasText = template.some((p) => p.t !== 'text' || p.v.trim() !== '') || acc.flags.embed !== null;
+    if (!hasText) errors.push(err('BUTTONS_NEED_TEXT', acc.buttonPos));
   }
 
   if (errors.length) return { ok: false, errors: errors.sort((a, b) => a.pos - b.pos) };
@@ -133,6 +145,7 @@ export async function compileScript(source, env) {
       flags: acc.flags,
       random: acc.random,
       argChecks: acc.argChecks,
+      ...(acc.buttons.length ? { buttons: acc.buttons } : {}),
     },
   };
 }

@@ -5,6 +5,8 @@ import { PermissionsBitField } from 'discord.js';
 import { parseEmoji } from '../../reactionroles/config.js';
 import { isDangerousRole, botCanGive, callerCanGive } from '../../../core/role-safety.js';
 import { getEmbed, normalizeEmbedName } from '../../embeds/store.js';
+import { getButton } from '../buttons/store.js';
+import { isButtonName, MAX_LABEL } from '../buttons/model.js';
 import { ESCAPED_BRACKET } from './parse.js';
 import { MAX_ARG_INDEX } from './args.js';
 
@@ -15,6 +17,8 @@ export const MAX_ROLE_ACTIONS = 3;
 export const MAX_NICK = 32;
 export const MAX_LIST = 10;
 export const MAX_RANDOM = 4;
+export const MAX_SCRIPT_BUTTONS = 25;
+export const MAX_LINK_URL = 512;
 export const MAX_CHOICES = 25;
 export const MAX_RANGE_VALUE = 1_000_000_000;
 export const ARG_TYPES = ['user', 'channel', 'color', 'role', 'number'];
@@ -230,7 +234,8 @@ export const FUNCTIONS = {
   requirearg: {
     min: 1,
     max: 2,
-    check(args, { matchMode }, acc) {
+    check(args, { matchMode: mode, buttonScript }, acc) {
+      const matchMode = buttonScript ? null : mode;
       if (!ARG_N_RE.test(args[0]) || Number(args[0]) > MAX_ARG_INDEX) return [{ code: 'ARG_INDEX_INVALID', detail: args[0] }];
       const n = Number(args[0]);
       const type = args.length > 1 ? args[1].toLowerCase() : null;
@@ -323,6 +328,45 @@ export const FUNCTIONS = {
       const r = resolveChannel(guild, args[0]);
       if (r.error) return [r.error];
       acc.flags.sendTo = r.channel.id;
+      return [];
+    },
+  },
+  addbutton: {
+    min: 1,
+    max: 1,
+    async check(args, { db, guild }, acc) {
+      if (acc.buttons.length >= MAX_SCRIPT_BUTTONS) return [{ code: 'TOO_MANY_BUTTONS', detail: String(MAX_SCRIPT_BUTTONS) }];
+      const name = args[0];
+      if (!isButtonName(name)) return [{ code: 'BUTTON_NAME_INVALID', detail: name }];
+      if (!(await getButton(db, guild.id, name))) return [{ code: 'BUTTON_NOT_FOUND', detail: name }];
+      acc.buttons.push({ kind: 'stored', name });
+      acc.buttonPos ??= acc.pos;
+      return [];
+    },
+  },
+  addlinkbutton: {
+    min: 2,
+    max: 3,
+    check(args, { guild }, acc) {
+      if (acc.buttons.length >= MAX_SCRIPT_BUTTONS) return [{ code: 'TOO_MANY_BUTTONS', detail: String(MAX_SCRIPT_BUTTONS) }];
+      const [label, rawUrl, rawEmoji = ''] = args;
+      if (!label || label.length > MAX_LABEL) return [{ code: 'BAD_ARGUMENT', detail: label }];
+      let url = null;
+      if (rawUrl.length <= MAX_LINK_URL) {
+        try {
+          const u = new URL(rawUrl);
+          if ((u.protocol === 'http:' || u.protocol === 'https:') && u.hostname) url = u.href;
+        } catch { /* invalid */ }
+      }
+      if (!url) return [{ code: 'LINK_URL_INVALID', detail: rawUrl.slice(0, 60) }];
+      let emoji = null;
+      if (rawEmoji !== '') {
+        const parsed = parseEmoji(rawEmoji, guild);
+        if (parsed.error) return [{ code: 'INVALID_EMOJI', detail: rawEmoji }];
+        emoji = parsed.emoji;
+      }
+      acc.buttons.push({ kind: 'link', label, url, emoji });
+      acc.buttonPos ??= acc.pos;
       return [];
     },
   },
