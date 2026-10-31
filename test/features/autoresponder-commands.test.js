@@ -8,6 +8,7 @@ import { t } from '../../src/i18n/index.js';
 import { createRule, getRule, listRules, MAX_RULES } from '../../src/features/autoresponder/store.js';
 import { getRules, clearCache } from '../../src/features/autoresponder/cache.js';
 import { claimCooldown } from '../../src/features/autoresponder/cooldown.js';
+import { pruneButtonMessages } from '../../src/features/autoresponder/buttons/store.js';
 import { COMPILE_ERROR_CODES } from '../../src/features/autoresponder/script/compile.js';
 import { RUN_ERROR_CODES } from '../../src/features/autoresponder/execute.js';
 import { createAutoresponderCommand } from '../../src/features/autoresponder/commands.js';
@@ -78,7 +79,7 @@ const inputs = (modal) => modal.components.map((row) => row.components[0]);
 test('index exports commands, events and housekeeping', () => {
   assert.equal(commands[0].data.name, 'autoresponder');
   assert.ok(Array.isArray(events));
-  assert.deepEqual(housekeeping, [pruneCooldowns]);
+  assert.deepEqual(housekeeping, [pruneCooldowns, pruneButtonMessages]);
   assert.equal(command.components.prefix, 'autoresponder');
 });
 
